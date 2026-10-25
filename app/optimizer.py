@@ -13,6 +13,13 @@ The anti-overfitting contract, enforced structurally:
 Ranking metric is OOS profit factor — NOT win rate, which is trivially
 gameable (see: martingale). Win rate is recorded but never optimized.
 
+Seeds (P2.2): --seed is a BASE seed. Each pair draws from its own stream,
+seed_for_pair = base_seed * 1000 + index of the pair in main.PAIRS, so trial
+k on BTC is not the same parameter set as trial k on ETH. Every row stores
+base_seed, the per-pair seed and the DNA of its params (lineage.dna_of), so a
+parameter set that was already tried shows up as a duplicate. Rows from
+before P2.2 have base_seed NULL: those runs used one seed for every pair.
+
 Usage:
   python optimizer.py --pairs BTC-USD,ETH-USD,SOL-USD --tf 1h --trials 300
   python optimizer.py --pairs BTC-USD --tf 4h --trials 200 --seed 7
@@ -28,6 +35,8 @@ import urllib.request
 
 import engine
 import features
+import lineage
+import main as collector
 import windows
 
 DB_PATH = os.environ.get("FORGE_DB", "/data/forge.db")
@@ -90,12 +99,41 @@ def ensure_tables(conn):
         oos_trades INTEGER, oos_net REAL, oos_pf REAL, oos_dd REAL, oos_wr REAL,
         passed INTEGER
     )""")
+    have = {r[1] for r in conn.execute("PRAGMA table_info(candidates)")}
+    for name, typ in (("base_seed", "INTEGER"), ("dna", "TEXT")):
+        if name not in have:
+            conn.execute(f"ALTER TABLE candidates ADD COLUMN {name} {typ}")
     conn.commit()
     windows.ensure_columns(conn)
+    backfill_dna(conn)
 
 
-def run_pair(conn, pair, tf, trials, seed):
+def backfill_dna(conn):
+    """DNA for rows inserted before P2.2. Pure hashing, no backtests."""
+    rows = conn.execute("SELECT id, params_json FROM candidates WHERE dna IS NULL").fetchall()
+    for cid, pj in rows:
+        conn.execute("UPDATE candidates SET dna=? WHERE id=?",
+                     (lineage.dna_of(json.loads(pj)), cid))
+    conn.commit()
+    return len(rows)
+
+
+def seed_for_pair(base_seed, pair, pairs=None):
+    """Per-pair RNG seed. Index comes from main.PAIRS, so that list may be
+    appended to but never reordered — reordering would silently change
+    which seed a pair gets."""
+    pairs = collector.PAIRS if pairs is None else pairs
+    if pair not in pairs:
+        raise SystemExit(f"{pair} is not in PAIRS {pairs}; add it there first "
+                         f"(append only) so its seed is stable")
+    if len(pairs) >= 1000:
+        raise SystemExit("seed_for_pair supports < 1000 pairs")
+    return base_seed * 1000 + pairs.index(pair)
+
+
+def run_pair(conn, pair, tf, trials, base_seed):
     tf_s = 3600 if tf == "1h" else 14400
+    seed = seed_for_pair(base_seed, pair)
     rng = random.Random(seed)
 
     # computed once per pair and stored on every row (P2.1), so the windows
@@ -105,14 +143,22 @@ def run_pair(conn, pair, tf, trials, seed):
         print(f"[{pair}] no candles, skipping")
         return []
     is_start_iso, split_iso, end_iso = w
-    print(f"[{pair} {tf}] IS {is_start_iso} -> {split_iso} | OOS {split_iso} -> {end_iso}")
+    print(f"[{pair} {tf}] seed {seed} (base {base_seed}) | "
+          f"IS {is_start_iso} -> {split_iso} | OOS {split_iso} -> {end_iso}")
 
     survivors = []
+    dupes = []
     t0 = time.time()
     for trial in range(trials):
         cfg = sample_cfg(rng)
         if tf == "4h":
             cfg["htf_seconds"] = 86400
+        dna = lineage.dna_of(cfg)
+        seen = conn.execute(
+            "SELECT id, pair, tf FROM candidates WHERE dna=? ORDER BY id LIMIT 1",
+            (dna,)).fetchone()
+        if seen:
+            dupes.append((trial, dna, seen))
         try:
             is_r = engine.backtest(conn, pair, cfg, is_start_iso, split_iso, tf_s)
         except Exception as e:
@@ -144,14 +190,14 @@ def run_pair(conn, pair, tf, trials, seed):
             """INSERT INTO candidates (run_at, pair, tf, seed, trial, params_json,
                is_trades, is_net, is_pf, is_dd, is_wr,
                oos_trades, oos_net, oos_pf, oos_dd, oos_wr, passed,
-               is_start, split_ts, oos_end, windows_backfilled)
+               is_start, split_ts, oos_end, windows_backfilled, base_seed, dna)
                VALUES (datetime('now'), ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?,
-                       ?, ?, ?, 0)""",
+                       ?, ?, ?, 0, ?, ?)""",
             (row["pair"], row["tf"], row["seed"], row["trial"], row["params_json"],
              row["is_trades"], row["is_net"], row["is_pf"], row["is_dd"], row["is_wr"],
              row["oos_trades"], row["oos_net"], row["oos_pf"], row["oos_dd"],
              row["oos_wr"], row["passed"],
-             is_start_iso, split_iso, end_iso))
+             is_start_iso, split_iso, end_iso, base_seed, dna))
         conn.commit()
         row["id"] = cur.lastrowid
         row["cfg"] = cfg
@@ -164,6 +210,13 @@ def run_pair(conn, pair, tf, trials, seed):
             print(f"  ...{trial + 1}/{trials} trials ({rate:.1f}/s), "
                   f"{len(survivors)} passed so far")
 
+    if dupes:
+        print(f"  {len(dupes)} of {trials} trials repeat a parameter set already in candidates:")
+        for trial, dna, (sid, spair, stf) in dupes[:5]:
+            print(f"    trial {trial} dna={dna} first seen as #{sid} ({spair} {stf})")
+        print("  Read: a repeat is the same hypothesis tested again, not new evidence.")
+    else:
+        print(f"  all {trials} parameter sets are new (no DNA seen before)")
     return survivors, is_start_iso, end_iso
 
 
@@ -176,7 +229,8 @@ def main():
     ap.add_argument("--pairs", default="BTC-USD,ETH-USD,SOL-USD")
     ap.add_argument("--tf", default="1h", choices=["1h", "4h"])
     ap.add_argument("--trials", type=int, default=300)
-    ap.add_argument("--seed", type=int, default=42)
+    ap.add_argument("--seed", type=int, default=42,
+                    help="base seed; each pair gets base*1000 + its index in PAIRS")
     args = ap.parse_args()
 
     conn = sqlite3.connect(DB_PATH)
@@ -216,7 +270,8 @@ def main():
         ntfy(f"Optimizer: {len(all_survivors)} survivors. Best: {best_pair} "
              f"candidate #{best['id']} OOS pf={best['oos_pf']:.2f} "
              f"({best['oos_trades']} trades)")
-    print(f"(total candidates in table: {total})")
+    distinct = conn.execute("SELECT COUNT(DISTINCT dna) FROM candidates").fetchone()[0]
+    print(f"(total candidates in table: {total}, distinct parameter sets: {distinct})")
     print("\nInspect any candidate's parameters:")
     print("  SELECT params_json FROM candidates WHERE id=<ID>;")
     conn.close()

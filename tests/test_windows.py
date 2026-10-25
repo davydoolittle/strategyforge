@@ -43,26 +43,33 @@ def insert_candidate(conn, run_at, pinned=None):
     return cur.lastrowid
 
 
-class TestCompute(unittest.TestCase):
+class DBTestCase(unittest.TestCase):
+    def db(self, *args):
+        conn = make_db(*args)
+        self.addCleanup(conn.close)
+        return conn
+
+
+class TestCompute(DBTestCase):
     def test_split_rule_matches_optimizer(self):
-        conn = make_db(1000)
+        conn = self.db(1000)
         s, sp, e = W.compute(conn, "BTC-USD", HOUR)
         self.assertEqual(W._ts(s), T0 + 300 * HOUR)
         self.assertEqual(W._ts(sp), T0 + int(999 * HOUR * 0.70))
         self.assertEqual(W._ts(e), T0 + 999 * HOUR)
 
     def test_as_of_ignores_later_candles(self):
-        conn = make_db(1000)
+        conn = self.db(1000)
         cut = T0 + 600 * HOUR
         self.assertEqual(W._ts(W.compute(conn, "BTC-USD", HOUR, cut)[2]), cut)
 
     def test_no_candles(self):
-        self.assertIsNone(W.compute(make_db(10), "ETH-USD", HOUR))
+        self.assertIsNone(W.compute(self.db(10), "ETH-USD", HOUR))
 
 
-class TestPinning(unittest.TestCase):
+class TestPinning(DBTestCase):
     def test_round_trip_survives_new_candles(self):
-        conn = make_db(1000)
+        conn = self.db(1000)
         pinned = W.compute(conn, "BTC-USD", HOUR)
         cid = insert_candidate(conn, "2024-10-13 18:00:00", pinned)
         add_bars(conn, "BTC-USD", 1000, 2000)     # collector keeps running
@@ -70,13 +77,13 @@ class TestPinning(unittest.TestCase):
         self.assertNotEqual(W.compute(conn, "BTC-USD", HOUR), pinned)  # the drift P2.1 stops
 
     def test_missing_windows_refuse_rather_than_recompute(self):
-        conn = make_db(1000)
+        conn = self.db(1000)
         cid = insert_candidate(conn, "2024-10-13 18:00:00")
         with self.assertRaises(SystemExit):
             W.for_candidate(conn, cid)
 
     def test_backfill_uses_run_at_and_marks_rows(self):
-        conn = make_db(2000)
+        conn = self.db(2000)
         run_at_ts = T0 + 1000 * HOUR + 1234       # mid-bar, 20 min after a bar opened
         run_at = W._iso(run_at_ts).replace("T", " ")
         old = insert_candidate(conn, run_at)
@@ -91,7 +98,7 @@ class TestPinning(unittest.TestCase):
         self.assertEqual(flags, {old: 1, new: 0})
 
     def test_ensure_columns_idempotent(self):
-        conn = make_db(10)
+        conn = self.db(10)
         W.ensure_columns(conn)
         W.ensure_columns(conn)
         cols = [r[1] for r in conn.execute("PRAGMA table_info(candidates)")]

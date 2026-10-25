@@ -109,7 +109,7 @@ Delivered and tested in this repo: `validation.py`, `adversary.py`, `lineage.py`
 Goal: make it *possible* for something to survive the adversary, by changing what is searched and how much data it is searched on. Definition of done: at least one candidate reaches `oos_validated` **or** a written finding that the V4.1 family has no validatable edge at 1h/4h on these pairs.
 
 - [x] **P2.1 Window pinning.** *(done 2026-10-25: `app/windows.py`; backfill reproduces stored IS+OOS stats for 97/97 passed candidates)* Add `is_start, split_ts, oos_end` columns to `candidates`; populate on insert; `adversary.py` and `analyze.py` read them instead of recomputing from `MAX(ts)`. Backfill the 2,700 existing rows from `run_at` + the candle range at that time (approximate; mark `windows_backfilled=1`).
-- [ ] **P2.2 Seed per pair.** `seed_for_pair = base_seed * 1000 + index_of(pair)`. Store `base_seed`. Log the DNA of every trial so duplicate parameter sets across runs are visible.
+- [x] **P2.2 Seed per pair.** *(done 2026-10-25: index = position in `main.PAIRS`, append-only; `candidates.base_seed` + `dna`; existing 2,700 rows = 900 DNAs × 3 pairs, `base_seed` NULL)* `seed_for_pair = base_seed * 1000 + index_of(pair)`. Store `base_seed`. Log the DNA of every trial so duplicate parameter sets across runs are visible.
 - [ ] **P2.3 Store per-trial Sharpe.** `is_sharpe, oos_sharpe, is_skew, is_kurt` in `candidates`. Retire `sr_trials` once backfilled.
 - [ ] **P2.4 More data, in this order, each one measured by "trades per survivor":**
   1. Extend history: Coinbase has BTC-USD hourly back to 2015. Backfill to **2,000 days** (`BACKFILL_DAYS=2000`). This alone roughly triples trade counts.
