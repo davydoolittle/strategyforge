@@ -110,7 +110,7 @@ Goal: make it *possible* for something to survive the adversary, by changing wha
 
 - [x] **P2.1 Window pinning.** *(done 2026-10-25: `app/windows.py`; backfill reproduces stored IS+OOS stats for 97/97 passed candidates)* Add `is_start, split_ts, oos_end` columns to `candidates`; populate on insert; `adversary.py` and `analyze.py` read them instead of recomputing from `MAX(ts)`. Backfill the 2,700 existing rows from `run_at` + the candle range at that time (approximate; mark `windows_backfilled=1`).
 - [x] **P2.2 Seed per pair.** *(done 2026-10-25: index = position in `main.PAIRS`, append-only; `candidates.base_seed` + `dna`; existing 2,700 rows = 900 DNAs × 3 pairs, `base_seed` NULL)* `seed_for_pair = base_seed * 1000 + index_of(pair)`. Store `base_seed`. Log the DNA of every trial so duplicate parameter sets across runs are visible.
-- [ ] **P2.3 Store per-trial Sharpe.** `is_sharpe, oos_sharpe, is_skew, is_kurt` in `candidates`. Retire `sr_trials` once backfilled.
+- [x] **P2.3 Store per-trial Sharpe.** *(done 2026-10-25: all 2,700 rows backfilled on pinned windows, 0 unreproducible; DSR variance now uses every trial; `sr_trials` no longer read or written — table left in the DB, drop when convenient)* `is_sharpe, oos_sharpe, is_skew, is_kurt` in `candidates`. Retire `sr_trials` once backfilled.
 - [ ] **P2.4 More data, in this order, each one measured by "trades per survivor":**
   1. Extend history: Coinbase has BTC-USD hourly back to 2015. Backfill to **2,000 days** (`BACKFILL_DAYS=2000`). This alone roughly triples trade counts.
   2. Add pairs from Coinbase with ≥ $50 M daily volume and ≥ 2 years of history: start with `AVAX-USD, LINK-USD, DOGE-USD, ADA-USD, DOT-USD, LTC-USD`. Make `PAIRS` the only place this list lives.

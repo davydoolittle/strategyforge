@@ -30,7 +30,6 @@ References
 """
 
 import copy
-import json
 import math
 import random
 from datetime import datetime, timezone
@@ -380,11 +379,12 @@ def lookahead_shift(conn, pair, cfg, tf_seconds, start_iso, end_iso, delay_bars=
 MIN_TRADES_FOR_SR_VARIANCE = 10
 
 
-def sharpe_variance_from_candidates(conn, pair, tf, tf_seconds, sample=150, seed=11):
-    """DSR needs the variance of SR across the trials that were run. The
-    candidates table stores pf/net but not SR, so re-run a random sample of
-    trials on the IS window and compute it. Cached in sr_trials table so this
-    costs ~20s once per (pair, tf), not every report.
+def sharpe_variance_from_candidates(conn, pair, tf):
+    """DSR needs the variance of SR across the trials that were run. Since
+    P2.3 every candidate row carries its own IS Sharpe (is_sharpe, computed
+    on its pinned IS window by the optimizer or `optimizer.py
+    --backfill-sharpe`), so this uses ALL trials, not a re-run sample. The
+    old sr_trials cache is no longer read or written.
 
     Trials with < MIN_TRADES_FOR_SR_VARIANCE trades are EXCLUDED from the
     variance: a 2-trade series can post SR = 7 and that number estimates
@@ -392,41 +392,15 @@ def sharpe_variance_from_candidates(conn, pair, tf, tf_seconds, sample=150, seed
     (54.8 vs 0.105) and made the benchmark absurd rather than strict.
     n_trials is still the full count — every draw was a chance to get lucky.
 
-    Each trial is scored on its own pinned IS window (candidates.is_start /
-    split_ts, P2.1). A cached row only counts if it was computed on that same
-    split; rows cached before windows were pinned are recomputed."""
-    conn.execute("""CREATE TABLE IF NOT EXISTS sr_trials (
-        candidate_id INTEGER PRIMARY KEY, pair TEXT, tf TEXT, is_sharpe REAL,
-        is_trades INTEGER)""")
-    if "split_ts" not in {r[1] for r in conn.execute("PRAGMA table_info(sr_trials)")}:
-        conn.execute("ALTER TABLE sr_trials ADD COLUMN split_ts TEXT")
-    conn.commit()
+    Returns (variance, n_used, n_total, n_missing). n_missing counts rows
+    with no is_sharpe (not backfilled, or not reproducible on their windows);
+    they are left out of the variance and should be reported, not hidden."""
     rows = conn.execute(
-        "SELECT id, params_json, is_start, split_ts FROM candidates WHERE pair=? AND tf=?",
+        "SELECT is_sharpe, is_trades FROM candidates WHERE pair=? AND tf=?",
         (pair, tf)).fetchall()
     n_total = len(rows)
-    if n_total == 0:
-        return 0.0, 0, 0
-    have = {r[0]: (r[1], r[2]) for r in conn.execute(
-        "SELECT s.candidate_id, s.is_sharpe, s.is_trades FROM sr_trials s"
-        " JOIN candidates c ON c.id = s.candidate_id"
-        " WHERE s.pair=? AND s.tf=? AND s.split_ts = c.split_ts", (pair, tf))}
-    rng = random.Random(seed)
-    rng.shuffle(rows)
-    need = [r for r in rows if r[0] not in have][:max(0, sample - len(have))]
-    if need:
-        for cid, pj, is_start, split in need:
-            if is_start is None or split is None:
-                raise RuntimeError(f"candidate {cid} has no pinned windows — "
-                                   f"run `python windows.py --backfill` first")
-            cfg = json.loads(pj)
-            r = engine.backtest(conn, pair, cfg, is_start, split, tf_seconds)
-            sr = sharpe(trade_returns(r["trades"], cfg["initial_capital"]))
-            conn.execute("INSERT OR REPLACE INTO sr_trials (candidate_id, pair, tf,"
-                         " is_sharpe, is_trades, split_ts) VALUES (?, ?, ?, ?, ?, ?)",
-                         (cid, pair, tf, sr, r["n_trades"], split))
-            have[cid] = (sr, r["n_trades"])
-        conn.commit()
-    srs = [s for s, n in have.values() if n is not None and n >= MIN_TRADES_FOR_SR_VARIANCE]
+    n_missing = sum(1 for sr, _ in rows if sr is None)
+    srs = [sr for sr, n in rows
+           if sr is not None and n is not None and n >= MIN_TRADES_FOR_SR_VARIANCE]
     var = _std(srs) ** 2 if len(srs) > 1 else 0.0
-    return var, len(srs), n_total
+    return var, len(srs), n_total, n_missing

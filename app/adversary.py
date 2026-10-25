@@ -86,7 +86,7 @@ def attack(conn, cid, verbose=True):
     rets = V.trade_returns(full["trades"], cap)
     sr = V.sharpe(rets)
     skew, kurt = V.moments(rets)
-    sr_var, n_sampled, n_trials = V.sharpe_variance_from_candidates(conn, pair, tf, tf_s)
+    sr_var, n_sampled, n_trials, n_sr_missing = V.sharpe_variance_from_candidates(conn, pair, tf)
     n_trials_all = conn.execute("SELECT COUNT(*) FROM candidates").fetchone()[0]
 
     attacks = {}
@@ -106,6 +106,7 @@ def attack(conn, cid, verbose=True):
         "name": "deflated_sharpe",
         "sharpe_per_trade": sr, "skew": skew, "kurtosis": kurt, "n_obs": len(rets),
         "sr_variance_across_trials": sr_var, "sr_var_sampled_from": n_sampled,
+        "sr_missing": n_sr_missing,
         "n_trials_pair_tf": n_trials, "expected_max_sr_pair_tf": bench_local, "dsr_pair_tf": dsr_local,
         "n_trials_all": n_trials_all, "expected_max_sr_all": bench_global, "dsr_all": dsr_global,
         "min_dsr": MIN_DSR,
@@ -247,6 +248,13 @@ def print_report(r):
         mark = "PASS" if a[code]["passed"] else ("FAIL*" if code in HARD else "fail ")
         print(f"  {code} {mark:5s} {name:16s} {value}")
         print(f"     {'':5s} {'':16s} rule: {rule}")
+        if code == "A2":
+            print(f"     {'':5s} {'':16s} SR variance {a['A2']['sr_variance_across_trials']:.4f} "
+                  f"from {a['A2']['sr_var_sampled_from']} trials with >= "
+                  f"{V.MIN_TRADES_FOR_SR_VARIANCE} IS trades")
+            if a["A2"].get("sr_missing"):
+                print(f"     {'':5s} {'':16s} WARNING {a['A2']['sr_missing']} trials have no "
+                      f"is_sharpe (run optimizer.py --backfill-sharpe); excluded")
     print()
     print(f"VERDICT: {r['verdict']}   hard fails {r['hard_fails']}   soft fails {r['soft_fails']}   "
           f"({r['elapsed_s']}s)")

@@ -37,6 +37,7 @@ import engine
 import features
 import lineage
 import main as collector
+import validation as V
 import windows
 
 DB_PATH = os.environ.get("FORGE_DB", "/data/forge.db")
@@ -100,7 +101,9 @@ def ensure_tables(conn):
         passed INTEGER
     )""")
     have = {r[1] for r in conn.execute("PRAGMA table_info(candidates)")}
-    for name, typ in (("base_seed", "INTEGER"), ("dna", "TEXT")):
+    for name, typ in (("base_seed", "INTEGER"), ("dna", "TEXT"),
+                      ("is_sharpe", "REAL"), ("oos_sharpe", "REAL"),
+                      ("is_skew", "REAL"), ("is_kurt", "REAL")):
         if name not in have:
             conn.execute(f"ALTER TABLE candidates ADD COLUMN {name} {typ}")
     conn.commit()
@@ -116,6 +119,53 @@ def backfill_dna(conn):
                      (lineage.dna_of(json.loads(pj)), cid))
     conn.commit()
     return len(rows)
+
+
+def trade_stats(trades, initial_capital):
+    """(per-trade Sharpe, skew, NON-excess kurtosis) of a backtest's trades,
+    as validation computes them for the deflated Sharpe ratio."""
+    rets = V.trade_returns(trades, initial_capital)
+    skew, kurt = V.moments(rets)
+    return V.sharpe(rets), skew, kurt
+
+
+def backfill_sharpe(conn, progress=True):
+    """Re-run IS (and OOS where the optimizer ran it) on each row's pinned
+    windows to fill is_sharpe / is_skew / is_kurt / oos_sharpe for rows
+    inserted before P2.3. Also checks the trade counts still match what was
+    stored: a mismatch means the row is not reproducible and is reported,
+    not written. Returns (filled, mismatches)."""
+    rows = conn.execute(
+        "SELECT id, pair, tf, params_json, is_start, split_ts, oos_end, is_trades, oos_trades"
+        " FROM candidates WHERE is_sharpe IS NULL ORDER BY id").fetchall()
+    filled, bad = 0, []
+    t0 = time.time()
+    for k, (cid, pair, tf, pj, s, sp, e, ist, oot) in enumerate(rows):
+        if s is None:
+            raise SystemExit(f"candidate {cid} has no pinned windows — "
+                             f"run `python windows.py --backfill` first")
+        cfg = json.loads(pj)
+        tf_s = windows.tf_seconds(tf)
+        is_r = engine.backtest(conn, pair, cfg, s, sp, tf_s)
+        oos_sr = None
+        oos_n = None
+        if oot is not None:
+            oos_r = engine.backtest(conn, pair, cfg, sp, e, tf_s)
+            oos_n = oos_r["n_trades"]
+            oos_sr = trade_stats(oos_r["trades"], cfg["initial_capital"])[0]
+        if is_r["n_trades"] != ist or oos_n != oot:
+            bad.append((cid, (ist, oot), (is_r["n_trades"], oos_n)))
+            continue
+        sr, skew, kurt = trade_stats(is_r["trades"], cfg["initial_capital"])
+        conn.execute("UPDATE candidates SET is_sharpe=?, is_skew=?, is_kurt=?, oos_sharpe=?"
+                     " WHERE id=?", (sr, skew, kurt, oos_sr, cid))
+        filled += 1
+        if k % 100 == 99:
+            conn.commit()
+            if progress:
+                print(f"  ...{k + 1}/{len(rows)} ({(k + 1) / (time.time() - t0):.1f}/s)")
+    conn.commit()
+    return filled, bad
 
 
 def seed_for_pair(base_seed, pair, pairs=None):
@@ -165,14 +215,16 @@ def run_pair(conn, pair, tf, trials, base_seed):
             print(f"  trial {trial} IS error: {e}")
             continue
 
+        is_sr, is_skew, is_kurt = trade_stats(is_r["trades"], cfg["initial_capital"])
         row = {
             "pair": pair, "tf": tf, "seed": seed, "trial": trial,
             "params_json": json.dumps(cfg),
             "is_trades": is_r["n_trades"], "is_net": is_r["net"],
             "is_pf": None if is_r["pf"] == float("inf") else is_r["pf"],
             "is_dd": is_r["max_dd"], "is_wr": is_r["win_rate"],
+            "is_sharpe": is_sr, "is_skew": is_skew, "is_kurt": is_kurt,
             "oos_trades": None, "oos_net": None, "oos_pf": None,
-            "oos_dd": None, "oos_wr": None, "passed": 0,
+            "oos_dd": None, "oos_wr": None, "oos_sharpe": None, "passed": 0,
         }
 
         if is_r["n_trades"] >= IS_MIN_TRADES and is_r["pf"] >= IS_MIN_PF:
@@ -182,6 +234,7 @@ def run_pair(conn, pair, tf, trials, base_seed):
             row["oos_pf"] = None if oos_r["pf"] == float("inf") else oos_r["pf"]
             row["oos_dd"] = oos_r["max_dd"]
             row["oos_wr"] = oos_r["win_rate"]
+            row["oos_sharpe"] = trade_stats(oos_r["trades"], cfg["initial_capital"])[0]
             if (oos_r["n_trades"] >= OOS_MIN_TRADES
                     and oos_r["pf"] >= OOS_MIN_PF and oos_r["net"] > 0):
                 row["passed"] = 1
@@ -190,14 +243,16 @@ def run_pair(conn, pair, tf, trials, base_seed):
             """INSERT INTO candidates (run_at, pair, tf, seed, trial, params_json,
                is_trades, is_net, is_pf, is_dd, is_wr,
                oos_trades, oos_net, oos_pf, oos_dd, oos_wr, passed,
-               is_start, split_ts, oos_end, windows_backfilled, base_seed, dna)
+               is_start, split_ts, oos_end, windows_backfilled, base_seed, dna,
+               is_sharpe, is_skew, is_kurt, oos_sharpe)
                VALUES (datetime('now'), ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?,
-                       ?, ?, ?, 0, ?, ?)""",
+                       ?, ?, ?, 0, ?, ?, ?, ?, ?, ?)""",
             (row["pair"], row["tf"], row["seed"], row["trial"], row["params_json"],
              row["is_trades"], row["is_net"], row["is_pf"], row["is_dd"], row["is_wr"],
              row["oos_trades"], row["oos_net"], row["oos_pf"], row["oos_dd"],
              row["oos_wr"], row["passed"],
-             is_start_iso, split_iso, end_iso, base_seed, dna))
+             is_start_iso, split_iso, end_iso, base_seed, dna,
+             row["is_sharpe"], row["is_skew"], row["is_kurt"], row["oos_sharpe"]))
         conn.commit()
         row["id"] = cur.lastrowid
         row["cfg"] = cfg
@@ -231,10 +286,31 @@ def main():
     ap.add_argument("--trials", type=int, default=300)
     ap.add_argument("--seed", type=int, default=42,
                     help="base seed; each pair gets base*1000 + its index in PAIRS")
+    ap.add_argument("--backfill-sharpe", action="store_true",
+                    help="fill is_sharpe/oos_sharpe/is_skew/is_kurt on old rows and exit")
     args = ap.parse_args()
 
     conn = sqlite3.connect(DB_PATH)
     ensure_tables(conn)
+
+    if args.backfill_sharpe:
+        t0 = time.time()
+        filled, bad = backfill_sharpe(conn)
+        print(f"filled per-trial Sharpe on {filled} candidates ({time.time() - t0:.0f}s); "
+              f"{len(bad)} not reproducible")
+        for cid, stored, now in bad[:20]:
+            print(f"  #{cid}: stored (is_trades, oos_trades)={stored}  rerun={now}  — left NULL")
+        srs = [r[0] for r in conn.execute(
+            "SELECT is_sharpe FROM candidates WHERE is_sharpe IS NOT NULL"
+            " AND is_trades >= ?", (V.MIN_TRADES_FOR_SR_VARIANCE,))]
+        if srs:
+            print(f"IS Sharpe over {len(srs)} trials with >= {V.MIN_TRADES_FOR_SR_VARIANCE} "
+                  f"trades: mean {V._mean(srs):+.3f}  var {V._std(srs) ** 2:.4f}")
+        print("\nRead: every trial now carries its own IS Sharpe, so the deflated Sharpe")
+        print("benchmark uses all trials instead of a 150-trial sample. Rows left NULL")
+        print("could not be reproduced on their pinned windows and are excluded.")
+        conn.close()
+        return
 
     all_survivors = []
     for pair in [p.strip() for p in args.pairs.split(",")]:
