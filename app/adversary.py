@@ -22,10 +22,14 @@ Attacks (each returns pass/fail + evidence):
                       pairs with a verified tick size (main.py TICK_SIZE) count,
                       and each is run at its own tick, not the tuned pair's
   A8 drawdown         Monte-Carlo 95th-pct drawdown exceeds the risk budget
+  A9 regime           all profit comes from one market regime: the full-window
+                      trades OUTSIDE the most profitable regime net <= 0.
+                      Regime = daily trend_up / trend_down / chop at signal
+                      time (features.RegimeTagger)
 
 Verdicts
   REJECTED    one or more HARD attacks landed (A1 A2 A6)
-  FRAGILE     no hard failure but >= 2 soft failures (A3 A4 A5 A7 A8)
+  FRAGILE     no hard failure but >= 2 soft failures (A3 A4 A5 A7 A8 A9)
   SURVIVED    no hard failure and <= 1 soft failure
 'SURVIVED' is a licence to paper-trade. It is not a licence to trade.
 
@@ -42,6 +46,7 @@ import sqlite3
 import time
 
 import engine
+import features
 import main as collector
 import neff as NE
 import validation as V
@@ -203,6 +208,11 @@ def attack(conn, cid, verbose=True):
         "passed": dd95_pct <= MAX_DD_P95_PCT,
     }
 
+    # A9 regime concentration on full-window trades
+    rt = features.RegimeTagger(conn, pair, start_ts, end_ts)
+    attacks["A9"] = {"name": "regime",
+                     **regime_split(full["trades"], lambda t: rt.at(t["signal_ts"]))}
+
     hard_fails = [k for k in HARD if not attacks[k]["passed"]]
     soft_fails = [k for k in attacks if k not in HARD and not attacks[k]["passed"]]
     if hard_fails:
@@ -234,6 +244,26 @@ def attack(conn, cid, verbose=True):
     if verbose:
         print_report(report)
     return report
+
+
+def regime_split(trades, tag):
+    """Net / PF per regime and the A9 verdict. Trades tag() returns None for
+    (daily warmup) are reported as 'n/a' and left out of the verdict."""
+    by = {}
+    for t in trades:
+        r = by.setdefault(tag(t) or "n/a", {"n_trades": 0, "net": 0.0, "gross_win": 0.0,
+                                           "gross_loss": 0.0})
+        r["n_trades"] += 1
+        r["net"] += t["pnl"]
+        r["gross_win" if t["pnl"] > 0 else "gross_loss"] += abs(t["pnl"])
+    for r in by.values():
+        r["pf"] = r["gross_win"] / r["gross_loss"] if r["gross_loss"] else None
+        del r["gross_win"], r["gross_loss"]
+    known = {k: v for k, v in by.items() if k != "n/a"}
+    best = max(known, key=lambda k: known[k]["net"]) if known else None
+    rest = sum(v["net"] for k, v in known.items() if k != best)
+    return {"regimes": by, "best_regime": best, "net_outside_best": rest,
+            "passed": best is not None and rest > 0}
 
 
 def transfer(conn, cfg, others, tf_s, end_ts, start_ts):
@@ -300,6 +330,11 @@ def print_report(r):
         ("A8", "drawdown", f"MC p95 DD = {a['A8']['dd_p95_pct_of_capital']:.1f}% of capital",
          f"need <= {a['A8']['max_dd_p95_pct']:.0f}%"),
     ]
+    if "A9" in a:
+        rows.append(("A9", "regime", "  ".join(
+            f"{k} {v['net']:+.0f}/{v['n_trades']}t" for k, v in sorted(a["A9"]["regimes"].items())),
+            f"net outside the best regime ({a['A9']['best_regime']}) must be > 0: "
+            f"{a['A9']['net_outside_best']:+.0f}"))
     for code, name, value, rule in rows:
         mark = "PASS" if a[code]["passed"] else ("FAIL*" if code in HARD else "fail ")
         print(f"  {code} {mark:5s} {name:16s} {value}")

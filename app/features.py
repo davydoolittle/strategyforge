@@ -29,6 +29,16 @@ from datetime import datetime, timezone
 import engine
 
 CONTEXT_MAX_AGE_S = 2 * 3600     # a context poll must be within 2h of signal
+
+# Market regime at signal time (P3.4), from DAILY bars: the last completed
+# UTC day before the signal. Not the trade's own timeframe: V4.1 only enters
+# when 1h ADX is above its threshold and the slow EMA slopes its way, so a 1h
+# tag is never 'chop' and mostly repeats the trade's direction (FINDINGS F7).
+REGIME_TF = 86400
+REGIME_EMA = 50               # slow EMA, daily closes
+REGIME_SLOPE_DAYS = 5         # slope = EMA[d] - EMA[d-5]
+REGIME_ADX = 20.0             # daily ADX(14) below this = chop
+REGIMES = ("trend_up", "trend_down", "chop")
 FILTER_OPS = {">=": operator.ge, "<=": operator.le}
 
 
@@ -293,6 +303,27 @@ class FeatureComputer:
         return self._cache[signal_ts]
 
 
+class RegimeTagger:
+    """trend_up / trend_down / chop for a signal, or None while the daily
+    EMA / ADX are still warming up (or the previous day has no candles)."""
+
+    def __init__(self, conn, pair, start_ts=None, end_ts=None):
+        ts, o, h, l, c, v = engine.load_candles(
+            conn, pair, end_ts if end_ts is not None else 2 ** 62, REGIME_TF, start_ts)
+        self.ema = engine.ema(c, REGIME_EMA)
+        self.adx = engine.dmi(h, l, c, 14, 14)
+        self.index = {t: i for i, t in enumerate(ts)}
+
+    def at(self, signal_ts):
+        i = self.index.get(signal_ts // REGIME_TF * REGIME_TF - REGIME_TF)
+        if (i is None or i < REGIME_SLOPE_DAYS or self.adx[i] is None
+                or self.ema[i - REGIME_SLOPE_DAYS] is None):
+            return None
+        if self.adx[i] < REGIME_ADX:
+            return "chop"
+        return "trend_up" if self.ema[i] > self.ema[i - REGIME_SLOPE_DAYS] else "trend_down"
+
+
 def validate_filters(filters):
     for flt in filters:
         if set(flt) != {"feature", "op", "value"}:
@@ -327,6 +358,9 @@ def ensure_tables(conn):
         pnl REAL, reason TEXT,
         features_json TEXT
     )""")
+    have = {r[1] for r in conn.execute("PRAGMA table_info(trade_features)")}
+    if "regime" not in have:
+        conn.execute("ALTER TABLE trade_features ADD COLUMN regime TEXT")
     conn.commit()
 
 
@@ -334,16 +368,63 @@ def annotate_trades(conn, candidate_id, pair, tf_seconds, trades):
     """Compute and store the feature vector for every trade. Returns count."""
     ensure_tables(conn)
     fc = FeatureComputer(conn, pair, tf_seconds)
+    rt = RegimeTagger(conn, pair)
     n = 0
     for t in trades:
         feats = fc.features_for_trade(t)
         conn.execute(
             "INSERT INTO trade_features (candidate_id, pair, tf_seconds, signal_ts,"
-            " entry_ts, direction, pnl, reason, features_json)"
-            " VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)",
+            " entry_ts, direction, pnl, reason, features_json, regime)"
+            " VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
             (candidate_id, pair, tf_seconds, t["signal_ts"], t["entry_ts"],
-             t["dir"], t["pnl"], t["reason"], json.dumps(feats)),
+             t["dir"], t["pnl"], t["reason"], json.dumps(feats), rt.at(t["signal_ts"])),
         )
         n += 1
     conn.commit()
     return n
+
+
+def backfill_regime(conn, progress=True):
+    """Tag trade_features rows that have no regime yet. Returns rows updated.
+    Rows whose signal is still in the daily warmup stay NULL."""
+    ensure_tables(conn)
+    n = 0
+    for (pair,) in conn.execute("SELECT DISTINCT pair FROM trade_features"
+                                " WHERE regime IS NULL").fetchall():
+        rt = RegimeTagger(conn, pair)
+        rows = conn.execute("SELECT id, signal_ts FROM trade_features"
+                            " WHERE pair=? AND regime IS NULL", (pair,)).fetchall()
+        upd = [(rt.at(sig), rid) for rid, sig in rows]
+        upd = [u for u in upd if u[0] is not None]
+        conn.executemany("UPDATE trade_features SET regime=? WHERE id=?", upd)
+        conn.commit()
+        n += len(upd)
+        if progress:
+            print(f"  {pair}: tagged {len(upd)} of {len(rows)} rows", flush=True)
+    return n
+
+
+def main():
+    import argparse
+    import os
+    ap = argparse.ArgumentParser(description="trade_features maintenance")
+    ap.add_argument("--backfill-regime", action="store_true",
+                    help="tag every trade_features row that has no regime (P3.4)")
+    args = ap.parse_args()
+    if not args.backfill_regime:
+        ap.error("nothing to do; pass --backfill-regime")
+    conn = sqlite3.connect(os.environ.get("FORGE_DB", "/data/forge.db"))
+    n = backfill_regime(conn)
+    print(f"tagged {n} rows")
+    for reg, cnt, net in conn.execute(
+            "SELECT COALESCE(regime, '(warmup)'), COUNT(*), SUM(pnl) FROM trade_features"
+            " GROUP BY 1 ORDER BY 1"):
+        print(f"  {reg:10s} {cnt:6d} trades  net {net:+.0f}")
+    print("Read: regime is the daily market state at signal time (50-EMA 5-day slope,")
+    print(f"ADX(14) >= {REGIME_ADX:g} = trending). Net is summed over overlapping candidates,")
+    print("so it says where the annotated strategies made money, not how much.")
+    conn.close()
+
+
+if __name__ == "__main__":
+    main()

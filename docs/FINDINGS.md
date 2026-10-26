@@ -6,6 +6,62 @@ pinned windows on each candidate (P2.1).
 
 ---
 
+## F7. Regime tag: at 1h it is decided by the entry rule; on daily bars no candidate is single-regime
+
+*2026-10-26. `features.RegimeTagger` and adversary A9 (P3.4), run on a
+scratch copy of forge.db.*
+
+- **The spec's literal tag is decided by the entry rule.** The spec says:
+  slow EMA slope plus ADX at signal time, on the trade's own 1h bars. But
+  V4.1 only enters when 1h ADX is above its threshold and the slow EMA
+  slopes the trade's way. So across #2716, #3214, #3047 and #2764:
+  - **No trade was ever tagged chop** (0 of 627).
+  - The tag mostly repeats the trade's direction. Long-only #2764 is 100%
+    trend_up with a 24-bar slope.
+
+  An A9 built on that tag would fail every long-only candidate by
+  construction.
+- **As built,** the regime is the market state on the **last completed UTC
+  day** before the signal:
+  - trend_up or trend_down from the 5-day slope of the daily 50-EMA, when
+    daily ADX(14) ≥ 20;
+  - chop when daily ADX is below 20.
+
+  It uses no data after the signal. The tag is stored in a new
+  `trade_features.regime` column and is filled at annotation time. Existing
+  rows are filled by `python features.py --backfill-regime`. On scratch,
+  that tagged 3,166 of 3,206 rows; 40 fall in the first 55 days, before the
+  daily EMA has warmed up.
+- **A9 (soft).** It fails if the full-window trades outside the most
+  profitable regime net ≤ 0. Two cases fail automatically: a strategy that
+  trades only one regime, and one whose other regimes only give back money.
+
+| | trend_up | trend_down | chop | best | net outside best | A9 |
+|---|---|---|---|---|---|---|
+| #2716 BTC (long-only) | +1168 / 50t | **−197 / 38t** | +2743 / 50t | chop | +972 | PASS |
+| #3214 ETH | +1687 / 61t | +700 / 69t | +1706 / 30t | chop | +2388 | PASS |
+| #3047, #3533, #2764 (from the prototype) | | | | | +733 to +1634 | PASS |
+
+**What this shows.**
+
+- **No verdict changed.** Both re-run candidates keep the soft fails from F4
+  and stay REJECTED on A2.
+- **A9 passes all five candidates tested.** Unlike A4 before F4, that is not
+  because the bar is loose. Each of them really did make money in at least
+  two daily regimes. A9 will bite on a strategy that only worked in, say,
+  the 2024 bull run. None of the current leaders is one.
+- **The surprise is chop.** Across all annotated trades (overlapping
+  candidates, so treat this as a direction, not a size), chop days earn
+  +51.7k on 936 trades, about +55 per trade. trend_up earns +14.3k on 1,126
+  (+13 per trade) and trend_down +12.7k on 1,104 (+11 per trade). This is a
+  1h trend-entry system, and it earns most per trade when the daily chart
+  has no trend, meaning hourly bursts inside a daily range. It fits F6:
+  big 24h moves follow low volatility. It is worth one P3.2-style
+  evaluation of `regime == chop` once there are new trades to check it on.
+  It is not a filter yet.
+
+---
+
 ## F6. Event fingerprints: before a big day, volatility is LOW; context feeds are too young to say anything
 
 *2026-10-26. `fingerprint.py` (P3.3), run against a scratch copy of
