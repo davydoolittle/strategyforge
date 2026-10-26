@@ -6,6 +6,87 @@ pinned windows on each candidate (P2.1).
 
 ---
 
+## F6. Event fingerprints: before a big day, volatility is LOW; context feeds are too young to say anything
+
+*2026-10-26. `fingerprint.py` (P3.3), run against a scratch copy of
+forge.db: 7,104 windows stored (BTC, ETH, SOL from 2021; XRP from 2023). A
+rerun replaced rows instead of adding them.*
+
+**Definition as built.**
+
+- Windows of 24 bars are laid on one grid, so they never overlap.
+- A window is a **move** if |close[i+24] − close[i]| ≥ K × ATR14[i].
+- Features are read at bar i, the window's start, so nothing after i is
+  used.
+- My first version scanned bar by bar for moves but used the grid for
+  non-moves. That made 83% of windows "moves" and skewed `hour` and
+  `wick_ratio`, so it was discarded.
+
+**K = 3, as specified, is not an event.**
+
+- 31–34% of 24h windows on every pair clear 3 hourly ATRs.
+- In hourly-ATR units, the median 24h move is 1.9 and the 95th percentile
+  is about 8.
+- At K = 3 the comparison is bigger days against smaller days. The report
+  warns about this, and `--k` is a CLI option.
+- K = 8 is about the top 5% of windows (349 moves out of 7,104) and is the
+  reading that answers the question.
+
+**Full history, OHLCV features, K = 8.** "Bonferroni" means the result still
+passes p < 0.05 after correcting for the 150 AUCs tested.
+
+| feature | AUC all | up | down | Bonferroni |
+|---|---|---|---|---|
+| vol_regime_pctile | 0.32 | 0.35 | 0.28 | yes |
+| atr_pct | 0.33 | 0.35 | 0.32 | yes |
+| bb_bw / bb_bw_pctile | 0.35 / 0.36 | 0.36 / 0.38 | 0.34 / 0.34 | yes |
+| rv7_ann_pct | 0.40 | 0.40 | 0.40 | yes |
+| vol_of_vol | 0.41 | 0.43 | 0.37 | yes |
+| dist_30d_low_pct | 0.44 | 0.50 | **0.38** | all, down |
+| dist_30d_high_pct | 0.47 | **0.42** | 0.53 | up |
+| stretch_slow_ema_pct | 0.51 | **0.59** | 0.43 | up |
+| dow | 0.56 | 0.52 | 0.60 | down |
+| ret_24h, hour, consec_closes, rel_vol | 0.50–0.53 | | | no |
+
+**What the table shows.**
+
+- **Low volatility comes before big moves, and that is partly built in.**
+  The threshold is K × ATR at bar i. A quiet bar i, or a weekend, which
+  explains `dow` and `is_weekend`, makes a move in ATR units easier to
+  reach. Volatility compression before expansion is also a real, known
+  pattern. This table cannot separate the two explanations. A threshold in
+  units of daily or 30-day volatility could, and would be the next step if
+  this matters.
+- **The directional features point to continuation, not reversal.**
+  - Up-moves start closer to the 30-day high (AUC 0.42 on distance from the
+    high) and further above the slow EMA (0.59).
+  - Down-moves start closer to the 30-day low (0.38).
+  - The pooled AUCs are about 0.5 because the up and down effects cancel.
+- **These p-values are too small.** The four pairs move together on the same
+  days, so 349 moves are perhaps 150 distinct market days. Even so, the
+  volatility features are many standard errors from 0.5. The directional ones
+  are close enough to the bar that they should be treated as hypotheses.
+- **Context-feed era.** The collector has 54 days of data (2026-09-02 →
+  2026-10-26), not the ~1 month the spec assumed. That gives 212 windows:
+  70 moves at K = 3 and **9** at K = 8. The best context features at K = 3
+  are fear_greed_chg_30d 0.61 and funding_rate_chg_30d 0.61, on 22–31 moves,
+  and none pass Bonferroni. 30-day changes have existed only since
+  2026-10-02. Nothing about funding, open interest, DVOL or the order book
+  can be concluded yet. Re-running in about 3 months gives roughly 4× the
+  data.
+
+**What this licenses.** Nothing for trading. Two hypotheses are worth one
+`feature_evals` / `filters.py` trial each, later:
+
+1. V4.1 entries should avoid high-volatility regimes. This is already the
+   opposite of what vol_of_vol suggested in P3.2, where its AUC was 0.58,
+   higher in winners. That disagreement is itself a reason for caution.
+2. Breakout entries near the 30-day extreme in the trade's direction.
+
+The trap filters already approximate both.
+
+---
+
 ## F5. vol_of_vol does not clear the P3.2 gate once duplicate trades are removed
 
 *2026-10-26. `feature_evals.py`, run on a scratch copy of forge.db.*
