@@ -6,6 +6,79 @@ pinned windows on each candidate (P2.1).
 
 ---
 
+## F2. Ablation of #2716 and #3214: what earns its place
+
+*2026-10-26. `ablation.py` (P2.5), run against a scratch copy of forge.db.*
+
+For each candidate, ablation tried 14 single changes on its pinned IS and OOS
+windows: 8 toggles flipped and 6 trap thresholds removed. A feature
+**earns** its place if the strategy is worse without it on *both* windows,
+with a full-window PF gap of at least 0.05. It **hurts** if the strategy is
+better without it on both. **Decoration** means it changes which trades are
+taken, but not in one direction. **Inactive** means it changes no trade at all.
+
+| feature | #2716 BTC (longs only) | #3214 ETH (long+short) |
+|---|---|---|
+| use_shorts | off; adding it **hurts** (OOS PF 1.45 → 1.03) | **earns** (without it: OOS PF 1.62 → 0.94) |
+| use_htf | **earns** (OOS −0.06) | inactive |
+| use_vwap | decoration | decoration |
+| use_volume / min_rel_vol | **earns** (OOS −0.26) | **earns** (OOS −0.43) |
+| avoid_chop / max_compression | inactive | inactive |
+| avoid_late via max_dist_ema | **earns** (OOS −0.13 / −0.08) | **earns** (OOS −0.15 / −0.20) |
+| max_big_bars (late trap) | decoration | decoration |
+| avoid_fake | **earns** (OOS −0.11) | off; adding it **hurts** (IS −0.15) |
+| use_trailing | off; adding it **hurts** (PF 0.23) | off; adding it **hurts** (PF 0.32) |
+| min_ema_sep | inactive | **earns** (OOS −0.45) |
+| adx_threshold | decoration (IS +0.01, OOS −0.11) | **earns** (OOS −0.18) |
+
+**Findings that hold on both candidates:**
+
+- **The volume trap and the distance arm of the late trap are the only
+  filters that earn their place on both.** Removing either costs
+  0.08–0.43 of OOS PF.
+- **`use_vwap` and the big-bar arm of the late trap are decoration on both.**
+- **`avoid_chop` is inactive on both, and it is redundant by
+  construction.** Its ADX arm (`adx <= adx_threshold`) is already excluded
+  by `strong_long`/`strong_short`. Its compression arm
+  (`sep < max_compression`) is already excluded by the hardcoded `sep > 1.0`
+  in `trending` and by `strong_sep`, whenever
+  `max_compression <= max(1.0, min_ema_sep)`. That holds for **1,235 of the
+  2,124** 1h trials that had `avoid_chop` on. So the random search spends
+  part of its trial budget, and raises the DSR bar, on a toggle that does
+  nothing.
+- **Trailing exits are disastrous on both** (PF 0.2–0.3). This fits
+  `use_trailing` having died out among survivors.
+
+**Pruned variants.** For each parent, every active feature that did not
+earn its place was switched off, the result was registered in the scratch
+DB, and the adversary attacked it:
+
+| | toggles on | full trades / pf | OOS trades / pf | SR | adversary |
+|---|---|---|---|---|---|
+| #2716 parent | 6 | 139 / 1.34 | 40 / 1.45 | 0.141 | REJECTED (A2) |
+| #3901 = #2716 pruned (−vwap, −chop, −big_bars, −min_ema_sep, −adx_threshold) | 4 | 150 / 1.33 | 42 / 1.34 | 0.137 | REJECTED (A2); A4 96% |
+| #3214 parent | 5 | 162 / 1.31 | 50 / 1.62 | 0.113 | REJECTED (A2; soft A7 A8) |
+| #3902 = #3214 pruned (−htf, −vwap, −chop, −big_bars) | 2 | 165 / 1.31 | 50 / 1.62 | 0.114 | REJECTED (A2; soft A7 A8) |
+
+- **#3902 is #3214 with three fewer toggles and the same OOS trades.** By
+  the simplicity rule it replaces #3214. Neither one survives.
+- **#2716 lost 0.11 of OOS PF when pruned.** Almost all of that comes from
+  removing `adx_threshold`, which the rule calls decoration because IS moved
+  the other way (+0.01). Removing several decoration features at once is not
+  free.
+- **#3901 scored 96% on A4.** That is the first A4 result below 100% in any
+  report (see F1).
+
+**What this does not show.** These are PF differences on 40–50 OOS trades.
+None of them is individually significant, and the IS half of each
+comparison was selected on. This is evidence about which *parts* of the
+family carry the result, to guide the next hypothesis, such as a
+volume-plus-late-entry core. It is not evidence that the result is real.
+Pruning cannot fix A2: it changes SR by less than 0.01, and the benchmark
+is about 1.08.
+
+---
+
 ## F1. V4.1 family, 1h, 2021-2026, 4 pairs: no validatable edge under random search
 
 *2026-10-26. Phase 2 random search after P2.1–P2.4.2 (pinned windows, per-pair
