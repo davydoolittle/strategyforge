@@ -4,7 +4,9 @@ Collects and archives everything the backtesting factory and shadow-feature
 analysis will need:
 
   1) 1h OHLCV candles from Coinbase public API  -> candles table
-     (backfills BACKFILL_DAYS on first run, then tops up hourly)
+     (backfills BACKFILL_DAYS on first run, then tops up hourly; if
+     BACKFILL_DAYS is later raised, also walks back from the oldest stored
+     bar to the new target, or to the pair's listing date if that is later)
   2) External context feeds (polled, ephemeral)  -> context table
      - Kraken Futures: funding rate, predicted funding, open interest,
        perp spread (bps) for BTC/ETH/SOL perps          [US-accessible]
@@ -120,16 +122,66 @@ def fetch_coinbase_candles(pair: str, start: datetime, end: datetime):
     return http_json(url)
 
 
+def store_candles(conn, pair: str, rows) -> int:
+    for r in rows:
+        conn.execute(
+            "INSERT OR REPLACE INTO candles (pair, ts, open, high, low, close, volume)"
+            " VALUES (?, ?, ?, ?, ?, ?, ?)",
+            (pair, int(r[0]), r[3], r[2], r[1], r[4], r[5]),
+        )
+    conn.commit()
+    return len(rows)
+
+
+# pairs whose history ran out before the BACKFILL_DAYS target (listed later
+# than that); remembered per process so the hourly top-up doesn't re-ask
+_history_exhausted = set()
+
+
+def backfill_backwards(conn, pair: str, oldest: datetime, target: datetime) -> int:
+    """Walk back from the oldest stored bar to target in 300-bar chunks.
+    Stops early when Coinbase returns nothing older than the chunk's end,
+    i.e. the pair's listing date has been reached."""
+    log(f"[{pair}] history starts {oldest:%Y-%m-%d %H:%M}, BACKFILL_DAYS={BACKFILL_DAYS} "
+        f"wants {target:%Y-%m-%d %H:%M} - backfilling backwards")
+    inserted = 0
+    cursor = oldest
+    while cursor > target:
+        chunk_start = max(cursor - timedelta(hours=300), target)
+        try:
+            rows = fetch_coinbase_candles(pair, chunk_start, cursor)
+        except Exception as e:
+            record_error(conn, f"coinbase-candles-back-{pair}", e)
+            break
+        if not any(int(r[0]) < cursor.timestamp() for r in rows):
+            _history_exhausted.add(pair)
+            log(f"[{pair}] no candles before {cursor:%Y-%m-%d %H:%M} - "
+                f"that is the start of Coinbase history for this pair")
+            break
+        inserted += store_candles(conn, pair, rows)
+        cursor = chunk_start
+        time.sleep(0.35)  # stay far under public rate limits
+    if inserted:
+        log(f"[{pair}] backward backfill upserted: {inserted}")
+    return inserted
+
+
 def update_candles(conn, pair: str):
     now = datetime.now(timezone.utc).replace(minute=0, second=0, microsecond=0)
-    row = conn.execute("SELECT MAX(ts) FROM candles WHERE pair = ?", (pair,)).fetchone()
-    if row[0] is None:
-        cursor = now - timedelta(days=BACKFILL_DAYS)
-        log(f"[{pair}] no candles yet - backfilling {BACKFILL_DAYS} days")
-    else:
-        cursor = datetime.fromtimestamp(row[0], tz=timezone.utc)
+    target = now - timedelta(days=BACKFILL_DAYS)
+    lo, hi = conn.execute(
+        "SELECT MIN(ts), MAX(ts) FROM candles WHERE pair = ?", (pair,)).fetchone()
 
     inserted = 0
+    if hi is None:
+        cursor = target
+        log(f"[{pair}] no candles yet - backfilling {BACKFILL_DAYS} days")
+    else:
+        cursor = datetime.fromtimestamp(hi, tz=timezone.utc)
+        oldest = datetime.fromtimestamp(lo, tz=timezone.utc)
+        if oldest > target and pair not in _history_exhausted:
+            inserted += backfill_backwards(conn, pair, oldest, target)
+
     while cursor < now:
         chunk_end = min(cursor + timedelta(hours=300), now)
         try:
@@ -137,14 +189,7 @@ def update_candles(conn, pair: str):
         except Exception as e:
             record_error(conn, f"coinbase-candles-{pair}", e)
             return inserted
-        for r in rows:
-            conn.execute(
-                "INSERT OR REPLACE INTO candles (pair, ts, open, high, low, close, volume)"
-                " VALUES (?, ?, ?, ?, ?, ?, ?)",
-                (pair, int(r[0]), r[3], r[2], r[1], r[4], r[5]),
-            )
-            inserted += 1
-        conn.commit()
+        inserted += store_candles(conn, pair, rows)
         cursor = chunk_end
         time.sleep(0.35)  # stay far under public rate limits
     if inserted:
