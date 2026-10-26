@@ -6,6 +6,36 @@ pinned windows on each candidate (P2.1).
 
 ---
 
+## F5. vol_of_vol does not clear the P3.2 gate once duplicate trades are removed
+
+*2026-10-26. `feature_evals.py`, run on a scratch copy of forge.db.*
+
+- **The 0.611 was inflated by duplicates.** `trade_features` has 3,111 rows,
+  but only 1,871 distinct signals (pair, tf, signal bar, direction). The 35
+  annotated candidates often take the same trade. On the raw rows,
+  vol_of_vol has AUC 0.598. Counting each signal once, it is **0.576**. The
+  0.611 in V2_PROMPT was measured on fewer rows. Either way it is below the
+  0.60 gate, so no `feature_evals` row was stored and vol_of_vol is not a
+  candidate filter.
+- **No other feature clears the gate.** The strongest OHLCV features are
+  vol_of_vol 0.576, rv7_ann_pct 0.425 and bb_bw_pctile 0.570, all on about
+  1,700–1,900 trades. The context features show larger AUCs (iv_rv_spread
+  1.000, btc_dominance 0.285, fear_greed 0.288), but on only 11–26 trades,
+  because the context collector starts 2026-09-01.
+- **The P3.1 plumbing was exercised anyway.** `filters.py --candidate 2716
+  --filter "vol_of_vol>=12"`, registered on scratch only, blocked 61 of 99
+  IS trades and 30 of 40 OOS trades. The blocked trades were net
+  **profitable** in both windows (+414 IS, +289 OOS). The child keeps 11 OOS
+  trades, so A1 would reject it. That is consistent with the gate: an AUC of
+  0.58 is not enough separation to pay for losing two-thirds of the trades.
+- **Holdout trades arrive slowly.** `--annotate-new` extended the 35
+  candidates to the newest candle and added 95 trades, but only 6 distinct
+  signals came after the current sample's last signal (2026-10-15). At that
+  rate, the 50 holdout trades a decision needs will take roughly three
+  months of collector time.
+
+---
+
 ## F4. A4 and A7 tightened: the soft attacks now discriminate
 
 *2026-10-26. Commit "adversary: tighten A4/A7". Re-run on a scratch copy of
