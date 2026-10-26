@@ -369,19 +369,17 @@ def annotate_trades(conn, candidate_id, pair, tf_seconds, trades):
     ensure_tables(conn)
     fc = FeatureComputer(conn, pair, tf_seconds)
     rt = RegimeTagger(conn, pair)
-    n = 0
-    for t in trades:
-        feats = fc.features_for_trade(t)
-        conn.execute(
-            "INSERT INTO trade_features (candidate_id, pair, tf_seconds, signal_ts,"
-            " entry_ts, direction, pnl, reason, features_json, regime)"
-            " VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
-            (candidate_id, pair, tf_seconds, t["signal_ts"], t["entry_ts"],
-             t["dir"], t["pnl"], t["reason"], json.dumps(feats), rt.at(t["signal_ts"])),
-        )
-        n += 1
+    # compute everything before the first INSERT: the write lock is then held
+    # for the inserts only, not the feature work (the collector writes too)
+    rows = [(candidate_id, pair, tf_seconds, t["signal_ts"], t["entry_ts"], t["dir"], t["pnl"],
+             t["reason"], json.dumps(fc.features_for_trade(t)), rt.at(t["signal_ts"]))
+            for t in trades]
+    conn.executemany(
+        "INSERT INTO trade_features (candidate_id, pair, tf_seconds, signal_ts,"
+        " entry_ts, direction, pnl, reason, features_json, regime)"
+        " VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)", rows)
     conn.commit()
-    return n
+    return len(rows)
 
 
 def backfill_regime(conn, progress=True):

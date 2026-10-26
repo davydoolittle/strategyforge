@@ -190,8 +190,8 @@ def run(conn, strategy_ids=None, day=None, topic=None, push=True):
             " mu, sigma, n_forward, min_cusum, breach_ts, notified, detail, measured_at)"
             " VALUES (:strategy_id, :day, :cusum, :alert, :source, :n_baseline, :mu, :sigma,"
             " :n_forward, :min_cusum, :breach_ts, :notified, :detail, :measured_at)", row)
+        conn.commit()      # per strategy: never hold the write lock across the next backtest
         out.append(row)
-    conn.commit()
     return out
 
 

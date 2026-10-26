@@ -15,6 +15,10 @@ analysis will need:
      - alternative.me: Fear & Greed index                [public]
      - CoinGecko: BTC dominance %                        [public]
 
+  3) Research jobs (P4.5) on a schedule  -> jobs table, /data/jobs/*.log
+     paper (hourly), health + feature_evals --annotate-new (daily),
+     adversary --top 20 (weekly), each as a child process.
+
 All feeds are shadow data: nothing here trades or decides anything.
 Every poll is timestamped so signals can later be joined to the market
 context that existed at signal time.
@@ -23,6 +27,8 @@ context that existed at signal time.
 import json
 import os
 import sqlite3
+import subprocess
+import sys
 import time
 import urllib.request
 from datetime import datetime, timedelta, timezone
@@ -63,6 +69,19 @@ KRAKEN_PERP_MAP = {
 }
 DVOL_CURRENCIES = ["BTC", "ETH"]
 
+# P4.5 research jobs: (name, cron_like_interval, command in app/, timeout s).
+# This list is the source of truth for interval and command; the jobs table
+# mirrors it and keeps last_run plus an `enabled` switch you may set to 0 by
+# hand (it survives restarts).
+JOB_SPECS = [
+    ("paper", "1h", "paper.py", 1800),
+    ("health", "1d", "health.py", 3600),
+    ("feature_evals", "1d", "feature_evals.py --annotate-new", 4 * 3600),
+    ("adversary", "7d", "adversary.py --top 20", 12 * 3600),
+]
+JOB_LOG_DIR = os.path.join(os.path.dirname(DB_PATH), "jobs")
+DB_TIMEOUT_S = 60    # wait this long for a job's write lock before an error
+
 
 # ----------------------------------------------------------------- helpers ---
 
@@ -101,7 +120,7 @@ def warn_if_pairs_env() -> bool:
 
 
 def db() -> sqlite3.Connection:
-    conn = sqlite3.connect(DB_PATH)
+    conn = sqlite3.connect(DB_PATH, timeout=DB_TIMEOUT_S)
     conn.execute("""CREATE TABLE IF NOT EXISTS candles (
         pair TEXT NOT NULL,
         ts INTEGER NOT NULL,            -- unix seconds, bar OPEN time, UTC
@@ -129,6 +148,14 @@ def record_error(conn, source: str, err: Exception):
         (int(time.time()), source, str(err)[:500]),
     )
     conn.commit()
+
+
+def safe_record_error(conn, source: str, err: Exception):
+    """record_error that cannot raise (e.g. the database itself is locked)."""
+    try:
+        record_error(conn, source, err)
+    except Exception as e2:
+        log(f"ERROR [{source}] {err} (and could not record it: {e2})")
 
 
 def put_context(conn, ts: int, metric: str, pair: str, value):
@@ -310,6 +337,130 @@ def poll_btc_dominance(conn, ts: int):
     conn.commit()
 
 
+# -------------------------------------------------------------------- jobs ---
+
+def parse_interval(spec: str) -> int:
+    """'15m' / '1h' / '1d' / '7d' -> seconds."""
+    units = {"m": 60, "h": 3600, "d": 86400}
+    if len(spec) < 2 or spec[-1] not in units or not spec[:-1].isdigit() or int(spec[:-1]) < 1:
+        raise ValueError(f"bad job interval {spec!r}: use e.g. 15m, 1h, 1d, 7d")
+    return int(spec[:-1]) * units[spec[-1]]
+
+
+class JobRunner:
+    """Starts due jobs as child processes (python -u <script> <args>, cwd =
+    app dir) and checks on them; the collector loop calls step() every pass.
+    step() never raises and never waits on a job, so a crash, a hang or a
+    long adversary run cannot stop or stall candle and context collection.
+
+    - one process per job at a time; different jobs may overlap
+    - last_run is set when a job STARTS: a failing job retries after one full
+      interval, not every pass
+    - stdout + stderr of the latest run -> <log_dir>/<name>.log
+    - non-zero exit, a timeout (process killed) or a failure to start ->
+      poll_errors with source 'job-<name>' and the tail of the log"""
+
+    def __init__(self, conn, specs=None, app_dir=None, log_dir=None, db_path=None):
+        self.conn = conn
+        self.specs = {}
+        for name, interval, command, timeout in (JOB_SPECS if specs is None else specs):
+            self.specs[name] = {"interval": parse_interval(interval), "spec": interval,
+                                "command": command, "timeout": timeout}
+        self.app_dir = app_dir or os.path.dirname(os.path.abspath(__file__))
+        self.log_dir = log_dir or JOB_LOG_DIR
+        self.env = {**os.environ, "FORGE_DB": db_path or DB_PATH}
+        self.running = {}          # name -> (Popen, started, log file)
+        self.ensure_table()
+
+    def ensure_table(self):
+        self.conn.execute("""CREATE TABLE IF NOT EXISTS jobs (
+            name TEXT PRIMARY KEY,
+            cron_like_interval TEXT,        -- 15m / 1h / 1d / 7d
+            command TEXT,                   -- script in app/ + args
+            enabled INTEGER DEFAULT 1,      -- set 0 by hand to pause a job
+            last_run INTEGER,               -- unix ts the latest run STARTED
+            last_exit INTEGER,              -- exit code; -9 = killed on timeout
+            last_duration_s REAL,
+            last_error TEXT
+        )""")
+        for name, s in self.specs.items():
+            self.conn.execute(
+                "INSERT INTO jobs (name, cron_like_interval, command) VALUES (?, ?, ?)"
+                " ON CONFLICT(name) DO UPDATE SET cron_like_interval=excluded.cron_like_interval,"
+                " command=excluded.command", (name, s["spec"], s["command"]))
+        self.conn.commit()
+
+    def _tail(self, name, n=400):
+        try:
+            with open(os.path.join(self.log_dir, f"{name}.log"), "rb") as f:
+                f.seek(0, 2)
+                f.seek(max(0, f.tell() - n))
+                return f.read().decode("utf-8", "replace").strip()
+        except OSError:
+            return ""
+
+    def _finish(self, name, now, code, why=None):
+        proc, started, fh = self.running.pop(name)
+        fh.close()
+        err = None
+        if why or code != 0:
+            err = f"{why or f'exit {code}'}: {self._tail(name)}"
+            safe_record_error(self.conn, f"job-{name}", RuntimeError(err))
+        else:
+            log(f"job {name} done in {now - started:.0f}s")
+        self.conn.execute("UPDATE jobs SET last_exit=?, last_duration_s=?, last_error=? WHERE name=?",
+                          (code, round(now - started, 1), err and err[:500], name))
+        self.conn.commit()
+
+    def _start(self, name, now):
+        s = self.specs[name]
+        self.conn.execute("UPDATE jobs SET last_run=? WHERE name=?", (int(now), name))
+        self.conn.commit()
+        os.makedirs(self.log_dir, exist_ok=True)
+        fh = open(os.path.join(self.log_dir, f"{name}.log"), "w", encoding="utf-8")
+        try:
+            fh.write(f"# {datetime.now(timezone.utc).isoformat()} {s['command']}\n")
+            fh.flush()
+            proc = subprocess.Popen([sys.executable, "-u"] + s["command"].split(),
+                                    cwd=self.app_dir, env=self.env, stdin=subprocess.DEVNULL,
+                                    stdout=fh, stderr=subprocess.STDOUT)
+        except Exception:
+            fh.close()
+            raise
+        self.running[name] = (proc, now, fh)
+        log(f"job {name} started: {s['command']}")
+
+    def step(self, now=None):
+        now = time.time() if now is None else now
+        for name in list(self.running):
+            try:
+                proc, started, _ = self.running[name]
+                code = proc.poll()
+                if code is not None:
+                    self._finish(name, now, code)
+                elif now - started > self.specs[name]["timeout"]:
+                    proc.kill()
+                    proc.wait(timeout=30)
+                    self._finish(name, now, -9,
+                                 f"timed out after {self.specs[name]['timeout']}s, killed")
+            except Exception as e:
+                safe_record_error(self.conn, f"job-{name}", e)
+        try:
+            rows = self.conn.execute("SELECT name, enabled, last_run FROM jobs").fetchall()
+        except Exception as e:
+            safe_record_error(self.conn, "jobs", e)
+            return
+        for name, enabled, last_run in rows:
+            if name not in self.specs or name in self.running or not enabled:
+                continue
+            if last_run is not None and now - last_run < self.specs[name]["interval"]:
+                continue
+            try:
+                self._start(name, now)
+            except Exception as e:
+                safe_record_error(self.conn, f"job-{name}", RuntimeError(f"could not start: {e}"))
+
+
 # -------------------------------------------------------------------- main ---
 
 def main():
@@ -321,6 +472,7 @@ def main():
     last_ctx = 0.0
     last_slow = 0.0
     announced = False
+    jobs = None
 
     while True:
         now = time.time()
@@ -328,7 +480,10 @@ def main():
 
         if now - last_candle >= CANDLE_INTERVAL_S or last_candle == 0:
             for pair in PAIRS:
-                update_candles(conn, pair)
+                try:
+                    update_candles(conn, pair)
+                except Exception as e:      # e.g. a job held the write lock > DB_TIMEOUT_S
+                    safe_record_error(conn, f"candles-{pair}", e)
             last_candle = now
             if not announced:
                 n = conn.execute("SELECT COUNT(*) FROM candles").fetchone()[0]
@@ -359,6 +514,14 @@ def main():
                 except Exception as e:
                     record_error(conn, name, e)
             last_slow = now
+
+        # jobs start only after the first candle top-up, so they see fresh bars
+        try:
+            if jobs is None:
+                jobs = JobRunner(conn)
+            jobs.step()
+        except Exception as e:
+            safe_record_error(conn, "jobs", e)
 
         time.sleep(30)
 

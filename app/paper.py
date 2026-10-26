@@ -108,7 +108,9 @@ def ensure_tables(conn):
 def open_signals(path):
     if not os.path.exists(path):
         raise SystemExit(f"signals db not found at {path}. On Matrix, sf.sh mounts davesbridge's "
-                         f"data dir read-only at /bridge; elsewhere pass --signals-db.")
+                         f"data dir read-only at /bridge; the collector container needs the same "
+                         f"mount (-v /mnt/user/appdata/davesbridge/data:/bridge:ro) for its "
+                         f"hourly paper job; elsewhere pass --signals-db.")
     return sqlite3.connect(f"file:{path}?mode=ro", uri=True)
 
 
@@ -337,16 +339,21 @@ def update_pnl(conn, now=None):
     out = {}
     for (sid,) in conn.execute("SELECT DISTINCT strategy_id FROM paper_trades"
                                " WHERE strategy_id IS NOT NULL ORDER BY strategy_id").fetchall():
-        conn.execute("DELETE FROM paper_positions WHERE strategy_id=?", (sid,))
-        conn.execute("DELETE FROM paper_summary WHERE strategy_id=?", (sid,))
         name = conn.execute("SELECT name FROM strategies WHERE id=?", (sid,)).fetchone()
         strat = strategy_by_name(conn, name[0]) if name else None
         alerts = own_alerts(conn, strat) if strat else {}
-        if not alerts:
+        r = None
+        if alerts:
+            # simulate before the first write: the write lock is then held only
+            # for this strategy's delete + inserts (the collector writes too)
+            newest = conn.execute("SELECT MAX(ts) FROM candles WHERE pair=?",
+                                  (strat["pair"],)).fetchone()[0]
+            r = simulate(conn, strat, alerts, newest)
+        conn.execute("DELETE FROM paper_positions WHERE strategy_id=?", (sid,))
+        conn.execute("DELETE FROM paper_summary WHERE strategy_id=?", (sid,))
+        if r is None:
+            conn.commit()
             continue
-        newest = conn.execute("SELECT MAX(ts) FROM candles WHERE pair=?",
-                              (strat["pair"],)).fetchone()[0]
-        r = simulate(conn, strat, alerts, newest)
         rows = position_rows(strat, alerts, r, newest, now)
         conn.executemany(
             "INSERT INTO paper_positions (strategy_id, signal_id, bar_ts, side, status, entry_ts,"
@@ -362,7 +369,7 @@ def update_pnl(conn, now=None):
         out[sid] = {"name": strat["name"], "capital": strat["cfg"]["initial_capital"],
                     "rows": rows, "last": days[-1], "n_closed": len(r["trades"]),
                     "net": r["net"], "pf": _pf([t["pnl"] for t in r["trades"]])}
-    conn.commit()
+        conn.commit()
     return out
 
 
