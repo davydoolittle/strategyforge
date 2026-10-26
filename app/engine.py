@@ -165,11 +165,11 @@ def vwap_daily(ts, h, l, c, v):
 
 # ------------------------------ data ---------------------------------------
 
-def load_candles(conn, pair, end_ts, tf_seconds=3600):
+def load_candles(conn, pair, end_ts, tf_seconds=3600, start_ts=None):
     rows = conn.execute(
         "SELECT ts, open, high, low, close, volume FROM candles"
-        " WHERE pair = ? AND ts <= ? ORDER BY ts",
-        (pair, end_ts),
+        " WHERE pair = ? AND ts <= ? AND ts >= ? ORDER BY ts",
+        (pair, end_ts, start_ts if start_ts is not None else 0),
     ).fetchall()
     if not rows:
         raise RuntimeError(f"no candles for {pair}")
@@ -221,7 +221,11 @@ def backtest(conn, pair, cfg, start_iso, end_iso, tf_seconds=3600):
     """Run the V4.1 strategy with the given cfg. Returns stats + trades."""
     start_ts = int(datetime.fromisoformat(start_iso).replace(tzinfo=timezone.utc).timestamp())
     end_ts = int(datetime.fromisoformat(end_iso).replace(tzinfo=timezone.utc).timestamp())
-    ts, o, h, l, c, v = load_candles(conn, pair, end_ts, tf_seconds)
+    # cfg["history_start_ts"] (default None = all history): ignore candles
+    # before it, so indicator warmup is the same as when a candidate's windows
+    # were pinned even after older candles are backfilled.
+    ts, o, h, l, c, v = load_candles(conn, pair, end_ts, tf_seconds,
+                                     cfg.get("history_start_ts"))
 
     n = len(ts)
     ema_f = ema(c, cfg["ema_fast"])

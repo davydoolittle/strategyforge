@@ -47,7 +47,7 @@ TERMINAL = "retired"
 # keys that change trading behaviour; everything else (capital, fees) is
 # an execution assumption and does not change DNA
 NON_DNA_KEYS = {"initial_capital", "commission_pct", "slippage_ticks", "tick_size",
-                "fill_delay_bars"}
+                "fill_delay_bars", "history_start_ts"}
 
 
 def dna_of(params):

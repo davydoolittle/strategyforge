@@ -78,6 +78,10 @@ def attack(conn, cid, verbose=True):
     # silently folded into "OOS"
     is_start, split, end = W.for_candidate(conn, cid)
     end_ts = W._ts(end)
+    # ...nor are older candles from a backward backfill: every backtest below
+    # (all attacks copy cfg) starts its indicator warmup where the optimizer's did
+    start_ts = W.history_start(is_start, tf_s)
+    cfg = W.pin_cfg(cfg, is_start, tf_s)
     cap = cfg["initial_capital"]
     t0 = time.time()
 
@@ -115,7 +119,7 @@ def attack(conn, cid, verbose=True):
 
     # A3 walk-forward
     wf = V.walk_forward(conn, pair, cfg, tf_s, WF_FOLDS, embargo_bars=WF_EMBARGO_BARS,
-                        end_ts=end_ts)
+                        end_ts=end_ts, start_ts=start_ts)
     attacks["A3"] = {
         "name": "walk_forward",
         "folds": [{k: f[k] for k in ("fold", "n_trades", "net", "pf")} for f in wf["folds"]],
@@ -154,7 +158,7 @@ def attack(conn, cid, verbose=True):
     others = [r[0] for r in conn.execute("SELECT DISTINCT pair FROM candles") if r[0] != pair]
     tr = []
     for other in others:
-        ow = W.compute(conn, other, tf_s, end_ts)
+        ow = W.compute(conn, other, tf_s, end_ts, start_ts)
         if ow is None:
             continue
         _, osplit, oend = ow

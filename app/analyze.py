@@ -148,10 +148,10 @@ def feature_separation(conn, min_n):
 
 # ------------------------- section 3: transfer -----------------------------
 
-def oos_window(conn, pair, tf_s, as_of_iso):
+def oos_window(conn, pair, tf_s, as_of_iso, from_ts):
     """OOS window of `pair` as it stood when the candidate was pinned, so
     transfer is judged on the same calendar span as the home pair."""
-    w = windows.compute(conn, pair, tf_s, windows._ts(as_of_iso))
+    w = windows.compute(conn, pair, tf_s, windows._ts(as_of_iso), from_ts)
     return None if w is None else (w[1], w[2])
 
 
@@ -173,13 +173,14 @@ def transfer_test(conn, tf, top_n):
             " WHERE tf=? AND passed=1 AND pair=? ORDER BY oos_pf DESC LIMIT ?",
             (tf, pair, top_n)).fetchall()
         for cid, pj, home_pf in tops:
-            cfg = json.loads(pj)
-            _, _, as_of = windows.for_candidate(conn, cid)
+            is_start, _, as_of = windows.for_candidate(conn, cid)
+            cfg = windows.pin_cfg(json.loads(pj), is_start, tf_s)
+            from_ts = windows.history_start(is_start, tf_s)
             line = [f"#{cid} (tuned {pair}, home OOS pf={home_pf:.2f}) ->"]
             for other in all_pairs:
                 if other == pair:
                     continue
-                w = oos_window(conn, other, tf_s, as_of)
+                w = oos_window(conn, other, tf_s, as_of, from_ts)
                 if not w:
                     continue
                 try:

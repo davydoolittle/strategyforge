@@ -144,8 +144,8 @@ def backfill_sharpe(conn, progress=True):
         if s is None:
             raise SystemExit(f"candidate {cid} has no pinned windows — "
                              f"run `python windows.py --backfill` first")
-        cfg = json.loads(pj)
         tf_s = windows.tf_seconds(tf)
+        cfg = windows.pin_cfg(json.loads(pj), s, tf_s)
         is_r = engine.backtest(conn, pair, cfg, s, sp, tf_s)
         oos_sr = None
         oos_n = None

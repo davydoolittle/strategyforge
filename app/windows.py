@@ -60,22 +60,33 @@ def ensure_columns(conn):
     conn.commit()
 
 
-def compute(conn, pair, tf_secs, as_of_ts=None):
+def compute(conn, pair, tf_secs, as_of_ts=None, from_ts=None):
     """The optimizer's split rule over the candles that existed at as_of_ts
-    (default: now). Returns (is_start, split, end) as ISO strings, or None
-    if the pair has no candles."""
-    if as_of_ts is None:
-        lo, hi = conn.execute(
-            "SELECT MIN(ts), MAX(ts) FROM candles WHERE pair=?", (pair,)).fetchone()
-    else:
-        lo, hi = conn.execute(
-            "SELECT MIN(ts), MAX(ts) FROM candles WHERE pair=? AND ts<=?",
-            (pair, as_of_ts)).fetchone()
+    (default: now), ignoring any before from_ts (default: none ignored —
+    pass history_start() of a pinned candidate so a backward backfill of
+    older candles can't move the split). Returns (is_start, split, end) as
+    ISO strings, or None if the pair has no candles in range."""
+    lo, hi = conn.execute(
+        "SELECT MIN(ts), MAX(ts) FROM candles WHERE pair=? AND ts<=? AND ts>=?",
+        (pair, as_of_ts if as_of_ts is not None else 2 ** 62,
+         from_ts if from_ts is not None else 0)).fetchone()
     if lo is None:
         return None
     is_start = lo + engine.WARMUP_BARS * tf_secs
     split = lo + int((hi - lo) * WF_SPLIT)
     return _iso(is_start), _iso(split), _iso(hi)
+
+
+def history_start(is_start_iso, tf_secs):
+    """First candle the optimizer had when the windows were pinned: is_start
+    minus the engine warmup. Pass it as cfg["history_start_ts"] so backtests
+    of a pinned candidate see the same warmup bars as the optimizer did."""
+    return _ts(is_start_iso) - engine.WARMUP_BARS * tf_secs
+
+
+def pin_cfg(cfg, is_start_iso, tf_secs):
+    """Copy of cfg that ignores candles older than the pinned history."""
+    return {**cfg, "history_start_ts": history_start(is_start_iso, tf_secs)}
 
 
 def for_candidate(conn, cid):
@@ -130,7 +141,7 @@ def verify(conn, limit=None):
         q += f" LIMIT {int(limit)}"
     ok, bad = 0, []
     for cid, pair, tf, pj, ist, isn, oot, oon, s, sp, e in conn.execute(q).fetchall():
-        cfg = json.loads(pj)
+        cfg = pin_cfg(json.loads(pj), s, tf_seconds(tf))
         a = engine.backtest(conn, pair, cfg, s, sp, tf_seconds(tf))
         b = engine.backtest(conn, pair, cfg, sp, e, tf_seconds(tf))
         if (a["n_trades"] == ist and abs(a["net"] - isn) < 0.01

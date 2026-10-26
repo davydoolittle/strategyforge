@@ -10,7 +10,10 @@ import unittest
 
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", "app"))
 
+import engine  # noqa: E402
+import lineage  # noqa: E402
 import optimizer  # noqa: E402
+import validation as V  # noqa: E402
 import windows as W  # noqa: E402
 
 T0 = 1_725_242_400          # 2024-09-02 02:00 UTC, first real candle
@@ -96,6 +99,34 @@ class TestPinning(DBTestCase):
         self.assertEqual(W.for_candidate(conn, new), keep)   # pinned rows untouched
         flags = dict(conn.execute("SELECT id, windows_backfilled FROM candidates"))
         self.assertEqual(flags, {old: 1, new: 0})
+
+    def test_backward_backfill_does_not_move_pinned_windows(self):
+        """Older candles prepended later (P2.4.1) must not shift a pinned
+        candidate's split, its transfer windows, its walk-forward folds or its
+        indicator warmup."""
+        conn = self.db(3000)
+        pinned = W.compute(conn, "BTC-USD", HOUR, T0 + 2000 * HOUR)
+        start = W.history_start(pinned[0], HOUR)
+        self.assertEqual(start, T0)
+        cfg = W.pin_cfg({"ema_fast": 9}, pinned[0], HOUR)
+        folds_before = V.walk_forward(conn, "BTC-USD", engine.default_cfg(), HOUR,
+                                      end_ts=W._ts(pinned[2]), start_ts=start)["folds"]
+
+        add_bars(conn, "BTC-USD", -5000, 0)        # backward backfill
+        self.assertNotEqual(W.compute(conn, "BTC-USD", HOUR, T0 + 2000 * HOUR), pinned)
+        self.assertEqual(W.compute(conn, "BTC-USD", HOUR, T0 + 2000 * HOUR, start), pinned)
+        folds_after = V.walk_forward(conn, "BTC-USD", engine.default_cfg(), HOUR,
+                                     end_ts=W._ts(pinned[2]), start_ts=start)["folds"]
+        self.assertEqual(folds_before, folds_after)
+        ts = engine.load_candles(conn, "BTC-USD", T0 + 10 * HOUR, HOUR,
+                                 cfg["history_start_ts"])[0]
+        self.assertEqual(ts[0], T0)
+        self.assertEqual(engine.load_candles(conn, "BTC-USD", T0, HOUR)[0][0], T0 - 5000 * HOUR)
+
+    def test_history_start_is_not_dna(self):
+        cfg = {"ema_fast": 9}
+        self.assertEqual(lineage.dna_of(cfg),
+                         lineage.dna_of(W.pin_cfg(cfg, W._iso(T0 + 300 * HOUR), HOUR)))
 
     def test_ensure_columns_idempotent(self):
         conn = self.db(10)

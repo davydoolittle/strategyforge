@@ -203,19 +203,16 @@ def make_folds(lo_ts, hi_ts, tf_seconds, n_folds, train_frac=0.6, embargo_bars=2
 
 
 def walk_forward(conn, pair, cfg, tf_seconds, n_folds=5, train_frac=0.6,
-                 embargo_bars=24, end_ts=None):
+                 embargo_bars=24, end_ts=None, start_ts=None):
     """Run cfg on every embargoed test window. cfg is FIXED (this validates a
     parameter set, it does not re-optimize per fold — that is the optimizer's
-    job and would need nested CV). end_ts caps the history (pass the
-    candidate's pinned oos_end so folds don't move as candles arrive).
-    Returns per-fold stats + summary."""
-    if end_ts is None:
-        lo, hi = conn.execute(
-            "SELECT MIN(ts), MAX(ts) FROM candles WHERE pair=?", (pair,)).fetchone()
-    else:
-        lo, hi = conn.execute(
-            "SELECT MIN(ts), MAX(ts) FROM candles WHERE pair=? AND ts<=?",
-            (pair, end_ts)).fetchone()
+    job and would need nested CV). start_ts / end_ts bound the history (pass
+    the candidate's pinned history start and oos_end so folds don't move as
+    candles are added at either end). Returns per-fold stats + summary."""
+    lo, hi = conn.execute(
+        "SELECT MIN(ts), MAX(ts) FROM candles WHERE pair=? AND ts<=? AND ts>=?",
+        (pair, end_ts if end_ts is not None else 2 ** 62,
+         start_ts if start_ts is not None else 0)).fetchone()
     folds = make_folds(lo, hi, tf_seconds, n_folds, train_frac, embargo_bars)
     results = []
     for f in folds:
