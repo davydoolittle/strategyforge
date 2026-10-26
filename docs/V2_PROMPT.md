@@ -178,6 +178,7 @@ Goal: close the loop between TradingView alerts and the engine, so `paper_valida
 6. Never touch `davesbridge`'s `DRY_RUN` / `KILL_SWITCH` handling.
 7. Commit after each checklist item with the item id in the message (`P2.1 window pinning`).
 8. If a step needs a credential or a service that isn't there, stop and say exactly what is missing. Do not stub it and move on.
+9. **No bulk writes to `forge.db` over the network.** Any job that writes thousands of rows (optimizer runs, backfills, re-annotation, anything with "backfill" in its name) runs **on Matrix** via `sf.sh`, never from a laptop against the mapped SMB share. SQLite locking over SMB is unreliable while the collector container writes to the same file; the P2.3 backfill died mid-run with `disk I/O error` on 2026-10-25. When working from the share: write the code and tests there, run tests and read-only checks there, test bulk jobs against a scratch copy (`sqlite3` backup API), and hand the human the exact `sf.sh` command to run on the server. Also: never enable WAL from the share (WAL needs shared memory, which a network filesystem doesn't provide).
 
 ## 11. Your first response
 
