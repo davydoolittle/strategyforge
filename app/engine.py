@@ -246,6 +246,10 @@ def backtest(conn, pair, cfg, start_iso, end_iso, tf_seconds=3600):
 
     equity = cfg["initial_capital"]
     trades = []
+    # every entry DECISION (signal on bar close + position allows it), filled
+    # or not by the end of the run. This is the bar where the Pine export
+    # calls strategy.entry() and alert(); paper.py reconciles against it.
+    entries = []
     pos = None
     pending = None
 
@@ -410,9 +414,11 @@ def backtest(conn, pair, cfg, start_iso, end_iso, tf_seconds=3600):
         if long_sig and (pos is None or pos["dir"] == "short"):
             pending = {"action": "long", "atr": atr_v[i], "flip": pos is not None,
                        "signal_ts": ts[i], "wait": delay}
+            entries.append({"ts": ts[i], "side": "long", "close": c[i]})
         elif short_sig and (pos is None or pos["dir"] == "long"):
             pending = {"action": "short", "atr": atr_v[i], "flip": pos is not None,
                        "signal_ts": ts[i], "wait": delay}
+            entries.append({"ts": ts[i], "side": "short", "close": c[i]})
 
     wins = [t for t in trades if t["pnl"] > 0]
     gross_p = sum(t["pnl"] for t in wins)
@@ -434,6 +440,7 @@ def backtest(conn, pair, cfg, start_iso, end_iso, tf_seconds=3600):
         "net": equity - cfg["initial_capital"],
         "pf": pf, "max_dd": max_dd,
         "trades": trades,
+        "entries": entries,
     }
 
 
