@@ -38,6 +38,17 @@ PAIRS = [
     "SOL-USD",
     "XRP-USD",   # P2.4.2, 2026-10-25: ~$78M/day 30d avg on Coinbase, >= 1,100 days hourly
 ]
+# Verified price increment per pair (Coinbase GET /products/{pair}
+# quote_increment, checked 2026-10-26). Slippage is slippage_ticks * tick, so a
+# wrong tick is a wrong cost model: the 0.01 default made XRP (~$2.5) pay
+# ~100x its real slippage (FINDINGS F1). A pair missing here is UNVERIFIED and
+# adversary A7 will not use it as transfer evidence.
+TICK_SIZE = {
+    "BTC-USD": 0.01,
+    "ETH-USD": 0.01,
+    "SOL-USD": 0.01,
+    "XRP-USD": 0.0001,
+}
 BACKFILL_DAYS = int(os.environ.get("BACKFILL_DAYS", "730"))
 NTFY_TOPIC = os.environ.get("NTFY_TOPIC", "")
 

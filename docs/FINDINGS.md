@@ -6,6 +6,62 @@ pinned windows on each candidate (P2.1).
 
 ---
 
+## F4. A4 and A7 tightened: the soft attacks now discriminate
+
+*2026-10-26. Commit "adversary: tighten A4/A7". Re-run on a scratch copy of
+forge.db (reports #24 and #25 there).*
+
+**What changed.**
+
+- **A4 plateau.** Each numeric parameter is now nudged by ±10% **and** ±25%,
+  giving 48 OOS neighbours instead of 24. A nudge that lands on a value
+  already tried is skipped. To pass, ≥ 70% of neighbours must be profitable
+  (unchanged), **and** the worst neighbour's OOS PF must be ≥ 1.0 (new).
+- **A7 transfer.** A pair counts as holding only with PF ≥ 1.1 on ≥ 15 OOS
+  trades; before, net > 0 on ≥ 5 trades was enough. Each pair is now run at
+  its own tick size from the new `main.TICK_SIZE` table, which was checked
+  against Coinbase `GET /products/{pair}` `quote_increment` on 2026-10-26:
+  BTC/ETH/SOL 0.01, XRP 0.0001. Pairs not in the table are excluded and
+  listed in the report. Before this, every transfer ran at the tuned pair's
+  0.01 tick: the F1 XRP artifact.
+
+**What changed in the verdicts.** Both candidates are still REJECTED on A2.
+Only the soft attacks moved.
+
+| | #2716 BTC before | #2716 after | #3214 ETH before | #3214 after |
+|---|---|---|---|---|
+| A4 | PASS, 100% of 24, worst PF 1.09 | **fail**, 94% of 48, worst PF **0.81** | PASS, 100% of 24, worst 1.29 | PASS, 100% of 48, worst 1.19 |
+| A7 ETH / BTC | ETH 1.09/32t → held (net > 0) | ETH 1.09/32t → **does not hold** | BTC 0.97/42t | BTC 0.97/42t |
+| A7 SOL | 0.42/41t | 0.42/41t | 0.70/59t | 0.70/59t |
+| A7 XRP | 0.04/29t (tick 0.01) | **0.88/17t** (tick 0.0001) | 0.03/59t (tick 0.01) | **1.06/29t** (tick 0.0001) |
+| A7 | PASS | **fail** | fail | fail |
+| soft fails | none | **A4, A7** | A7, A8 | A7, A8 |
+| verdict without A2 | SURVIVED | **FRAGILE** | FRAGILE | FRAGILE |
+
+**What this shows.**
+
+- **A4 now separates the two candidates.** #2716's worst neighbours are all
+  at ±25%: `adx_threshold` 26.6 → 33.25 gives PF 0.81 on 24 trades,
+  `rsi_buy` +25% gives 0.98, and `stop_atr` −25% gives 0.99. At ±10% it
+  looked like a plateau; one step further it is an edge. #3214 holds PF ≥ 1.19
+  on all 48 neighbours. That is the first A4 result in the project that is
+  not 100%/PASS, and the first candidate to clear the stricter rule.
+- **#2716's A7 pass hung on one marginal pair.** It passed only
+  through ETH at PF 1.09. Under PF ≥ 1.1 it fails. Neither candidate
+  transfers anywhere at a PF that would pay for an extra trial.
+- **The XRP transfer numbers were a cost artifact, as F1 said.** At the real
+  tick, XRP goes from PF 0.03–0.04 to 0.88–1.06: break-even, not collapse.
+  XRP is now usable evidence in A7. It is still not evidence *for* either
+  candidate.
+- **Neither check should get looser.** If A2 were ignored, both candidates
+  would be FRAGILE, not SURVIVED.
+- **Not done.** The optimizer still writes `tick_size: 0.01` into every new
+  XRP candidate's cfg, so XRP's own optimizer results remain mis-costed until
+  `optimizer.sample_cfg` takes the tick from `main.TICK_SIZE`. That is one
+  line, left for when XRP is re-run, because it changes stored results.
+
+---
+
 ## F3. Effective number of trials: under N_eff, no verdict changes
 
 *2026-10-26. `neff.py` + `validation.effective_trials`, run against a scratch

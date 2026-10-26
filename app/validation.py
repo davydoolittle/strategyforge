@@ -15,7 +15,7 @@ Contents
   walk_forward()         rolling, EMBARGOED folds — train on [a,b), test on
                          [b+embargo, c)
   monte_carlo()          resample trade order -> drawdown distribution
-  param_sensitivity()    perturb each numeric param +/-pct, measure PF stability
+  param_sensitivity()    perturb each numeric param +/-pct (several steps), PF stability
   cost_stress()          re-run with 2x and 3x commission+slippage
   lookahead_shift()      delay every signal by +1 bar; if results IMPROVE,
                          something is leaking
@@ -307,11 +307,14 @@ SENSITIVITY_PARAMS = ["ema_fast", "ema_mid", "ema_slow", "rsi_buy", "rsi_sell",
 INT_PARAMS = {"ema_fast", "ema_mid", "ema_slow", "rsi_len", "adx_len", "dc_len"}
 
 
-def param_sensitivity(conn, pair, cfg, tf_seconds, start_iso, end_iso, pct=0.10):
-    """For each numeric param, nudge it +/-pct and re-run. A robust parameter
-    set lives on a plateau: neighbours keep PF > 1. A fragile one lives on a
-    spike: neighbours collapse. Returns per-param results + plateau score =
-    fraction of neighbours that stay profitable."""
+def param_sensitivity(conn, pair, cfg, tf_seconds, start_iso, end_iso, pct=(0.10,)):
+    """For each numeric param, nudge it +/-pct (one or several step sizes) and
+    re-run. A robust parameter set lives on a plateau: neighbours keep PF > 1.
+    A fragile one lives on a spike: neighbours collapse. Returns per-param
+    results, plateau score = fraction of neighbours that stay profitable, and
+    worst_pf = the lowest neighbour PF (0 if a neighbour takes no trades).
+    A nudge that lands on a value already tried for that param is skipped."""
+    pcts = (pct,) if isinstance(pct, (int, float)) else tuple(pct)
     base = engine.backtest(conn, pair, cfg, start_iso, end_iso, tf_seconds)
     base_pf = base["pf"] if base["pf"] != float("inf") else 99.0
     rows = []
@@ -320,27 +323,33 @@ def param_sensitivity(conn, pair, cfg, tf_seconds, start_iso, end_iso, pct=0.10)
     for p in SENSITIVITY_PARAMS:
         if p not in cfg:
             continue
-        for sign in (-1, +1):
-            c2 = copy.deepcopy(cfg)
-            v = cfg[p]
-            nv = v * (1 + sign * pct)
-            if p in INT_PARAMS:
-                nv = max(2, int(round(nv)))
-                if nv == v:
-                    nv = v + sign
-            c2[p] = nv
-            # keep EMA ordering sane
-            if c2["ema_fast"] >= c2["ema_mid"] or c2["ema_mid"] >= c2["ema_slow"]:
-                continue
-            r = engine.backtest(conn, pair, c2, start_iso, end_iso, tf_seconds)
-            pf = r["pf"] if r["pf"] != float("inf") else 99.0
-            rows.append({"param": p, "from": v, "to": nv, "pf": pf,
-                         "n_trades": r["n_trades"], "net": r["net"]})
-            total += 1
-            ok += 1 if (r["net"] > 0 and r["n_trades"] > 0) else 0
+        seen = {cfg[p]}
+        for step in pcts:
+            for sign in (-1, +1):
+                c2 = copy.deepcopy(cfg)
+                v = cfg[p]
+                nv = v * (1 + sign * step)
+                if p in INT_PARAMS:
+                    nv = max(2, int(round(nv)))
+                    if nv == v:
+                        nv = v + sign
+                if nv in seen:
+                    continue
+                seen.add(nv)
+                c2[p] = nv
+                # keep EMA ordering sane
+                if c2["ema_fast"] >= c2["ema_mid"] or c2["ema_mid"] >= c2["ema_slow"]:
+                    continue
+                r = engine.backtest(conn, pair, c2, start_iso, end_iso, tf_seconds)
+                pf = r["pf"] if r["pf"] != float("inf") else 99.0
+                rows.append({"param": p, "pct": sign * step, "from": v, "to": nv, "pf": pf,
+                             "n_trades": r["n_trades"], "net": r["net"]})
+                total += 1
+                ok += 1 if (r["net"] > 0 and r["n_trades"] > 0) else 0
     return {
         "base_pf": base_pf, "base_net": base["net"], "base_trades": base["n_trades"],
         "neighbours": rows, "plateau_score": ok / total if total else 0.0,
+        "worst_pf": min((r["pf"] for r in rows), default=None),
     }
 
 

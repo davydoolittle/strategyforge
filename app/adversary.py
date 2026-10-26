@@ -13,10 +13,14 @@ Attacks (each returns pass/fail + evidence):
                       (also reports DSR at N_eff, the effective number of
                       independent trials from neff.py — information only)
   A3 walk_forward     fewer than K of N embargoed folds are profitable
-  A4 plateau          +/-10% parameter nudges collapse the result (spike, not plateau)
+  A4 plateau          +/-10% and +/-25% parameter nudges collapse the OOS result
+                      (spike, not plateau): < 70% of neighbours profitable, or
+                      the WORST neighbour's OOS PF < 1.0
   A5 cost_stress      edge disappears at 2x realistic costs
   A6 lookahead        result IMPROVES when fills are delayed -> leakage
-  A7 transfer         collapses on every pair it was not tuned on
+  A7 transfer         no other pair reaches PF >= 1.1 on >= 15 OOS trades. Only
+                      pairs with a verified tick size (main.py TICK_SIZE) count,
+                      and each is run at its own tick, not the tuned pair's
   A8 drawdown         Monte-Carlo 95th-pct drawdown exceeds the risk budget
 
 Verdicts
@@ -38,6 +42,7 @@ import sqlite3
 import time
 
 import engine
+import main as collector
 import neff as NE
 import validation as V
 import windows as W
@@ -50,7 +55,12 @@ MIN_FULL_TRADES = 50         # A1  full-window floor for DSR to mean anything
 MIN_DSR = 0.95               # A2  standard bar in BLdP
 MIN_WF_CONSISTENCY = 0.60    # A3  >= 3 of 5 folds profitable
 MIN_PLATEAU = 0.70           # A4  >= 70% of neighbours profitable
+PLATEAU_STEPS = (0.10, 0.25) # A4  nudge sizes; 2026-10-26: +/-10% alone passed 100% of
+                             #     20 reports (FINDINGS F1), so it discriminated nothing
+MIN_WORST_NEIGHBOUR_PF = 1.0 # A4  ...and no single neighbour may lose money
 MIN_PF_AT_2X_COST = 1.10     # A5
+MIN_TRANSFER_PF = 1.10       # A7  2026-10-26: was net > 0 on >= 5 trades, which
+MIN_TRANSFER_TRADES = 15     #     a coin flip clears; raised with A4 (FINDINGS F4)
 MAX_DD_P95_PCT = 25.0        # A8  of initial capital
 WF_FOLDS = 5
 WF_EMBARGO_BARS = 24
@@ -146,14 +156,17 @@ def attack(conn, cid, verbose=True):
     }
 
     # A4 plateau
-    sens = V.param_sensitivity(conn, pair, cfg, tf_s, split, end)
-    worst = sorted(sens["neighbours"], key=lambda r: r["net"])[:3]
+    sens = V.param_sensitivity(conn, pair, cfg, tf_s, split, end, pct=PLATEAU_STEPS)
+    worst = sorted(sens["neighbours"], key=lambda r: r["pf"])[:3]
     attacks["A4"] = {
         "name": "plateau",
         "plateau_score": sens["plateau_score"], "min_plateau": MIN_PLATEAU,
+        "steps": list(PLATEAU_STEPS),
         "n_neighbours": len(sens["neighbours"]),
+        "worst_pf": sens["worst_pf"], "min_worst_pf": MIN_WORST_NEIGHBOUR_PF,
         "worst_neighbours": worst,
-        "passed": sens["plateau_score"] >= MIN_PLATEAU,
+        "passed": (sens["plateau_score"] >= MIN_PLATEAU and sens["worst_pf"] is not None
+                   and sens["worst_pf"] >= MIN_WORST_NEIGHBOUR_PF),
     }
 
     # A5 cost stress on OOS
@@ -172,18 +185,12 @@ def attack(conn, cid, verbose=True):
     # A7 cross-pair transfer on the other pairs' OOS windows, cut at the same
     # moment this candidate's windows were pinned
     others = [r[0] for r in conn.execute("SELECT DISTINCT pair FROM candles") if r[0] != pair]
-    tr = []
-    for other in others:
-        ow = W.compute(conn, other, tf_s, end_ts, start_ts)
-        if ow is None:
-            continue
-        _, osplit, oend = ow
-        r = engine.backtest(conn, other, cfg, osplit, oend, tf_s)
-        tr.append({"pair": other, "n_trades": r["n_trades"], "net": r["net"],
-                   "pf": None if r["pf"] == float("inf") else r["pf"]})
-    n_hold = sum(1 for x in tr if x["net"] > 0 and x["n_trades"] >= 5)
+    tr, excluded = transfer(conn, cfg, others, tf_s, end_ts, start_ts)
+    n_hold = sum(1 for x in tr if x["holds"])
     attacks["A7"] = {
-        "name": "transfer", "results": tr, "pairs_holding": n_hold, "pairs_tested": len(tr),
+        "name": "transfer", "results": tr, "excluded_unverified_tick": excluded,
+        "pairs_holding": n_hold, "pairs_tested": len(tr),
+        "min_pf": MIN_TRANSFER_PF, "min_trades": MIN_TRANSFER_TRADES,
         "passed": len(tr) == 0 or n_hold >= 1,
     }
 
@@ -229,6 +236,29 @@ def attack(conn, cid, verbose=True):
     return report
 
 
+def transfer(conn, cfg, others, tf_s, end_ts, start_ts):
+    """Run cfg on each other pair's OOS window at THAT pair's verified tick
+    size. Pairs without one are returned in `excluded`, not tested: a cost model
+    we have not checked cannot count as evidence either way."""
+    tr, excluded = [], []
+    for other in others:
+        tick = collector.TICK_SIZE.get(other)
+        if tick is None:
+            excluded.append(other)
+            continue
+        ow = W.compute(conn, other, tf_s, end_ts, start_ts)
+        if ow is None:
+            continue
+        _, osplit, oend = ow
+        r = engine.backtest(conn, other, {**cfg, "tick_size": tick}, osplit, oend, tf_s)
+        pf = None if r["pf"] == float("inf") else r["pf"]
+        tr.append({"pair": other, "tick_size": tick, "n_trades": r["n_trades"], "net": r["net"],
+                   "pf": pf,
+                   "holds": r["n_trades"] >= MIN_TRANSFER_TRADES
+                            and (pf is None or pf >= MIN_TRANSFER_PF) and r["net"] > 0})
+    return tr, excluded
+
+
 def _f(x, nd=2):
     return "n/a" if x is None else f"{x:.{nd}f}"
 
@@ -253,14 +283,20 @@ def print_report(r):
          f"E[max SR | {a['A2']['n_trials_pair_tf']} trials] = {a['A2']['expected_max_sr_pair_tf']:.2f}; need DSR >= {a['A2']['min_dsr']}"),
         ("A3", "walk-forward", f"{a['A3']['folds_profitable']}/{a['A3']['n_folds']} folds profitable",
          f"need >= {a['A3']['min_consistency']:.0%}  (embargo {a['A3']['embargo_bars']} bars)"),
-        ("A4", "plateau", f"{a['A4']['plateau_score']:.0%} of {a['A4']['n_neighbours']} neighbours profitable",
-         f"need >= {a['A4']['min_plateau']:.0%}"),
+        ("A4", "plateau", f"{a['A4']['plateau_score']:.0%} of {a['A4']['n_neighbours']} neighbours profitable,"
+                          f" worst pf {_f(a['A4'].get('worst_pf'))}",
+         f"+/-{'/'.join(f'{x:.0%}' for x in a['A4'].get('steps', [0.10]))} nudges on OOS: need >= "
+         f"{a['A4']['min_plateau']:.0%} profitable and worst pf >= {a['A4'].get('min_worst_pf', 0)}"),
         ("A5", "cost stress", f"OOS pf at 2x costs = {_f(a['A5']['pf_at_2x'])}",
          f"need >= {a['A5']['min_pf_at_2x']}"),
         ("A6", "look-ahead", f"net {a['A6']['base_net']:+.0f} -> {a['A6']['delayed_net']:+.0f} when delayed 1 bar",
          "must NOT improve"),
-        ("A7", "transfer", "  ".join(f"{x['pair']} pf={_f(x['pf'])}/{x['n_trades']}t" for x in a['A7']['results']),
-         "need >= 1 other pair profitable"),
+        ("A7", "transfer", "  ".join(f"{x['pair']} pf={_f(x['pf'])}/{x['n_trades']}t" for x in a['A7']['results'])
+                           or "no verified pair to test",
+         f"need >= 1 other pair with pf >= {a['A7'].get('min_pf', 0)} on >= "
+         f"{a['A7'].get('min_trades', 5)} OOS trades"
+         + (f"; excluded (tick unverified): {', '.join(a['A7']['excluded_unverified_tick'])}"
+            if a['A7'].get('excluded_unverified_tick') else "")),
         ("A8", "drawdown", f"MC p95 DD = {a['A8']['dd_p95_pct_of_capital']:.1f}% of capital",
          f"need <= {a['A8']['max_dd_p95_pct']:.0f}%"),
     ]
