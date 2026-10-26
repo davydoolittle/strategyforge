@@ -158,8 +158,24 @@ def promote(conn, strategy_id, to_status, evidence, human=False, by="cli"):
             raise SystemExit(f"report {rid} is for different params (DNA mismatch)")
         if verdict != "SURVIVED":
             raise SystemExit(f"report {rid} verdict is {verdict}; only SURVIVED can promote")
-    if to_status == "paper_validated" and not evidence.startswith("paper:"):
-        raise SystemExit("paper_validated needs evidence 'paper:<id>' from the paper-trade log")
+    if to_status == "paper_validated":
+        # P4.3: the paper log must show >= 30 reconciled alerts over >= 60 days,
+        # >= 90% engine/alert agreement and a 30-day paper PF >= 1.2 (paper.evidence)
+        if not evidence.startswith("paper:"):
+            raise SystemExit("paper_validated needs evidence 'paper:<strategy_id>' from the paper-trade log")
+        try:
+            pid = int(evidence.split(":", 1)[1])
+        except ValueError:
+            raise SystemExit(f"bad evidence {evidence!r}: expected 'paper:<strategy_id>'")
+        if pid != strategy_id:
+            raise SystemExit(f"evidence paper:{pid} is another strategy's paper log")
+        import paper  # here, not at top: paper imports lineage
+        ev = paper.evidence(conn, strategy_id)
+        if not ev["passed"]:
+            raise SystemExit("paper evidence insufficient: " + "; ".join(ev["failed"]))
+        evidence = (f"paper:{pid} n={ev['n_reconciled']} days={ev['span_days']:.0f}"
+                    f" agree={100 * ev['agreement']:.0f}% pf30="
+                    + ("inf" if ev["rolling_30d_pf"] is None else f"{ev['rolling_30d_pf']:.2f}"))
     if to_status == "approved":
         if not human:
             raise SystemExit("approved is a human decision: re-run with --i-am-a-human")

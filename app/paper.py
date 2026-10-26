@@ -46,6 +46,13 @@ run, so a partial 4h bar or a late candle never leaves stale state:
 Usage
   python paper.py                         # SIGNALS_DB, default /bridge/signals.db
   python paper.py --signals-db W:/davesbridge/data/signals.db
+  python paper.py --evidence 3            # P4.3 checks for strategy #3, read-only
+
+Promotion evidence (P4.3): `lineage promote --to paper_validated --evidence
+paper:<id>` calls evidence() and refuses unless the strategy has >= 30
+reconciled alerts spanning >= 60 days, engine/alert agreement >= 90 % (engine
+entries in that span that never got an alert count as disagreements), and a
+30-day paper PF >= 1.2 at the newest candle.
 """
 
 import argparse
@@ -359,6 +366,64 @@ def update_pnl(conn, now=None):
     return out
 
 
+# --------------------------- P4.3 promotion evidence ---------------------------
+
+PROMOTE_MIN_TRADES = 30      # reconciled alerts
+PROMOTE_MIN_DAYS = 60        # first to last reconciled alert bar
+PROMOTE_MIN_AGREE = 0.90     # engine agreed / (reconciled alerts + engine entries never alerted)
+PROMOTE_MIN_PF = 1.2         # 30-day paper PF at the newest candle
+
+
+def evidence(conn, strategy_id):
+    """The P4.3 checks behind `lineage promote --to paper_validated --evidence
+    paper:<id>`. Read-only: paper P&L is re-simulated, not read from
+    paper_summary, so it cannot be stale. Returns {"passed", "failed": [...], ...}."""
+    ensure_tables(conn)
+    name = conn.execute("SELECT name FROM strategies WHERE id=?", (strategy_id,)).fetchone()
+    strat = strategy_by_name(conn, name[0]) if name else None
+    if strat is None:
+        return {"passed": False, "failed": [f"strategy {strategy_id} not found"]}
+    rows = conn.execute("SELECT bar_ts, engine_fired FROM paper_trades WHERE strategy_id=?"
+                        " AND bar_ts IS NOT NULL", (strategy_id,)).fetchall()
+    ev = {"strategy_id": strategy_id, "n_reconciled": len(rows), "span_days": 0.0,
+          "agreed": sum(f for _, f in rows), "engine_only": 0, "agreement": None,
+          "n_closed": 0, "rolling_30d_trades": 0, "rolling_30d_pf": None}
+    alerts = own_alerts(conn, strat)
+    if rows:
+        lo, hi = min(t for t, _ in rows), max(t for t, _ in rows)
+        ev["span_days"] = (hi - lo) / DAY
+        alerted = {t for t, _ in rows}
+        ev["engine_only"] = sum(1 for t in engine_entries(conn, strat, hi)
+                                if lo <= t <= hi and t not in alerted)
+        ev["agreement"] = ev["agreed"] / (len(rows) + ev["engine_only"])
+    if alerts:
+        newest = conn.execute("SELECT MAX(ts) FROM candles WHERE pair=?",
+                              (strat["pair"],)).fetchone()[0]
+        r = simulate(conn, strat, alerts, newest)
+        last = daily_summary([(t["exit_ts"], t["pnl"]) for t in r["trades"]],
+                             min(alerts), newest)[-1]
+        ev.update(n_closed=len(r["trades"]), rolling_30d_trades=last["rolling_30d_trades"],
+                  rolling_30d_pf=last["rolling_30d_pf"])
+
+    failed = []
+    if ev["n_reconciled"] < PROMOTE_MIN_TRADES:
+        failed.append(f"{ev['n_reconciled']} reconciled alerts < {PROMOTE_MIN_TRADES}")
+    if ev["span_days"] < PROMOTE_MIN_DAYS:
+        failed.append(f"span {ev['span_days']:.1f} days < {PROMOTE_MIN_DAYS}")
+    if ev["agreement"] is None or ev["agreement"] < PROMOTE_MIN_AGREE:
+        a = "n/a" if ev["agreement"] is None else f"{100 * ev['agreement']:.0f}%"
+        failed.append(f"engine/alert agreement {a} < {100 * PROMOTE_MIN_AGREE:.0f}% "
+                      f"({ev['agreed']} agreed of {ev['n_reconciled']} alerts"
+                      f" + {ev['engine_only']} engine entries never alerted)")
+    if ev["rolling_30d_trades"] == 0:
+        failed.append("no paper trade closed in the last 30 days")
+    elif ev["rolling_30d_pf"] is not None and ev["rolling_30d_pf"] < PROMOTE_MIN_PF:
+        failed.append(f"30-day paper PF {ev['rolling_30d_pf']:.2f} < {PROMOTE_MIN_PF}")
+    ev["failed"] = failed
+    ev["passed"] = not failed
+    return ev
+
+
 def print_pnl(snap):
     print("\n" + "-" * 78)
     print("PAPER P&L (P4.2) — the positions TradingView's alerts opened, run by the engine")
@@ -433,7 +498,20 @@ def print_report(conn, summary):
 def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("--signals-db", default=SIGNALS_DB)
+    ap.add_argument("--evidence", type=int, metavar="STRATEGY_ID",
+                    help="print the P4.3 promotion checks for one strategy and exit")
     args = ap.parse_args()
+    if args.evidence is not None:
+        conn = sqlite3.connect(DB_PATH)
+        ev = evidence(conn, args.evidence)
+        conn.close()
+        for k, v in ev.items():
+            if k != "failed":
+                print(f"{k:20s} {v}")
+        for f in ev["failed"]:
+            print(f"FAIL  {f}")
+        print("-> promotable to paper_validated" if ev["passed"] else "-> NOT promotable")
+        return
     sconn = open_signals(args.signals_db)
     conn = sqlite3.connect(DB_PATH)
     ensure_tables(conn)
