@@ -6,6 +6,104 @@ pinned windows on each candidate (P2.1).
 
 ---
 
+## F3. Effective number of trials: under N_eff, no verdict changes
+
+*2026-10-26. `neff.py` + `validation.effective_trials`, run against a scratch
+copy of forge.db. Information only: A2 still decides on N.*
+
+**Method.**
+
+- **Source.** This is from López de Prado, *Machine Learning for Asset
+  Managers* (2020), ch. 8, and López de Prado & Lewis (2019). The request
+  cited *Advances in Financial ML* ch. 8, but that chapter is about feature
+  importance. The effective-trials clustering is in MLAM.
+- **Common window.** Every trial of a pair/tf was re-run on one reference
+  window: the longest pinned IS window, which is 2021-05 → 2025-03 for
+  BTC/ETH/SOL. Correlations need a shared calendar, and the 600 older trials
+  were pinned to a different, shorter window.
+- **Series.** Each trial's trade returns became a daily series, with each
+  trade spread across the days it was open.
+- **Clustering.** Trials were clustered on the correlation distance
+  √((1−ρ)/2). The book uses repeated k-means, which is too slow in stdlib
+  Python. I used average-linkage hierarchical clustering instead. The number
+  of clusters is chosen by the same ONC criterion: the t-stat of the
+  silhouette scores.
+- **Output.** N_eff is the number of clusters. A2 now reports it, with
+  E[max SR] and DSR at N_eff, plus a **break-even N**: the largest number
+  of independent trials at which the candidate would still pass.
+
+**Result: N_eff = 2 on every 1h pair.** Daily and weekly buckets give the
+same answer.
+
+| pair 1h | N | N_eff | cluster sizes | mean \|ρ\| | participation ratio | clusters at ρ≥0.5 / 0.7 / 0.9 |
+|---|---|---|---|---|---|---|
+| BTC | 901 | 2 | 899 + 2 | 0.29 | 9 | 81 / 418 / 883 |
+| ETH | 901 | 2 | 899 + 2 (weekly 896 + 5) | 0.29 | 9 | 86 / 482 / 893 |
+| SOL | 900 | 2 | 478 + 422 | 0.25 | 12 | 99 / 500 / 890 |
+| XRP | 300 | 2 | 283 + 17 | 0.49 | 4 | 9 / 31 / 159 |
+
+At 4h, N_eff is 3 on BTC, ETH and SOL (300 trials each).
+
+**Verdicts under N_eff.**
+
+| # | SR/trade | trades | PSR vs 0 | DSR at N | DSR at N_eff = 2 | E[max SR] at N → N_eff | break-even N | verdict at N_eff |
+|---|---|---|---|---|---|---|---|---|
+| 3047 ETH | 0.080 | 252 | 0.904 | 0.000 | 0.067 | 1.07 → 0.17 | 0 | REJECTED |
+| 3533 SOL | 0.085 | 231 | 0.911 | 0.000 | 0.070 | 1.11 → 0.18 | 0 | REJECTED |
+| 3214 ETH | 0.113 | 162 | 0.934 | 0.000 | 0.216 | 1.07 → 0.17 | 0 | REJECTED |
+| 2716 BTC | 0.141 | 139 | 0.957 | 0.000 | 0.337 | 1.09 → 0.18 | 1 | REJECTED |
+| 2764 BTC | 0.188 | 74 | 0.953 | 0.000 | 0.541 | 1.09 → 0.18 | 1 | REJECTED (A1 too) |
+| 3901 (2716 pruned) | 0.137 | 150 | 0.958 | 0.000 | 0.313 | 1.09 → 0.18 | 1 | REJECTED |
+
+**None of the four passes under N_eff, and neither does any other
+candidate attacked.** The break-even column is the clearest number.
+#3047, #3533 and #3214 would fail **even if they were the only trial ever
+run**: PSR against zero is below 0.95. #2716, #2764 and #3901 pass only at
+N = 1, which means no deflation at all.
+
+**Why N_eff = 2 should be treated with suspicion even though it changes no
+verdict:**
+
+1. **The trials have no real cluster structure.**
+   - The silhouette t-stat is highest at k=2 and then falls almost steadily
+     (BTC: 3.34 at k=2, 1.81 at k=4, about 1.0 at k=13–370). The trials form
+     a continuum.
+   - The criterion finds the cleanest single cut. On BTC and ETH that cut
+     isolates 2 outlier trials. On SOL it is a near-even split, matching the
+     50/50 `use_shorts` coin flip.
+   - The book's ONC recursion would not fix this. It re-clusters only when
+     at least two clusters fall below the mean quality, and with k=2 that
+     cannot happen.
+2. **Other reasonable estimators disagree by two orders of magnitude.**
+   - The participation ratio of the correlation matrix gives 9–12.
+   - Cutting the same dendrogram where clusters average ρ ≥ 0.5 gives 81–99.
+   - At ρ ≥ 0.9, near-duplicates only, it gives 883–893, which is close to N.
+   - Mean |ρ| is only 0.25–0.29. Most pairs of trials are *not* the same bet.
+   - An estimate this sensitive to the method is a modelling choice, not a
+     measurement.
+3. **A small N_eff lowers the bar after the search has already looked.**
+   - The 900 trials were each a chance to find a lucky parameter set,
+     whether or not their return series correlate. Correlated trials still
+     search different corners of the parameter space.
+   - Selecting the best OOS PF out of 900 is still selection, and N_eff does
+     not see that.
+4. **The variance was kept as is.**
+   - The book also replaces the across-trial SR variance with the variance
+     of the cluster-level SRs. That has not been done here.
+   - With two clusters, that variance would rest on two numbers, so it
+     means nothing.
+
+Even in the most favourable case, N_eff = 2 and E[max SR] ≈ 0.18, the best
+per-trade Sharpe in the family (0.14 on 139 trades) is still below the
+noise ceiling. The F1 conclusion does not depend on how N is counted.
+
+**What would make N_eff useful.** It would help on a search whose trials
+really do fall into distinct families, such as several strategy families
+or a hypothesis-driven grid. Before it decides anything, require
+agreement across estimators, for example ONC within 2× of the ρ ≥ 0.5 cut.
+
+---
+
 ## F2. Ablation of #2716 and #3214: what earns its place
 
 *2026-10-26. `ablation.py` (P2.5), run against a scratch copy of forge.db.*

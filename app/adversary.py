@@ -10,6 +10,8 @@ written to adversarial_reports so the decision is auditable later.
 Attacks (each returns pass/fail + evidence):
   A1 sample_size      OOS trade count below a statistical floor
   A2 deflated_sharpe  SR is below what the best of N noise trials would show
+                      (also reports DSR at N_eff, the effective number of
+                      independent trials from neff.py — information only)
   A3 walk_forward     fewer than K of N embargoed folds are profitable
   A4 plateau          +/-10% parameter nudges collapse the result (spike, not plateau)
   A5 cost_stress      edge disappears at 2x realistic costs
@@ -36,6 +38,7 @@ import sqlite3
 import time
 
 import engine
+import neff as NE
 import validation as V
 import windows as W
 
@@ -106,6 +109,13 @@ def attack(conn, cid, verbose=True):
     # A2 deflated sharpe (against this pair/tf's trial count AND the global one)
     dsr_local, bench_local = V.deflated_sharpe(sr, len(rets), skew, kurt, n_trials, sr_var)
     dsr_global, bench_global = V.deflated_sharpe(sr, len(rets), skew, kurt, n_trials_all, sr_var)
+    # INFORMATION ONLY: the same DSR with N replaced by the effective number of
+    # independent trials (neff.py). The verdict below still uses N.
+    ne = NE.lookup(conn, pair, tf)
+    dsr_neff = bench_neff = None
+    if ne:
+        dsr_neff, bench_neff = V.deflated_sharpe(sr, len(rets), skew, kurt, ne["n_eff"], sr_var)
+    breakeven = V.breakeven_trials(sr, len(rets), skew, kurt, sr_var, MIN_DSR)
     attacks["A2"] = {
         "name": "deflated_sharpe",
         "sharpe_per_trade": sr, "skew": skew, "kurtosis": kurt, "n_obs": len(rets),
@@ -113,6 +123,12 @@ def attack(conn, cid, verbose=True):
         "sr_missing": n_sr_missing,
         "n_trials_pair_tf": n_trials, "expected_max_sr_pair_tf": bench_local, "dsr_pair_tf": dsr_local,
         "n_trials_all": n_trials_all, "expected_max_sr_all": bench_global, "dsr_all": dsr_global,
+        "n_eff_pair_tf": ne["n_eff"] if ne else None,
+        "n_eff_computed_on": ne["n_series"] if ne else None,
+        "n_eff_computed_at": ne["computed_at"] if ne else None,
+        "expected_max_sr_neff": bench_neff, "dsr_neff": dsr_neff,
+        "would_pass_with_neff": None if dsr_neff is None else dsr_neff >= MIN_DSR,
+        "breakeven_trials": breakeven,
         "min_dsr": MIN_DSR,
         "passed": dsr_local >= MIN_DSR,
     }
@@ -256,6 +272,20 @@ def print_report(r):
             print(f"     {'':5s} {'':16s} SR variance {a['A2']['sr_variance_across_trials']:.4f} "
                   f"from {a['A2']['sr_var_sampled_from']} trials with >= "
                   f"{V.MIN_TRADES_FOR_SR_VARIANCE} IS trades")
+            a2 = a["A2"]
+            if a2.get("n_eff_pair_tf") is not None:
+                print(f"     {'':5s} {'':16s} info: N_eff {a2['n_eff_pair_tf']} of "
+                      f"{a2['n_eff_computed_on']} trials (neff.py, {a2['n_eff_computed_at']}): "
+                      f"E[max SR] = {a2['expected_max_sr_neff']:.2f}, DSR {a2['dsr_neff']:.3f}"
+                      f" -> would {'PASS' if a2['would_pass_with_neff'] else 'still fail'}"
+                      f"; verdict uses N")
+                if a2["n_eff_computed_on"] != a2["n_trials_pair_tf"]:
+                    print(f"     {'':5s} {'':16s} info: N_eff is stale ({a2['n_trials_pair_tf']} "
+                          f"trials now); rerun neff.py")
+            else:
+                print(f"     {'':5s} {'':16s} info: N_eff not computed (run neff.py)")
+            print(f"     {'':5s} {'':16s} info: passes only if the search had been <= "
+                  f"{a2['breakeven_trials']} independent trials")
             if a["A2"].get("sr_missing"):
                 print(f"     {'':5s} {'':16s} WARNING {a['A2']['sr_missing']} trials have no "
                       f"is_sharpe (run optimizer.py --backfill-sharpe); excluded")

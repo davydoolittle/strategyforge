@@ -19,6 +19,10 @@ Contents
   cost_stress()          re-run with 2x and 3x commission+slippage
   lookahead_shift()      delay every signal by +1 bar; if results IMPROVE,
                          something is leaking
+  bucket_returns()       a trade list as a calendar return series, so trials
+                         can be correlated with each other
+  effective_trials()     cluster trials by return correlation; N_eff =
+                         number of clusters (information only, see A2)
 
 Sharpe note: ratios are per-trade. Annualizing a 20-trade series is
 meaningless and invites comparison with numbers it should not be compared to.
@@ -27,10 +31,14 @@ DSR / PSR are scale-free so per-trade is exactly what they want.
 References
   Bailey & López de Prado (2014), "The Deflated Sharpe Ratio"
   López de Prado (2018), Advances in Financial ML, ch. 7 (purged/embargoed CV)
+  López de Prado (2020), Machine Learning for Asset Managers, ch. 8 (effective
+    number of trials by clustering, ONC); López de Prado & Lewis (2019),
+    "Detection of false investment strategies using unsupervised learning"
 """
 
 import copy
 import math
+import operator
 import random
 from datetime import datetime, timezone
 
@@ -401,3 +409,247 @@ def sharpe_variance_from_candidates(conn, pair, tf):
            if sr is not None and n is not None and n >= MIN_TRADES_FOR_SR_VARIANCE]
     var = _std(srs) ** 2 if len(srs) > 1 else 0.0
     return var, len(srs), n_total, n_missing
+
+
+# ------------------------------------------- effective number of trials ---
+#
+# expected_max_sharpe() assumes the N trials are INDEPENDENT. 900 draws of one
+# strategy family on one price history are not: two parameter sets that
+# differ by one EMA length take mostly the same trades. López de Prado (MLAM
+# ch. 8) estimates the effective number of trials by clustering the trials'
+# return series on correlation distance and counting the clusters.
+#
+# Deviations from the book, both forced by stdlib-only:
+#   - clustering is average-linkage hierarchical (NN-chain, O(n^2)) rather
+#     than repeated k-means; the number of clusters is still chosen by the
+#     ONC criterion, the t-stat of the silhouette scores, mean(s) / std(s).
+#   - the variance fed to E[max SR] stays the across-trial SR variance; the
+#     book replaces it with the variance of cluster-level SRs.
+# Trials whose series is flat (no trades in the window) are identical to each
+# other and form one cluster of their own.
+
+DAY = 86400
+
+
+def bucket_returns(trades, initial_capital, start_ts, end_ts, bucket_secs=DAY):
+    """Per-bucket (default: per UTC day) return series over [start_ts, end_ts].
+    Each trade's return (trade_returns) is spread over the buckets it was open
+    in, pro rata by time, so two trials holding the same position on the same
+    days correlate even if their exits differ by a few hours."""
+    rets = trade_returns(trades, initial_capital)
+    b0 = start_ts // bucket_secs
+    n = end_ts // bucket_secs - b0 + 1
+    out = [0.0] * n
+    for t, r in zip(trades, rets):
+        a = t["entry_ts"]
+        b = max(t["exit_ts"], a + 1)
+        x = a
+        while x < b:
+            k = x // bucket_secs
+            nxt = min(b, (k + 1) * bucket_secs)
+            i = k - b0
+            if 0 <= i < n:
+                out[i] += r * (nxt - x) / (b - a)
+            x = nxt
+    return out
+
+
+def rebucket(series, factor):
+    """Sum consecutive groups of `factor` buckets (days -> weeks: factor=7)."""
+    return [sum(series[i:i + factor]) for i in range(0, len(series), factor)]
+
+
+def _zscores(x):
+    n = len(x)
+    m = sum(x) / n
+    sd = math.sqrt(sum((v - m) ** 2 for v in x) / n)
+    if sd < 1e-15:
+        return None
+    return [(v - m) / sd for v in x]
+
+
+def correlation_matrix(series):
+    """Pearson correlation of equal-length series. Rows for flat series are
+    None (correlation undefined)."""
+    zs = [_zscores(s) for s in series]
+    n = len(series)
+    length = len(series[0]) if series else 0
+    corr = [[None] * n for _ in range(n)]
+    for i in range(n):
+        if zs[i] is None:
+            continue
+        corr[i][i] = 1.0
+        for j in range(i + 1, n):
+            if zs[j] is None:
+                continue
+            c = sum(map(operator.mul, zs[i], zs[j])) / length
+            corr[i][j] = corr[j][i] = max(-1.0, min(1.0, c))
+    return corr
+
+
+def corr_distance(rho):
+    """MLAM correlation distance sqrt((1 - rho) / 2): 0 identical, 1 opposite."""
+    return math.sqrt(max(0.0, (1.0 - rho) / 2.0))
+
+
+def average_linkage(dist):
+    """Average-linkage agglomerative clustering by the nearest-neighbour-chain
+    algorithm. dist: symmetric n x n list of lists. Returns the n-1 merges as
+    (height, i, j) sorted by height; after a merge, slot i stands for i u j."""
+    n = len(dist)
+    d = [row[:] for row in dist]
+    size = [1] * n
+    active = set(range(n))
+    merges = []
+    chain = []
+    seq = 0
+    while len(active) > 1:
+        if not chain:
+            chain.append(min(active))
+        a = chain[-1]
+        prev = chain[-2] if len(chain) > 1 else None
+        best = prev
+        bd = d[a][prev] if prev is not None else float("inf")
+        row = d[a]
+        for c in active:
+            if c != a and row[c] < bd:
+                best, bd = c, row[c]
+        if best == prev:
+            chain.pop()
+            chain.pop()
+            i, j = min(a, prev), max(a, prev)
+            merges.append((bd, seq, i, j))
+            seq += 1
+            ni, nj = size[i], size[j]
+            for c in active:
+                if c != i and c != j:
+                    v = (ni * d[i][c] + nj * d[j][c]) / (ni + nj)
+                    d[i][c] = d[c][i] = v
+            size[i] = ni + nj
+            active.remove(j)
+        else:
+            chain.append(best)
+    merges.sort()
+    return [(h, i, j) for h, _, i, j in merges]
+
+
+def cut(merges, n, k):
+    """Cluster labels (0..k-1) after applying the n-k lowest merges."""
+    parent = list(range(n))
+
+    def find(x):
+        while parent[x] != x:
+            parent[x] = parent[parent[x]]
+            x = parent[x]
+        return x
+
+    for _, i, j in merges[:max(0, n - k)]:
+        parent[find(j)] = find(i)
+    roots = {}
+    return [roots.setdefault(find(x), len(roots)) for x in range(n)]
+
+
+def silhouettes(dist, labels):
+    """Silhouette score per observation (0 for members of singleton clusters)."""
+    k = max(labels) + 1
+    counts = [0] * k
+    for lab in labels:
+        counts[lab] += 1
+    out = []
+    for i, row in enumerate(dist):
+        sums = [0.0] * k
+        for j, dj in enumerate(row):
+            sums[labels[j]] += dj
+        own = labels[i]
+        if counts[own] <= 1:
+            out.append(0.0)
+            continue
+        a = sums[own] / (counts[own] - 1)
+        b = min(sums[c] / counts[c] for c in range(k) if c != own and counts[c])
+        out.append((b - a) / max(a, b) if max(a, b) > 0 else 0.0)
+    return out
+
+
+def _k_grid(n):
+    ks = set(range(2, min(n, 41)))
+    k = 40.0
+    while k < n - 1:
+        k *= 1.15
+        ks.add(min(n - 1, int(round(k))))
+    return sorted(x for x in ks if 2 <= x <= n - 1)
+
+
+def effective_trials(series):
+    """Effective number of independent trials among `series` (one return
+    series per trial, all on the same calendar). Returns a dict:
+      n_eff          clusters chosen by the ONC criterion, + 1 if any flat series
+      n              trials
+      n_flat         trials with a flat series (all in one cluster)
+      n_distinct     non-flat trials left after merging exact duplicates
+      quality        mean(silhouette) / std(silhouette) at the chosen k
+      labels         cluster label per trial (flat trials get label -1)
+      curve          [(k, quality)] over the k grid tried
+      mean_abs_corr  average |rho| over all pairs of non-flat trials"""
+    n = len(series)
+    corr = correlation_matrix(series)
+    live = [i for i in range(n) if corr[i][i] is not None]
+    n_flat = n - len(live)
+    labels = [-1] * n
+    result = {"n": n, "n_flat": n_flat, "n_distinct": 0, "quality": None, "curve": [],
+              "mean_abs_corr": None}
+    if len(live) > 1:
+        pairs = [abs(corr[a][b]) for x, a in enumerate(live) for b in live[x + 1:]]
+        result["mean_abs_corr"] = sum(pairs) / len(pairs)
+    # exact duplicates (two parameter sets that take identical trades) are one
+    # trial; collapsing them first also lets N_eff be 1, which silhouette
+    # scores cannot express
+    reps, rep_of = [], {}
+    for i in live:
+        r = next((r for r in reps if corr[i][r] >= 1.0 - 1e-9), None)
+        if r is None:
+            reps.append(i)
+            r = i
+        rep_of[i] = r
+    result["n_distinct"] = len(reps)
+    if len(reps) <= 2:
+        lab = list(range(len(reps)))
+        q = None
+    else:
+        dist = [[corr_distance(corr[i][j]) for j in reps] for i in reps]
+        merges = average_linkage(dist)
+        best = None
+        for k in _k_grid(len(reps)):
+            lab_k = cut(merges, len(reps), k)
+            s = silhouettes(dist, lab_k)
+            sd = _std(s, ddof=0)
+            qk = _mean(s) / sd if sd > 0 else 0.0
+            result["curve"].append((k, qk))
+            if best is None or qk > best[1]:
+                best = (k, qk, lab_k)
+        _, q, lab = best
+    rep_label = dict(zip(reps, lab))
+    for i in live:
+        labels[i] = rep_label[rep_of[i]]
+    k = len(set(lab))
+    result.update(n_eff=k + (1 if n_flat else 0), quality=q, labels=labels)
+    return result
+
+
+def breakeven_trials(sr, n_obs, skew, kurt, sr_variance, min_dsr=0.95, cap=10 ** 6):
+    """Largest number of independent trials N for which DSR >= min_dsr, i.e.
+    how small the search would have had to be for this SR to pass. 0 if it
+    fails even as a single trial (PSR vs 0 < min_dsr)."""
+    if deflated_sharpe(sr, n_obs, skew, kurt, 1, sr_variance)[0] < min_dsr:
+        return 0
+    lo, hi = 1, 2
+    while hi < cap and deflated_sharpe(sr, n_obs, skew, kurt, hi, sr_variance)[0] >= min_dsr:
+        lo, hi = hi, hi * 2
+    if hi >= cap:
+        return cap
+    while hi - lo > 1:
+        mid = (lo + hi) // 2
+        if deflated_sharpe(sr, n_obs, skew, kurt, mid, sr_variance)[0] >= min_dsr:
+            lo = mid
+        else:
+            hi = mid
+    return lo
