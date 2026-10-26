@@ -28,7 +28,16 @@ import urllib.request
 from datetime import datetime, timedelta, timezone
 
 DB_PATH = os.environ.get("FORGE_DB", "/data/forge.db")
-PAIRS = [p.strip() for p in os.environ.get("PAIRS", "BTC-USD,ETH-USD,SOL-USD").split(",")]
+# The ONE list of traded pairs: collector, optimizer default and per-pair
+# seeds (optimizer.seed_for_pair uses each pair's index here). APPEND ONLY —
+# reordering or removing a pair silently changes every later pair's seed.
+# A PAIRS env var is ignored (a warning is logged at startup).
+PAIRS = [
+    "BTC-USD",
+    "ETH-USD",
+    "SOL-USD",
+    "XRP-USD",   # P2.4.2, 2026-10-25: ~$78M/day 30d avg on Coinbase, >= 1,100 days hourly
+]
 BACKFILL_DAYS = int(os.environ.get("BACKFILL_DAYS", "730"))
 NTFY_TOPIC = os.environ.get("NTFY_TOPIC", "")
 
@@ -68,6 +77,16 @@ def ntfy(msg: str):
         urllib.request.urlopen(req, timeout=5)
     except Exception:
         pass
+
+
+def warn_if_pairs_env() -> bool:
+    """PAIRS used to be overridable from the environment; it no longer is
+    (one source of truth, stable seeds). Say so loudly if it is still set."""
+    if not os.environ.get("PAIRS"):
+        return False
+    log(f"WARNING: PAIRS env var is set ({os.environ['PAIRS']!r}) and IGNORED. "
+        f"The pair list lives only in main.py; remove the env var from the container.")
+    return True
 
 
 def db() -> sqlite3.Connection:
@@ -284,6 +303,7 @@ def poll_btc_dominance(conn, ts: int):
 
 def main():
     log(f"StrategyForge A-1 starting. pairs={PAIRS} backfill_days={BACKFILL_DAYS}")
+    warn_if_pairs_env()
     conn = db()
 
     last_candle = 0.0

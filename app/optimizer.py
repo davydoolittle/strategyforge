@@ -21,6 +21,7 @@ parameter set that was already tried shows up as a duplicate. Rows from
 before P2.2 have base_seed NULL: those runs used one seed for every pair.
 
 Usage:
+  python optimizer.py --tf 1h --trials 300          # every pair in main.PAIRS
   python optimizer.py --pairs BTC-USD,ETH-USD,SOL-USD --tf 1h --trials 300
   python optimizer.py --pairs BTC-USD --tf 4h --trials 200 --seed 7
 """
@@ -275,20 +276,25 @@ def run_pair(conn, pair, tf, trials, base_seed):
     return survivors, is_start_iso, end_iso
 
 
-def main():
-    global NTFY_TOPIC
-    import os
-    NTFY_TOPIC = os.environ.get("NTFY_TOPIC", "")
-
+def parse_args(argv=None):
     ap = argparse.ArgumentParser()
-    ap.add_argument("--pairs", default="BTC-USD,ETH-USD,SOL-USD")
+    ap.add_argument("--pairs", default=",".join(collector.PAIRS),
+                    help="comma list, each must be in main.PAIRS (default: all of them)")
     ap.add_argument("--tf", default="1h", choices=["1h", "4h"])
     ap.add_argument("--trials", type=int, default=300)
     ap.add_argument("--seed", type=int, default=42,
                     help="base seed; each pair gets base*1000 + its index in PAIRS")
     ap.add_argument("--backfill-sharpe", action="store_true",
                     help="fill is_sharpe/oos_sharpe/is_skew/is_kurt on old rows and exit")
-    args = ap.parse_args()
+    return ap.parse_args(argv)
+
+
+def main():
+    global NTFY_TOPIC
+    import os
+    NTFY_TOPIC = os.environ.get("NTFY_TOPIC", "")
+
+    args = parse_args()
 
     conn = sqlite3.connect(DB_PATH)
     ensure_tables(conn)
