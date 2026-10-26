@@ -217,8 +217,13 @@ def htf_confirmed(ts, c, htf_seconds, ema_len):
 
 # ------------------------------ backtest -----------------------------------
 
-def backtest(conn, pair, cfg, start_iso, end_iso, tf_seconds=3600):
-    """Run the V4.1 strategy with the given cfg. Returns stats + trades."""
+def backtest(conn, pair, cfg, start_iso, end_iso, tf_seconds=3600, signals=None):
+    """Run the V4.1 strategy with the given cfg. Returns stats + trades.
+
+    signals (default None = the strategy's own): {bar_ts: "long"|"short"}
+    replaces the entry signals, so paper.py can drive positions from the
+    TradingView alerts. Fills, sizing, stops, targets, trailing and flips are
+    unchanged; a signal on the side already held is ignored, as in Pine."""
     start_ts = int(datetime.fromisoformat(start_iso).replace(tzinfo=timezone.utc).timestamp())
     end_ts = int(datetime.fromisoformat(end_iso).replace(tzinfo=timezone.utc).timestamp())
     # cfg["history_start_ts"] (default None = all history): ignore candles
@@ -409,7 +414,10 @@ def backtest(conn, pair, cfg, start_iso, end_iso, tf_seconds=3600):
 
         if ts[i] < start_ts:
             continue
-        long_sig, short_sig = bar_signals(i)
+        if signals is None:
+            long_sig, short_sig = bar_signals(i)
+        else:
+            long_sig, short_sig = signals.get(ts[i]) == "long", signals.get(ts[i]) == "short"
         delay = cfg.get("fill_delay_bars", 0)
         if long_sig and (pos is None or pos["dir"] == "short"):
             pending = {"action": "long", "atr": atr_v[i], "flip": pos is not None,
@@ -419,6 +427,19 @@ def backtest(conn, pair, cfg, start_iso, end_iso, tf_seconds=3600):
             pending = {"action": "short", "atr": atr_v[i], "flip": pos is not None,
                        "signal_ts": ts[i], "wait": delay}
             entries.append({"ts": ts[i], "side": "short", "close": c[i]})
+
+    # still open at the last bar: marked at its close as if closed at market
+    open_position = None
+    if pos is not None:
+        px = c[-1] - slip if pos["dir"] == "long" else c[-1] + slip
+        gross = (px - pos["entry"]) * pos["qty"] if pos["dir"] == "long" else (pos["entry"] - px) * pos["qty"]
+        open_position = {k: pos[k] for k in ("dir", "qty", "entry_ts", "entry", "signal_ts",
+                                             "stop", "limit", "trail_active")}
+        open_position.update(mark_ts=ts[-1], mark=c[-1],
+                             unrealised=gross - (pos["entry"] + px) * pos["qty"] * comm)
+    # signalled on the last bar, fills at the next bar's open
+    pending_entry = ({"side": pending["action"], "signal_ts": pending["signal_ts"]}
+                     if pending is not None else None)
 
     wins = [t for t in trades if t["pnl"] > 0]
     gross_p = sum(t["pnl"] for t in wins)
@@ -441,6 +462,8 @@ def backtest(conn, pair, cfg, start_iso, end_iso, tf_seconds=3600):
         "pf": pf, "max_dd": max_dd,
         "trades": trades,
         "entries": entries,
+        "open_position": open_position,
+        "pending_entry": pending_entry,
     }
 
 

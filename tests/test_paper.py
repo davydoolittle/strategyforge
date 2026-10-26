@@ -187,5 +187,152 @@ class TestReconcile(unittest.TestCase):
         self.assertIn("Nothing is deployed", out.getvalue())
 
 
+class TestEngineSignals(unittest.TestCase):
+    def test_own_entries_as_signals_reproduce_the_backtest(self):
+        conn = forge_db()
+        self.addCleanup(conn.close)
+        start, end = iso(T0 + 1000 * H), iso(T0 + (N_BARS - 1) * H)
+        own = engine.backtest(conn, "BTC-USD", loose_cfg(), start, end)
+        sig = {e["ts"]: e["side"] for e in own["entries"]}
+        forced = engine.backtest(conn, "BTC-USD", loose_cfg(), start, end, signals=sig)
+        self.assertGreater(own["n_trades"], 10)
+        self.assertEqual(forced["trades"], own["trades"])
+        self.assertEqual(forced["open_position"], own["open_position"])
+
+    def test_open_position_marked_at_last_close(self):
+        conn = forge_db()
+        self.addCleanup(conn.close)
+        end = T0 + (N_BARS - 1) * H
+        r = engine.backtest(conn, "BTC-USD", loose_cfg(), iso(end - 5 * H), iso(end),
+                            signals={end - 3 * H: "long"})
+        op = r["open_position"]
+        if op is None:                      # stopped out within 2 bars: nothing to mark
+            self.assertEqual(r["n_trades"], 1)
+            return
+        last = conn.execute("SELECT close FROM candles WHERE ts=?", (end,)).fetchone()[0]
+        self.assertEqual(op["entry_ts"], end - 2 * H)
+        self.assertEqual(op["mark"], last)
+        cfg = loose_cfg()
+        slip = cfg["slippage_ticks"] * cfg["tick_size"]
+        comm = cfg["commission_pct"] / 100
+        px = last - slip
+        self.assertAlmostEqual(op["unrealised"],
+                               (px - op["entry"]) * op["qty"] - (op["entry"] + px) * op["qty"] * comm)
+
+    def test_signal_on_last_bar_is_pending(self):
+        conn = forge_db()
+        self.addCleanup(conn.close)
+        end = T0 + (N_BARS - 1) * H
+        r = engine.backtest(conn, "BTC-USD", loose_cfg(), iso(end - 5 * H), iso(end),
+                            signals={end: "short"})
+        self.assertEqual(r["pending_entry"], {"side": "short", "signal_ts": end})
+        self.assertIsNone(r["open_position"])
+
+
+class TestPaperPnl(unittest.TestCase):
+    def setUp(self):
+        self.conn = forge_db()
+        self.addCleanup(self.conn.close)
+        strat = P.strategy_by_name(self.conn, "SF c1-btc-1h")
+        self.ent = sorted(P.engine_entries(self.conn, strat, T0 + (N_BARS - 1) * H).values(),
+                          key=lambda e: e["ts"])
+
+    def positions(self):
+        cur = self.conn.execute("SELECT * FROM paper_positions ORDER BY bar_ts")
+        cols = [c[0] for c in cur.description]
+        return [dict(zip(cols, r)) for r in cur]
+
+    def run_alerts(self, alerts):
+        sconn = signals_db(alerts)
+        self.addCleanup(sconn.close)
+        P.reconcile(self.conn, sconn)
+        return P.update_pnl(self.conn, now="t")
+
+    def test_alerted_engine_entries_become_the_engines_trades(self):
+        tail = self.ent[-8:]
+        snap = self.run_alerts([alert(e["ts"], e["side"], e["close"]) for e in tail])
+        # the same signals from the first alert on, run by the engine directly
+        strat = P.strategy_by_name(self.conn, "SF c1-btc-1h")
+        r = P.simulate(self.conn, strat, P.own_alerts(self.conn, strat), T0 + (N_BARS - 1) * H)
+        pos = self.positions()
+        self.assertEqual(len(pos), 8)
+        closed = [p for p in pos if p["status"] == "closed"]
+        self.assertEqual([(p["bar_ts"], p["exit_ts"]) for p in closed],
+                         [(t["signal_ts"], t["exit_ts"]) for t in r["trades"]])
+        for p, t in zip(closed, r["trades"]):
+            self.assertAlmostEqual(p["pnl"], t["pnl"])
+        self.assertAlmostEqual(snap[1]["net"], sum(p["pnl"] for p in closed))
+        # every alert accounted for
+        self.assertEqual(len(closed) + sum(p["status"] in ("open", "pending", "ignored")
+                                           for p in pos), 8)
+        # summary: one row per day, realised net adds up, cum_net ends at the total
+        days = self.conn.execute("SELECT day, n_trades, net, cum_net FROM paper_summary"
+                                 " WHERE strategy_id=1 ORDER BY day").fetchall()
+        self.assertEqual(days[0][0], P._day(tail[0]["ts"]))
+        self.assertEqual(days[-1][0], P._day(T0 + (N_BARS - 1) * H))
+        self.assertEqual(len(days), (T0 + (N_BARS - 1) * H) // 86400 - tail[0]["ts"] // 86400 + 1)
+        self.assertEqual(sum(d[1] for d in days), len(closed))
+        self.assertAlmostEqual(days[-1][3], sum(p["pnl"] for p in closed))
+        # rebuilt, not appended
+        P.update_pnl(self.conn, now="t2")
+        self.assertEqual(len(self.positions()), 8)
+        self.assertEqual(self.conn.execute("SELECT COUNT(*) FROM paper_summary").fetchone()[0],
+                         len(days))
+
+    def test_paper_follows_the_alert_not_the_engine(self):
+        e = self.ent[-4]
+        flip = "short" if e["side"] == "long" else "long"
+        self.run_alerts([alert(e["ts"], flip, e["close"])])
+        p = self.positions()[0]
+        self.assertEqual(p["side"], flip)
+        self.assertIn(p["status"], ("closed", "open"))
+        self.assertEqual(p["entry_ts"], e["ts"] + H)
+
+    def test_same_side_alert_while_in_position_is_ignored(self):
+        end = T0 + (N_BARS - 1) * H
+        self.run_alerts([alert(end - 3 * H, "long", 1.0), alert(end - 2 * H, "long", 1.0)])
+        pos = self.positions()
+        if pos[0]["status"] == "open":       # still holding the first long
+            self.assertEqual(pos[1]["status"], "ignored")
+            self.assertEqual(pos[1]["reason"], "already long")
+
+    def test_alert_on_newest_bar_is_pending(self):
+        end = T0 + (N_BARS - 1) * H
+        self.run_alerts([alert(end, "short", 1.0)])
+        self.assertEqual(self.positions()[0]["status"], "pending")
+
+    def test_other_symbol_alerts_do_not_trade(self):
+        e = self.ent[-3]
+        snap = self.run_alerts([alert(e["ts"], e["side"], e["close"], symbol="ETHUSD")])
+        self.assertEqual(snap, {})
+        self.assertEqual(self.positions(), [])
+
+    def test_no_alerts_no_rows(self):
+        self.assertEqual(self.run_alerts([]), {})
+
+
+class TestDailySummary(unittest.TestCase):
+    D = 86400
+    T = 20_000 * 86400                      # midnight UTC
+
+    def test_days_pf_rolling(self):
+        D, T = self.D, self.T
+        closed = [(T + 3600, 30.0), (T + 7200, -10.0),          # day 0: pf 3
+                  (T + 2 * D, 5.0),                              # day 2: no loss -> pf None
+                  (T + 31 * D, -20.0)]                           # day 31: day 0 fell out
+        rows = P.daily_summary(closed, T + 1800, T + 31 * D + 5)
+        self.assertEqual(len(rows), 32)
+        self.assertEqual((rows[0]["n_trades"], rows[0]["pf"]), (2, 3.0))
+        self.assertIsNone(rows[2]["pf"])
+        self.assertEqual(rows[1]["n_trades"], 0)
+        self.assertAlmostEqual(rows[29]["rolling_30d_pf"], 35 / 10)   # days 0..29
+        self.assertEqual(rows[29]["rolling_30d_trades"], 3)
+        self.assertEqual(rows[30]["rolling_30d_trades"], 1)           # days 1..30: only day 2
+        self.assertIsNone(rows[30]["rolling_30d_pf"])
+        self.assertAlmostEqual(rows[31]["rolling_30d_pf"], 5 / 20)
+        self.assertAlmostEqual(rows[31]["rolling_30d_net"], -15.0)
+        self.assertAlmostEqual(rows[31]["cum_net"], 5.0)
+
+
 if __name__ == "__main__":
     unittest.main()

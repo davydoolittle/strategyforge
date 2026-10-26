@@ -29,6 +29,20 @@ Stored in paper_trades (one row per davesbridge signal id; re-runs skip
 rows already there). The report also lists engine entries that got NO
 alert in the reconciled span — the other half of the agreement P4.3 needs.
 
+Paper P&L (P4.2). The paper position is the one TradingView holds: the
+strategy's alerts (for its own symbol and timeframe, agreed or not) are fed
+to engine.backtest as its entry signals, so fills (next bar open + slippage),
+risk sizing, stop/target/trailing exits, flips and fees are the engine's own,
+starting at initial_capital on the first alert. Rebuilt from scratch every
+run, so a partial 4h bar or a late candle never leaves stale state:
+  paper_positions  one row per alert: closed (realised pnl), open (marked to
+                   the newest hourly close; unrealised = pnl if closed at
+                   market now), pending (fills next bar) or ignored (already
+                   on that side)
+  paper_summary    per strategy per UTC day from the first alert to today:
+                   closed trades by exit day, net, pf, and pf / count / net
+                   over the trailing 30 days (pf NULL = no losing trade)
+
 Usage
   python paper.py                         # SIGNALS_DB, default /bridge/signals.db
   python paper.py --signals-db W:/davesbridge/data/signals.db
@@ -63,6 +77,23 @@ def ensure_tables(conn):
         symbol TEXT, tf TEXT,
         note TEXT,
         reconciled_at TEXT
+    )""")
+    conn.execute("""CREATE TABLE IF NOT EXISTS paper_positions (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        strategy_id INTEGER, signal_id INTEGER, bar_ts INTEGER, side TEXT,
+        status TEXT,                   -- closed | open | pending | ignored
+        entry_ts INTEGER, entry REAL, qty REAL,
+        exit_ts INTEGER, exit REAL, reason TEXT,
+        pnl REAL,                      -- realised (closed only)
+        mark_ts INTEGER, mark REAL, unrealised REAL,   -- open only
+        updated_at TEXT
+    )""")
+    conn.execute("""CREATE TABLE IF NOT EXISTS paper_summary (
+        strategy_id INTEGER, day TEXT,
+        n_trades INTEGER, net REAL, pf REAL,
+        rolling_30d_pf REAL, rolling_30d_trades INTEGER, rolling_30d_net REAL,
+        cum_net REAL,
+        PRIMARY KEY (strategy_id, day)
     )""")
     conn.commit()
 
@@ -207,6 +238,156 @@ def reconcile(conn, sconn, now=None):
             "engine_only": engine_only}
 
 
+# ------------------------------ P4.2 paper P&L ------------------------------
+
+DAY = 86400
+ROLLING_DAYS = 30
+
+
+def _day(ts):
+    return datetime.fromtimestamp(ts, tz=timezone.utc).strftime("%Y-%m-%d")
+
+
+def _pf(pnls):
+    """Profit factor; None when there is no losing trade (or no trade)."""
+    loss = -sum(p for p in pnls if p <= 0)
+    return sum(p for p in pnls if p > 0) / loss if loss > 0 else None
+
+
+def own_alerts(conn, strat):
+    """{bar_ts: (side, signal_id)}: this strategy's reconciled alerts that came
+    from its own symbol and timeframe. The first alert on a bar wins."""
+    tf_s = W.tf_seconds(strat["tf"])
+    sym, per = strat["pair"].replace("-", ""), TV_PERIOD.get(tf_s)
+    out = {}
+    for sig_id, bar_ts, side, symbol, tf in conn.execute(
+            "SELECT signal_id, bar_ts, side, symbol, tf FROM paper_trades"
+            " WHERE strategy_id=? AND bar_ts IS NOT NULL ORDER BY signal_id", (strat["id"],)):
+        if side not in ("long", "short") or (symbol and symbol != sym) or (tf and per and tf != per):
+            continue
+        out.setdefault(bar_ts, (side, sig_id))
+    return out
+
+
+def simulate(conn, strat, alerts, through_ts):
+    """engine.backtest driven by the alerts, from the first alert through the
+    bar holding through_ts (the newest hourly candle)."""
+    tf_s = W.tf_seconds(strat["tf"])
+    is_start = W.for_candidate(conn, strat["candidate_id"])[0]
+    cfg = W.pin_cfg(strat["cfg"], is_start, tf_s)
+    return engine.backtest(conn, strat["pair"], cfg, _iso(min(alerts)), _iso(through_ts), tf_s,
+                           signals={t: side for t, (side, _) in alerts.items()})
+
+
+def position_rows(strat, alerts, r, through_ts, now):
+    by_signal = {t["signal_ts"]: t for t in r["trades"]}
+    op, pend = r["open_position"], r["pending_entry"]
+    rows = []
+    for bar_ts, (side, sig_id) in sorted(alerts.items()):
+        row = dict(strategy_id=strat["id"], signal_id=sig_id, bar_ts=bar_ts, side=side,
+                   status="ignored", entry_ts=None, entry=None, qty=None, exit_ts=None,
+                   exit=None, reason=None, pnl=None, mark_ts=None, mark=None,
+                   unrealised=None, updated_at=now)
+        t = by_signal.get(bar_ts)
+        if t is not None:
+            row.update(status="closed", entry_ts=t["entry_ts"], entry=t["entry"], qty=t["qty"],
+                       exit_ts=t["exit_ts"], exit=t["exit"], reason=t["reason"], pnl=t["pnl"])
+        elif op is not None and op["signal_ts"] == bar_ts:
+            row.update(status="open", entry_ts=op["entry_ts"], entry=op["entry"], qty=op["qty"],
+                       mark_ts=through_ts, mark=op["mark"], unrealised=op["unrealised"])
+        elif pend is not None and pend["signal_ts"] == bar_ts:
+            row.update(status="pending")
+        else:
+            row.update(reason=f"already {side}")
+        rows.append(row)
+    return rows
+
+
+def daily_summary(closed, first_ts, last_ts):
+    """closed: [(exit_ts, pnl)]. One dict per UTC day first..last inclusive,
+    trades counted on their exit day."""
+    by_day = {}
+    for ts, pnl in closed:
+        by_day.setdefault(_day(ts), []).append(pnl)
+    out, cum = [], 0.0
+    d = first_ts // DAY * DAY
+    while d <= last_ts:
+        today = by_day.get(_day(d), [])
+        window = [p for k in range(ROLLING_DAYS) for p in by_day.get(_day(d - k * DAY), [])]
+        cum += sum(today)
+        out.append({"day": _day(d), "n_trades": len(today), "net": sum(today), "pf": _pf(today),
+                    "rolling_30d_pf": _pf(window), "rolling_30d_trades": len(window),
+                    "rolling_30d_net": sum(window), "cum_net": cum})
+        d += DAY
+    return out
+
+
+def update_pnl(conn, now=None):
+    """Rebuild paper_positions and paper_summary for every strategy with at
+    least one reconciled alert. Returns {strategy_id: snapshot} for the report."""
+    ensure_tables(conn)
+    now = now or datetime.now(timezone.utc).strftime("%Y-%m-%d %H:%M:%S")
+    out = {}
+    for (sid,) in conn.execute("SELECT DISTINCT strategy_id FROM paper_trades"
+                               " WHERE strategy_id IS NOT NULL ORDER BY strategy_id").fetchall():
+        conn.execute("DELETE FROM paper_positions WHERE strategy_id=?", (sid,))
+        conn.execute("DELETE FROM paper_summary WHERE strategy_id=?", (sid,))
+        name = conn.execute("SELECT name FROM strategies WHERE id=?", (sid,)).fetchone()
+        strat = strategy_by_name(conn, name[0]) if name else None
+        alerts = own_alerts(conn, strat) if strat else {}
+        if not alerts:
+            continue
+        newest = conn.execute("SELECT MAX(ts) FROM candles WHERE pair=?",
+                              (strat["pair"],)).fetchone()[0]
+        r = simulate(conn, strat, alerts, newest)
+        rows = position_rows(strat, alerts, r, newest, now)
+        conn.executemany(
+            "INSERT INTO paper_positions (strategy_id, signal_id, bar_ts, side, status, entry_ts,"
+            " entry, qty, exit_ts, exit, reason, pnl, mark_ts, mark, unrealised, updated_at)"
+            " VALUES (:strategy_id, :signal_id, :bar_ts, :side, :status, :entry_ts, :entry, :qty,"
+            " :exit_ts, :exit, :reason, :pnl, :mark_ts, :mark, :unrealised, :updated_at)", rows)
+        days = daily_summary([(t["exit_ts"], t["pnl"]) for t in r["trades"]], min(alerts), newest)
+        conn.executemany(
+            "INSERT INTO paper_summary (strategy_id, day, n_trades, net, pf, rolling_30d_pf,"
+            " rolling_30d_trades, rolling_30d_net, cum_net) VALUES (:sid, :day, :n_trades, :net,"
+            " :pf, :rolling_30d_pf, :rolling_30d_trades, :rolling_30d_net, :cum_net)",
+            [{**d, "sid": sid} for d in days])
+        out[sid] = {"name": strat["name"], "capital": strat["cfg"]["initial_capital"],
+                    "rows": rows, "last": days[-1], "n_closed": len(r["trades"]),
+                    "net": r["net"], "pf": _pf([t["pnl"] for t in r["trades"]])}
+    conn.commit()
+    return out
+
+
+def print_pnl(snap):
+    print("\n" + "-" * 78)
+    print("PAPER P&L (P4.2) — the positions TradingView's alerts opened, run by the engine")
+    print("-" * 78)
+    if not snap:
+        print("No reconciled strategy alerts, so no paper positions.")
+        return
+    fmt = lambda x: "-" if x is None else f"{x:.2f}"   # noqa: E731
+    print(f"{'strategy':28s} {'closed':>6s} {'net':>9s} {'net %':>6s} {'pf':>5s} "
+          f"{'30d n':>5s} {'30d pf':>6s}  open/pending/ignored")
+    for sid, s in snap.items():
+        st = [x["status"] for x in s["rows"]]
+        last = s["last"]
+        print(f"#{sid:<3d}{s['name'][:24]:25s} {s['n_closed']:6d} {s['net']:+9.2f} "
+              f"{100 * s['net'] / s['capital']:+5.1f}% {fmt(s['pf']):>5s} "
+              f"{last['rolling_30d_trades']:5d} {fmt(last['rolling_30d_pf']):>6s}  "
+              f"{st.count('open')}/{st.count('pending')}/{st.count('ignored')}")
+        for x in s["rows"]:
+            if x["status"] == "open":
+                print(f"      open {x['side']:5s} since {_iso(x['entry_ts'])[:16]} @ {x['entry']:.6g}"
+                      f"  mark {x['mark']:.6g} at {_iso(x['mark_ts'])[:16]}"
+                      f"  unrealised {x['unrealised']:+.2f}")
+    print("\nRead: net is realised P&L on the engine's own sizing (initial_capital, risk_pct)")
+    print("since the first alert; pf '-' = no losing trade yet. Open positions are marked to")
+    print("the newest hourly close, net of fees and slippage. An 'ignored' alert came while")
+    print("the position was already on that side. P4.3 wants >= 30 reconciled trades over")
+    print(">= 60 days and a rolling PF >= 1.2: a handful of paper trades says nothing yet.")
+
+
 def print_report(conn, summary):
     print("\n" + "=" * 78)
     print("PAPER RECONCILIATION (P4.1) — TradingView alerts vs engine")
@@ -246,7 +427,7 @@ def print_report(conn, summary):
     print("timing differs; the note column says which bar the engine fired on instead. Price")
     print("gaps are TradingView's feed vs Coinbase's API. Engine entries with no alert are")
     print("missed or unconfigured alerts. P4.3 promotion needs >= 90% agreement over")
-    print(">= 30 reconciled trades and >= 60 days; nothing here is P&L yet (that is P4.2).")
+    print(">= 30 reconciled trades and >= 60 days.")
 
 
 def main():
@@ -258,6 +439,7 @@ def main():
     ensure_tables(conn)
     summary = reconcile(conn, sconn)
     print_report(conn, summary)
+    print_pnl(update_pnl(conn))
     conn.close()
     sconn.close()
 
