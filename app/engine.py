@@ -249,6 +249,20 @@ def backtest(conn, pair, cfg, start_iso, end_iso, tf_seconds=3600):
     pos = None
     pending = None
 
+    # cfg["filters"] (P3.1, default none): shadow features that must hold at
+    # the signal bar. Features are only computed when a signal would fire.
+    filters = cfg.get("filters") or []
+    fc = None
+
+    def filters_pass(i):
+        nonlocal fc
+        import features  # here, not at top: features imports engine
+        if fc is None:
+            features.validate_filters(filters)
+            fc = features.FeatureComputer(conn, pair, tf_seconds,
+                                          cfg.get("history_start_ts"), end_ts)
+        return features.check_filters(fc, filters, ts[i])
+
     def bar_signals(i):
         need = [ema_f[i], ema_m[i], ema_s[i], rsi_v[i], adx_v[i], dc_hi[i],
                 dc_lo[i], vwap_v[i], vol_ma[i], atr_v[i]]
@@ -302,6 +316,8 @@ def backtest(conn, pair, cfg, start_iso, end_iso, tf_seconds=3600):
                      and ((not cfg["avoid_chop"]) or not choppy)
                      and ((not cfg["avoid_late"]) or not late)
                      and ((not cfg["avoid_fake"]) or conf_bear))
+        if filters and (long_sig or short_sig) and not filters_pass(i):
+            return False, False
         return long_sig, short_sig
 
     def close_position(exit_price, exit_ts, reason, is_market):

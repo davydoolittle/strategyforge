@@ -245,12 +245,25 @@ def _strip_sigs(report):
 
 def register(conn, parent_id, report, raw):
     """Store the pruned cfg as a candidates row so adversary.py can attack
-    it. Same pair/tf/pinned windows as the parent; gates as the optimizer's.
-    Returns the new id, or the id of an existing row with the same DNA."""
-    params = report["pruned"]["params"]
+    it. Returns the new id, or the id of an existing row with the same DNA."""
+    return insert_child(conn, parent_id, report["pair"], report["tf"],
+                        report["pruned"]["params"], report["windows"], raw, "ablation_of")
+
+
+CHILD_LINKS = {"ablation_of", "filter_of"}
+
+
+def insert_child(conn, parent_id, pair, tf, params, w, raw, link_col):
+    """Insert a cfg derived from candidate parent_id (pruned by ablation, or
+    with a filter added) as a candidates row: same pair/tf/pinned windows as
+    the parent, passed by the optimizer's gates, link_col = parent_id.
+    raw = (IS result, OOS result) already run on those windows. Returns
+    (id, created); an existing row with the same DNA is returned instead."""
+    if link_col not in CHILD_LINKS:
+        raise ValueError(f"link_col must be one of {sorted(CHILD_LINKS)}")
     dna = lineage.dna_of(params)
     seen = conn.execute("SELECT id FROM candidates WHERE dna=? AND pair=? AND tf=?",
-                        (dna, report["pair"], report["tf"])).fetchone()
+                        (dna, pair, tf)).fetchone()
     if seen:
         return seen[0], False
     is_r, oos_r = raw
@@ -262,20 +275,19 @@ def register(conn, parent_id, report, raw):
                  and oos_r["pf"] >= optimizer.OOS_MIN_PF and oos_r["net"] > 0)
     backfilled = conn.execute("SELECT windows_backfilled FROM candidates WHERE id=?",
                               (parent_id,)).fetchone()[0]
-    w = report["windows"]
 
     def pf(x):
         return None if x == float("inf") else x
 
     cur = conn.execute(
-        """INSERT INTO candidates (run_at, pair, tf, seed, trial, params_json,
+        f"""INSERT INTO candidates (run_at, pair, tf, seed, trial, params_json,
            is_trades, is_net, is_pf, is_dd, is_wr,
            oos_trades, oos_net, oos_pf, oos_dd, oos_wr, passed,
            is_start, split_ts, oos_end, windows_backfilled, base_seed, dna,
-           is_sharpe, is_skew, is_kurt, oos_sharpe, ablation_of)
+           is_sharpe, is_skew, is_kurt, oos_sharpe, {link_col})
            VALUES (datetime('now'), ?, ?, NULL, NULL, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?,
                    ?, ?, ?, ?, NULL, ?, ?, ?, ?, ?, ?)""",
-        (report["pair"], report["tf"], json.dumps(params),
+        (pair, tf, json.dumps(params),
          is_r["n_trades"], is_r["net"], pf(is_r["pf"]), is_r["max_dd"], is_r["win_rate"],
          oos_r["n_trades"], oos_r["net"], pf(oos_r["pf"]), oos_r["max_dd"], oos_r["win_rate"],
          passed, w["is_start"], w["split"], w["end"], backfilled, dna,

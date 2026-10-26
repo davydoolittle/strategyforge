@@ -51,6 +51,11 @@ def _tf_minutes(seconds):
 
 
 def render(cfg, title, source_note):
+    if cfg.get("filters"):
+        # shadow features (P3.1) come from Python-side data (context feeds,
+        # 90-day percentiles) that this template does not reproduce in Pine
+        raise SystemExit(f"cannot export: cfg has feature filters {cfg['filters']}; "
+                         f"the Pine template has no equivalent for them")
     htf = _tf_minutes(cfg["htf_seconds"])
     return f'''//@version=6
 // {title}

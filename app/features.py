@@ -11,19 +11,25 @@ the entry fill). Two feature families:
                    collector (it started 2026-09-01), populated for
                    everything after.
 
-Features never affect trading decisions. They exist to be analyzed later:
-which conditions separate winning signals from losing ones, validated
-in-sample -> out-of-sample before anything is ever promoted to a filter.
+Features do not affect trading decisions unless a cfg opts in through
+cfg["filters"] (P3.1): a list of {"feature": name, "op": ">=" | "<=",
+"value": x}. engine.backtest then builds a FeatureComputer lazily and lets a
+signal through only if every filter holds AT THE SIGNAL BAR. A missing value
+(None: not enough history, or a context feed that did not exist yet) blocks
+the signal: a filter that cannot be evaluated is not satisfied. Which
+features deserve to become filters is decided by feature_evals.py (P3.2).
 """
 
 import json
 import math
+import operator
 import sqlite3
 from datetime import datetime, timezone
 
 import engine
 
 CONTEXT_MAX_AGE_S = 2 * 3600     # a context poll must be within 2h of signal
+FILTER_OPS = {">=": operator.ge, "<=": operator.le}
 
 
 def _pctile(window, value):
@@ -56,11 +62,15 @@ def _autocorr1(rets):
 
 
 class FeatureComputer:
-    def __init__(self, conn, pair, tf_seconds=3600):
+    def __init__(self, conn, pair, tf_seconds=3600, start_ts=None, end_ts=None):
+        """start_ts/end_ts bound the candles loaded (default: all). A filter
+        passes the backtest's own bounds, so indicator warmup matches it."""
         self.conn = conn
         self.pair = pair
         self.tf = tf_seconds
-        ts, o, h, l, c, v = engine.load_candles(conn, pair, 2 ** 62, tf_seconds)
+        self._cache = {}
+        ts, o, h, l, c, v = engine.load_candles(
+            conn, pair, end_ts if end_ts is not None else 2 ** 62, tf_seconds, start_ts)
         self.ts, self.o, self.h, self.l, self.c, self.v = ts, o, h, l, c, v
         self.index = {t: i for i, t in enumerate(ts)}
         self.atr = engine.atr(h, l, c, 14)
@@ -256,9 +266,7 @@ class FeatureComputer:
     def features_for_trade(self, trade):
         sig_ts = trade["signal_ts"]
         i = self.index.get(sig_ts)
-        f = self.ohlcv_features(i) if i is not None and i > 200 * self.bars_per_day // 24 else {}
-        if i is not None:
-            f = self.ohlcv_features(i)
+        f = self.ohlcv_features(i) if i is not None else {}
         ctx = self.context_features(sig_ts)
         f.update(ctx)
         # IV - RV spread once both halves exist
@@ -267,6 +275,47 @@ class FeatureComputer:
         else:
             f["iv_rv_spread"] = None
         return f
+
+
+    def at(self, signal_ts, names=None):
+        """Features at one signal bar, cached (a filter asks per bar). With
+        names given and all of them OHLCV-derived, the context table is not
+        queried at all."""
+        key = (signal_ts, "ohlcv")
+        if key not in self._cache:
+            i = self.index.get(signal_ts)
+            self._cache[key] = self.ohlcv_features(i) if i is not None else {}
+        f = self._cache[key]
+        if names is not None and all(n in f for n in names):
+            return f
+        if signal_ts not in self._cache:
+            self._cache[signal_ts] = self.features_for_trade({"signal_ts": signal_ts})
+        return self._cache[signal_ts]
+
+
+def validate_filters(filters):
+    for flt in filters:
+        if set(flt) != {"feature", "op", "value"}:
+            raise ValueError(f"filter needs exactly feature/op/value: {flt!r}")
+        if flt["op"] not in FILTER_OPS:
+            raise ValueError(f"filter op must be one of {sorted(FILTER_OPS)}: {flt!r}")
+
+
+def describe(flt):
+    return f"{flt['feature']} {flt['op']} {flt['value']:g}"
+
+
+def check_filters(fc, filters, signal_ts):
+    """True if every filter holds at signal_ts. None blocks; a name that is
+    not a feature raises (a typo must not silently block every trade)."""
+    f = fc.at(signal_ts, [flt["feature"] for flt in filters])
+    for flt in filters:
+        if flt["feature"] not in f:
+            raise KeyError(f"unknown feature {flt['feature']!r} in cfg['filters']")
+        v = f[flt["feature"]]
+        if v is None or not FILTER_OPS[flt["op"]](v, flt["value"]):
+            return False
+    return True
 
 
 def ensure_tables(conn):
