@@ -2,7 +2,9 @@
 StrategyForge filters (P3.1) — put a shadow feature in front of a candidate.
 
 A filter is {"feature": name, "op": ">=" | "<=", "value": x} in
-cfg["filters"]; engine.backtest lets a signal through only if every filter
+cfg["filters"], or {"feature": "regime", "op": "==" | "!=", "value": tag}
+for the daily regime tag (P5.4, features.RegimeTagger: chop = daily ADX(14)
+< 20 on the last completed day); engine.backtest lets a signal through only if every filter
 holds at the signal bar (features.check_filters). This CLI takes a candidate,
 adds one or more filters, and runs parent and child on the parent's PINNED IS
 and OOS windows (P2.1), side by side.
@@ -21,6 +23,7 @@ you tried.
 Usage
   python filters.py --candidate 2716 --filter "vol_of_vol>=12"
   python filters.py --candidate 2716 --filter "vol_of_vol>=12" --register
+  python filters.py --candidate 3214 --filter "regime==chop" --register
 """
 
 import argparse
@@ -39,6 +42,7 @@ import windows as W
 DB_PATH = os.environ.get("FORGE_DB", "/data/forge.db")
 
 _FILTER_RE = re.compile(r"^\s*([A-Za-z_][A-Za-z0-9_]*)\s*(>=|<=)\s*(-?[0-9.]+(?:[eE][-+]?[0-9]+)?)\s*$")
+_CAT_RE = re.compile(r"^\s*([A-Za-z_][A-Za-z0-9_]*)\s*(==|!=)\s*([A-Za-z_]+)\s*$")
 
 
 def ensure_tables(conn):
@@ -49,10 +53,17 @@ def ensure_tables(conn):
 
 
 def parse_filter(text):
+    m = _CAT_RE.match(text)
+    if m:
+        flt = {"feature": m.group(1), "op": m.group(2), "value": m.group(3)}
+        features.validate_filters([flt])
+        return flt
     m = _FILTER_RE.match(text)
     if not m:
-        raise ValueError(f"filter must look like 'vol_of_vol>=12', got {text!r}")
-    return {"feature": m.group(1), "op": m.group(2), "value": float(m.group(3))}
+        raise ValueError(f"filter must look like 'vol_of_vol>=12' or 'regime==chop', got {text!r}")
+    flt = {"feature": m.group(1), "op": m.group(2), "value": float(m.group(3))}
+    features.validate_filters([flt])
+    return flt
 
 
 def with_filters(cfg, new):

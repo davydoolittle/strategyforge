@@ -136,6 +136,30 @@ class TestEngineFilters(unittest.TestCase):
         self.assertNotEqual(lineage.dna_of(c),
                             lineage.dna_of({**c, "filters": [{"feature": "hour", "op": "<=", "value": 11}]}))
 
+    def test_regime_filter_holds_at_signal_bar(self):
+        tagger = features.RegimeTagger(self.conn, "BTC-USD")
+        tags = [tagger.at(t["signal_ts"]) for t in self.base["trades"]]
+        self.assertIn(None, tags)                       # some signals in the daily warmup
+        # these candles have no chop day, so filter on the commonest tag
+        tag = max(set(tags) - {None}, key=tags.count)
+        self.assertGreater(len(set(tags) - {None, tag}), 0)
+        same = self.run_with([F.parse_filter(f"regime=={tag}")])
+        other = self.run_with([F.parse_filter(f"regime!={tag}")])
+        self.assertGreater(same["n_trades"], 0)
+        self.assertGreater(other["n_trades"], 0)
+        self.assertTrue(all(tagger.at(e["ts"]) == tag for e in same["entries"]))
+        # != also blocks signals still in the daily warmup (tag None)
+        self.assertTrue(all(tagger.at(e["ts"]) not in (tag, None) for e in other["entries"]))
+
+    def test_regime_filter_validation(self):
+        self.assertEqual(F.parse_filter(" regime == chop "),
+                         {"feature": "regime", "op": "==", "value": "chop"})
+        for bad in ("regime==sideways", "regime>=1", "hour==chop"):
+            with self.assertRaises(ValueError, msg=bad):
+                F.parse_filter(bad)
+        self.assertEqual(features.describe({"feature": "regime", "op": "==", "value": "chop"}),
+                         "regime == chop")
+
     def test_pine_export_refuses(self):
         with self.assertRaises(SystemExit):
             pine_export.render({**loose_cfg(), "filters": [{"feature": "hour", "op": "<=", "value": 1}]},

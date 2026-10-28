@@ -6,6 +6,86 @@ pinned windows on each candidate (P2.1).
 
 ---
 
+## F8. Trading V4.1 only on chop days doubles SR per trade, but the evidence stays the same
+
+*2026-10-28. P5.4: `filters.py --filter "regime==chop" --register` on #3214
+and #2716, then `adversary.py` on both children and both parents. Run on a
+scratch copy of forge.db; nothing was written to the live DB.*
+
+**What was tested.** The tag is P3.4's: chop means the last completed UTC
+day had daily ADX(14) < 20. The filter is checked at the signal bar, and
+only signals on chop days are let through. The threshold was not tuned:
+one value, one trial per parent. The engine gets the tag from
+`FeatureComputer.regime()`, with the same bounds A9 uses. `regime` is a
+new categorical filter feature (`==` / `!=`).
+
+**Caveat on independence.** F7 picked chop as the best regime per trade,
+across annotated trades that include these two candidates' own IS and OOS
+trades. So this is not an out-of-sample test of the hypothesis. It shows
+what the filter costs and earns on the trades that suggested it.
+
+**Parent vs child on the pinned windows**
+
+| | IS trades / pf / net | OOS trades / pf / net | blocked IS (net) | blocked OOS (net) |
+|---|---|---|---|---|
+| #3214 ETH parent | 112 / 1.15 / +1,279 | 50 / 1.62 / +2,308 | | |
+| #3901 = #3214 chop only | 19 / 2.06 / +1,361 | 11 / 1.58 / +474 | 93t (+74) | 39t (**+1,864**) |
+| #2716 BTC parent | 99 / 1.29 / +2,081 | 40 / 1.45 / +1,266 | | |
+| #3902 = #2716 chop only | 27 / 1.41 / +712 | 24 / 1.96 / +1,400 | 73t (**+1,046**) | 16t (−148) |
+
+`filters.py`'s own test of a helpful filter is that the blocked trades net
+negative in both windows. Neither child passes it:
+
+- On #3214 the blocked trades made money in both windows. Most of the
+  OOS profit (+1,864 of +2,308) was in trades the filter removed.
+- On #2716 the filter helps OOS (PF 1.45 → 1.96, blocked −148). But it
+  throws away +1,046 of IS profit, so the OOS gain is one-window evidence
+  on 16 blocked trades.
+
+**Adversary**
+
+| | full trades / pf | SR/trade | PSR vs 0 | DSR (N = 901) | break-even N | hard | soft | verdict |
+|---|---|---|---|---|---|---|---|---|
+| #3214 parent | 162 / 1.31 | 0.113 | 0.934 | 0.000 | 0 | A2 | A7 A8 | REJECTED |
+| #3901 child | 30 / 1.86 | 0.286 | 0.949 | 0.000 | 0 | **A1** A2 | A4 A7 A9 | REJECTED |
+| #2716 parent | 139 / 1.34 | 0.141 | 0.957 | 0.000 | 1 | A2 | A4 A7 | REJECTED |
+| #3902 child | 51 / 1.67 | 0.237 | 0.957 | 0.000 | 1 | **A1** A2 | A4 A7 A9 | REJECTED |
+
+E[max SR] is 1.07 (ETH) and 1.09 (BTC) over 901 V4.1 trials per pair:
+900 from the search plus the child. Since P5.2 that count covers V4.1
+trials only.
+
+**What this shows.**
+
+- **The filter changes the per-trade numbers, not the evidence.** SR per
+  trade roughly doubles (0.11 → 0.29, 0.14 → 0.24), and PF and drawdown
+  improve (A8 p95 DD 27% → 11% on #3214). But trades drop 3–5×.
+  - PSR against zero, which asks how sure we are that SR > 0 at all, does
+    not move: 0.957 → 0.957 on #2716 and 0.934 → 0.949 on #3214.
+  - Break-even N stays at 0–1. The filter turns many weak trades into a few
+    better ones and buys no extra certainty.
+- **A1 now fails on both children.** OOS has 11 and 24 trades, against a
+  floor of 30. The full windows have 30 and 51 trades, so #3902 clears the
+  full-window floor of 50 by one trade. That turns a single hard failure
+  (A2) into two.
+- **A9 fails by construction.** A chop-only strategy has no trades outside
+  its one regime. A9 working as intended here is not new information.
+- **A4 and A7 get worse.** A4's worst neighbours go below PF 1.0 (0.93,
+  0.98), though 98% of neighbours stay profitable. A7 cannot pass: the
+  other pairs' chop-day OOS windows hold only 7–17 trades.
+- **A3 holds up only partly.** #3902 has 4/5 profitable folds. #3901 has
+  3/5, on 4–7 trades per fold.
+
+**What this licenses.** Nothing. `regime == chop` is not a filter for
+V4.1. F7's "chop earns most per trade" is real on these trades, but trend
+days are profitable too, just less so per trade. Removing them costs more
+in sample size than it gains in per-trade quality. If regime is used again,
+it should be as a sizing input (more risk on chop days), so no trades are
+lost. That would be a new hypothesis, which needs trades the F7 sample
+did not contain.
+
+---
+
 ## F7. Regime tag: at 1h it is decided by the entry rule; on daily bars no candidate is single-regime
 
 *2026-10-26. `features.RegimeTagger` and adversary A9 (P3.4), run on a

@@ -13,7 +13,8 @@ the entry fill). Two feature families:
 
 Features do not affect trading decisions unless a cfg opts in through
 cfg["filters"] (P3.1): a list of {"feature": name, "op": ">=" | "<=",
-"value": x}. engine.backtest then builds a FeatureComputer lazily and lets a
+"value": x}, or for the categorical regime tag (P5.4) {"feature": "regime",
+"op": "==" | "!=", "value": "trend_up" | "trend_down" | "chop"}. engine.backtest then builds a FeatureComputer lazily and lets a
 signal through only if every filter holds AT THE SIGNAL BAR. A missing value
 (None: not enough history, or a context feed that did not exist yet) blocks
 the signal: a filter that cannot be evaluated is not satisfied. Which
@@ -40,6 +41,9 @@ REGIME_SLOPE_DAYS = 5         # slope = EMA[d] - EMA[d-5]
 REGIME_ADX = 20.0             # daily ADX(14) below this = chop
 REGIMES = ("trend_up", "trend_down", "chop")
 FILTER_OPS = {">=": operator.ge, "<=": operator.le}
+# categorical features a filter may test for (in)equality: name -> allowed values
+CATEGORICAL_OPS = {"==": operator.eq, "!=": operator.ne}
+CATEGORICAL = {"regime": REGIMES}
 
 
 def _pctile(window, value):
@@ -79,6 +83,8 @@ class FeatureComputer:
         self.pair = pair
         self.tf = tf_seconds
         self._cache = {}
+        self._bounds = (start_ts, end_ts)
+        self._regime = None
         ts, o, h, l, c, v = engine.load_candles(
             conn, pair, end_ts if end_ts is not None else 2 ** 62, tf_seconds, start_ts)
         self.ts, self.o, self.h, self.l, self.c, self.v = ts, o, h, l, c, v
@@ -303,6 +309,14 @@ class FeatureComputer:
         return self._cache[signal_ts]
 
 
+    def regime(self, signal_ts):
+        """Daily regime tag at the signal (RegimeTagger, built on first use
+        with this computer's bounds: the same history adversary A9 tags with)."""
+        if self._regime is None:
+            self._regime = RegimeTagger(self.conn, self.pair, *self._bounds)
+        return self._regime.at(signal_ts)
+
+
 class RegimeTagger:
     """trend_up / trend_down / chop for a signal, or None while the daily
     EMA / ADX are still warming up (or the previous day has no candles)."""
@@ -328,23 +342,36 @@ def validate_filters(filters):
     for flt in filters:
         if set(flt) != {"feature", "op", "value"}:
             raise ValueError(f"filter needs exactly feature/op/value: {flt!r}")
-        if flt["op"] not in FILTER_OPS:
-            raise ValueError(f"filter op must be one of {sorted(FILTER_OPS)}: {flt!r}")
+        if flt["feature"] in CATEGORICAL:
+            if flt["op"] not in CATEGORICAL_OPS:
+                raise ValueError(f"{flt['feature']} filter op must be one of "
+                                 f"{sorted(CATEGORICAL_OPS)}: {flt!r}")
+            if flt["value"] not in CATEGORICAL[flt["feature"]]:
+                raise ValueError(f"{flt['feature']} must be one of "
+                                 f"{CATEGORICAL[flt['feature']]}: {flt!r}")
+        elif flt["op"] not in FILTER_OPS or isinstance(flt["value"], str):
+            raise ValueError(f"filter op must be one of {sorted(FILTER_OPS)} with a number: {flt!r}")
 
 
 def describe(flt):
-    return f"{flt['feature']} {flt['op']} {flt['value']:g}"
+    v = flt["value"]
+    return f"{flt['feature']} {flt['op']} {v if isinstance(v, str) else format(v, 'g')}"
 
 
 def check_filters(fc, filters, signal_ts):
-    """True if every filter holds at signal_ts. None blocks; a name that is
-    not a feature raises (a typo must not silently block every trade)."""
-    f = fc.at(signal_ts, [flt["feature"] for flt in filters])
+    """True if every filter holds at signal_ts. None blocks (a regime still in
+    its daily warmup too); a name that is not a feature raises (a typo must
+    not silently block every trade)."""
+    numeric = [flt for flt in filters if flt["feature"] not in CATEGORICAL]
+    f = fc.at(signal_ts, [flt["feature"] for flt in numeric]) if numeric else {}
     for flt in filters:
-        if flt["feature"] not in f:
+        if flt["feature"] == "regime":
+            v, op = fc.regime(signal_ts), CATEGORICAL_OPS[flt["op"]]
+        elif flt["feature"] not in f:
             raise KeyError(f"unknown feature {flt['feature']!r} in cfg['filters']")
-        v = f[flt["feature"]]
-        if v is None or not FILTER_OPS[flt["op"]](v, flt["value"]):
+        else:
+            v, op = f[flt["feature"]], FILTER_OPS[flt["op"]]
+        if v is None or not op(v, flt["value"]):
             return False
     return True
 
