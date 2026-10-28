@@ -92,7 +92,7 @@ Matrix: Intel i7, 16 GB, Unraid, shared with ~15 other containers.
 
 - StrategyForge gets **≤ 2 CPU cores and ≤ 2 GB RAM** (`deploy.resources.limits` in compose). One engine backtest is 0.14 s single-threaded; an adversarial battery is ~100 backtests. Budget accordingly: a nightly job may run ≤ 4,000 backtests (~10 min).
 - SQLite stays. At current growth (3 pairs × 24 bars/day) `candles` adds 26k rows/year. Adding 10 pairs at 15 m adds ~350k rows/year. Still trivial. Enable WAL mode on first connect in v2.
-- No local LLM. A 7B model at Q4 wants 5–6 GB and reasons poorly about statistics. If a research assistant is built (§8, Phase 6), it calls the Claude API with read-only tools over the DB; cost is cents per question.
+- No local LLM. A 7B model at Q4 wants 5–6 GB and reasons poorly about statistics. If a research assistant is built (Phase 7), it calls the Claude API with read-only tools over the DB; cost is cents per question.
 
 ---
 
@@ -145,11 +145,26 @@ Goal: close the loop between TradingView alerts and the engine, so `paper_valida
 
 ---
 
-## 8. Phase 5 — Minimal dashboard  (only after Phase 4 produces data worth looking at)
+## 8. Phase 5 — Pluggable engine and a second family
 
-- [ ] **P5.1** `web.py`: FastAPI, read-only, port 8091, LAN only (no Cloudflare route). Endpoints: `/api/strategies`, `/api/candidates?tf=&passed=`, `/api/reports/{id}`, `/api/health`, `/api/paper/{strategy_id}`.
-- [ ] **P5.2** One static `index.html` (vanilla JS + Chart.js from cdnjs, dark theme): lineage tree with verdict badges, candidate table with sortable DSR / WF / plateau columns, equity + drawdown chart for a selected report, paper vs engine reconciliation table, health sparkline.
-- [ ] **P5.3** Auth: single bearer token from env. Tailscale is the remote-access path; nothing public.
+Goal: stop every module assuming V4.1. Definition of done: a second strategy
+family runs through optimizer, adversary, ablation, lineage, paper, health and
+Pine export with no V4.1-specific code outside its own file, and every stored
+V4.1 result still reproduces to the cent. Rules in §10 apply: no bulk writes
+to forge.db from the laptop; optimizer runs are handed over as `sf.sh` commands.
+
+- [x] **P5.1 Regression harness first.** *(done 2026-10-28: 127/127 passed candidates to the cent, #3214 = 112 IS + 50 OOS trades identical field for field against `tests/fixtures/c3214_trades.json` (written from the pre-split engine), plus every stored DNA equals `dna_of(params)` (3,900/3,900). Copies forge.db with the backup API into `SF_SCRATCH_DIR` or the temp dir; skips loudly if no forge.db exists. ~5.5 min, so the full suite now takes ~6 min)* `tests/test_regression.py`: against a scratch copy of forge.db, every candidate with `passed=1` must reproduce its stored `is_trades, is_net, oos_trades, oos_net` to the cent on its pinned windows, and strategy #1 (candidate 3214) must reproduce its exact trade list. This test must pass before and after every later step.
+- [ ] **P5.2 Split engine.py into execution and strategy.** Execution (fills at next open, slippage, commission, risk sizing, ATR stop / R:R target / trailing, reverse-on-opposite, `fill_delay_bars`, `history_start_ts`, forced `signals=`, filters hook, `entries` / `open_position` / `pending_entry` outputs) stays in `engine.py`. The V4.1 signal logic moves to `app/strategies/smrt_v41.py` as a class with: `name`, `default_cfg()`, `sample_cfg(rng)`, `dna_keys`, numeric/toggle param lists for ablation and sensitivity, `signals(bars, cfg)` -> per-bar (long, short), and `pine_template()`. `app/strategies/__init__.py` is a registry keyed by family name. `candidates` and `strategies` get a `family` column (default `'smrt_v41'`, backfilled); DNA includes family. optimizer, adversary, ablation, pine_export, lineage, paper, health dispatch by family. P5.1 must still pass.
+- [ ] **P5.3 Second family.** `app/strategies/core.py` = the F2 earned-its-place subset: EMA stack (fast/mid/slow), ADX threshold, volume filter (`vol_ma_len`, `min_rel_vol`), late-entry distance trap (`max_dist_ema`), breakout confirmation, fixed ATR stop and R:R, longs and shorts toggles. No VWAP, no chop filter, no big-bar trap, no trailing. Aim for <= 10 parameters. Its own `sample_cfg` ranges. Pine template derived from the V4.1 one with the removed parts gone. Tests. Then hand over the `sf.sh` optimizer command for 300 trials per pair at 1h with a new base seed, with the note that A2's trial count for this family is its own search, not V4.1's 900.
+- [ ] **P5.4 Regime filter on V4.1, via `filters.py`.** Register children of #3214 and #2716 with the filter `regime == chop` (daily ADX14 < 20 at signal time, the tag from P3.4), compare parent vs child on the pinned windows against a scratch copy, and run the adversary on both children. Write the result as FINDINGS F8 whatever it shows.
+
+---
+
+## 8a. Phase 6 — Minimal dashboard  (renumbered from Phase 5 on 2026-10-28; only after Phase 4 produces data worth looking at)
+
+- [ ] **P6.1** `web.py`: FastAPI, read-only, port 8091, LAN only (no Cloudflare route). Endpoints: `/api/strategies`, `/api/candidates?tf=&passed=`, `/api/reports/{id}`, `/api/health`, `/api/paper/{strategy_id}`.
+- [ ] **P6.2** One static `index.html` (vanilla JS + Chart.js from cdnjs, dark theme): lineage tree with verdict badges, candidate table with sortable DSR / WF / plateau columns, equity + drawdown chart for a selected report, paper vs engine reconciliation table, health sparkline.
+- [ ] **P6.3** Auth: single bearer token from env. Tailscale is the remote-access path; nothing public.
 
 ---
 
@@ -161,8 +176,8 @@ Goal: close the loop between TradingView alerts and the engine, so `paper_valida
 | §8 Insider Form 4 | **not here** | Equities-only; this pipeline trades crypto. Dave's `edgar-alert` project already ingests Form 4. If a crypto-relevant use emerges (e.g. COIN, MSTR as sentiment proxies) consume its table rather than re-scrape. |
 | §9 13F / 13D / COT | **not here** | 45-day-stale disclosures are irrelevant at 1h–4h horizons. COT has no crypto coverage that matters. |
 | §6 Equities / ETFs / forex markets | **deferred** | Different data vendor, different session logic, different cost model. Get crypto validated first. |
-| §13 Local LLM research agent | **replaced** | See §3. Phase 6, if it happens, is Claude API + read-only DB tools. |
-| §14 React dashboard with 10 sections | **replaced** by §8 | One page, read-only. |
+| §13 Local LLM research agent | **replaced** | See §3. Phase 7, if it happens, is Claude API + read-only DB tools. |
+| §14 React dashboard with 10 sections | **replaced** by §8a | One page, read-only. |
 | §2 Postgres / Redis / auth stack | **replaced** | SQLite + bearer token + Tailscale. |
 | Live order execution | **never in this repo** | davesbridge `DRY_RUN` is the boundary. |
 
