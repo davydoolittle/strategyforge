@@ -21,6 +21,7 @@ temp drive is full), else the system temp dir.
 
 import json
 import os
+import random
 import shutil
 import sqlite3
 import sys
@@ -32,6 +33,8 @@ sys.path.insert(0, os.path.join(HERE, "..", "app"))
 
 import engine  # noqa: E402
 import lineage  # noqa: E402
+import optimizer  # noqa: E402
+import strategies  # noqa: E402
 import windows as W  # noqa: E402
 
 FIXTURE = os.path.join(HERE, "fixtures", "c3214_trades.json")
@@ -86,6 +89,9 @@ class RegressionTest(unittest.TestCase):
                                     "the regression harness needs the real data")
         cls.tmp = scratch_dir()
         cls.conn = sqlite3.connect(scratch_copy(src, cls.tmp))
+        # family columns (P5.2) on the scratch copy, as the server's first run will
+        optimizer.ensure_tables(cls.conn)
+        lineage.ensure_tables(cls.conn)
 
     @classmethod
     def tearDownClass(cls):
@@ -115,6 +121,23 @@ class RegressionTest(unittest.TestCase):
             self.assertEqual(len(got[w]), len(want[w]), w)
             for k, (a, b) in enumerate(zip(got[w], want[w])):
                 self.assertEqual(a, b, f"{w} trade {k} differs")
+
+    def test_seeded_trials_regenerate(self):
+        """Every optimizer row with a base_seed is trial k of its seed's stream
+        from its family's sampler (P5.2 moved the samplers). No backtests."""
+        rows = self.conn.execute(
+            "SELECT seed, trial, tf, family, params_json FROM candidates"
+            " WHERE base_seed IS NOT NULL AND trial IS NOT NULL ORDER BY seed, trial").fetchall()
+        self.assertGreater(len(rows), 0)
+        streams, bad = {}, []
+        for seed, trial, tf, family, pj in rows:
+            fam = strategies.get(family)
+            drawn = streams.setdefault((seed, tf, family), [random.Random(seed), []])
+            while len(drawn[1]) <= trial:
+                drawn[1].append(fam.for_timeframe(fam.sample_cfg(drawn[0]), W.tf_seconds(tf)))
+            if drawn[1][trial] != json.loads(pj):
+                bad.append((seed, trial))
+        self.assertEqual(bad, [], f"{len(bad)} of {len(rows)} seeded rows differ, e.g. {bad[:5]}")
 
     def test_stored_dna_is_stable(self):
         bad = [cid for cid, pj, dna in

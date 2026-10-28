@@ -43,6 +43,7 @@ import random
 from datetime import datetime, timezone
 
 import engine
+import strategies
 
 EULER_GAMMA = 0.5772156649015329
 
@@ -301,26 +302,24 @@ def monte_carlo(trades, initial_capital, n_sims=2000, seed=7):
 
 # ---------------------------------------------------- param sensitivity ---
 
-SENSITIVITY_PARAMS = ["ema_fast", "ema_mid", "ema_slow", "rsi_buy", "rsi_sell",
-                      "adx_threshold", "min_ema_sep", "min_rel_vol",
-                      "max_compression", "max_dist_ema", "stop_atr", "rr_ratio"]
-INT_PARAMS = {"ema_fast", "ema_mid", "ema_slow", "rsi_len", "adx_len", "dc_len"}
-
-
 def param_sensitivity(conn, pair, cfg, tf_seconds, start_iso, end_iso, pct=(0.10,)):
     """For each numeric param, nudge it +/-pct (one or several step sizes) and
     re-run. A robust parameter set lives on a plateau: neighbours keep PF > 1.
     A fragile one lives on a spike: neighbours collapse. Returns per-param
     results, plateau score = fraction of neighbours that stay profitable, and
     worst_pf = the lowest neighbour PF (0 if a neighbour takes no trades).
-    A nudge that lands on a value already tried for that param is skipped."""
+    A nudge that lands on a value already tried for that param is skipped.
+    Which params, which are integers and which nudges are nonsense (e.g. EMA
+    lengths out of order) is the cfg's family's call (sensitivity_params,
+    int_params, cfg_ok)."""
+    fam = strategies.for_cfg(cfg)
     pcts = (pct,) if isinstance(pct, (int, float)) else tuple(pct)
     base = engine.backtest(conn, pair, cfg, start_iso, end_iso, tf_seconds)
     base_pf = base["pf"] if base["pf"] != float("inf") else 99.0
     rows = []
     ok = 0
     total = 0
-    for p in SENSITIVITY_PARAMS:
+    for p in fam.sensitivity_params:
         if p not in cfg:
             continue
         seen = {cfg[p]}
@@ -329,7 +328,7 @@ def param_sensitivity(conn, pair, cfg, tf_seconds, start_iso, end_iso, pct=(0.10
                 c2 = copy.deepcopy(cfg)
                 v = cfg[p]
                 nv = v * (1 + sign * step)
-                if p in INT_PARAMS:
+                if p in fam.int_params:
                     nv = max(2, int(round(nv)))
                     if nv == v:
                         nv = v + sign
@@ -337,8 +336,7 @@ def param_sensitivity(conn, pair, cfg, tf_seconds, start_iso, end_iso, pct=(0.10
                     continue
                 seen.add(nv)
                 c2[p] = nv
-                # keep EMA ordering sane
-                if c2["ema_fast"] >= c2["ema_mid"] or c2["ema_mid"] >= c2["ema_slow"]:
+                if not fam.cfg_ok(c2):
                     continue
                 r = engine.backtest(conn, pair, c2, start_iso, end_iso, tf_seconds)
                 pf = r["pf"] if r["pf"] != float("inf") else 99.0
@@ -393,7 +391,7 @@ def lookahead_shift(conn, pair, cfg, tf_seconds, start_iso, end_iso, delay_bars=
 MIN_TRADES_FOR_SR_VARIANCE = 10
 
 
-def sharpe_variance_from_candidates(conn, pair, tf):
+def sharpe_variance_from_candidates(conn, pair, tf, family=strategies.DEFAULT_FAMILY):
     """DSR needs the variance of SR across the trials that were run. Since
     P2.3 every candidate row carries its own IS Sharpe (is_sharpe, computed
     on its pinned IS window by the optimizer or `optimizer.py
@@ -406,12 +404,16 @@ def sharpe_variance_from_candidates(conn, pair, tf):
     (54.8 vs 0.105) and made the benchmark absurd rather than strict.
     n_trials is still the full count — every draw was a chance to get lucky.
 
+    Only trials of the given strategy family count (P5.2): each family is
+    its own search over its own parameter space, so a second family's 300
+    trials neither inherit V4.1's 900 nor raise V4.1's bar.
+
     Returns (variance, n_used, n_total, n_missing). n_missing counts rows
     with no is_sharpe (not backfilled, or not reproducible on their windows);
     they are left out of the variance and should be reported, not hidden."""
     rows = conn.execute(
-        "SELECT is_sharpe, is_trades FROM candidates WHERE pair=? AND tf=?",
-        (pair, tf)).fetchall()
+        "SELECT is_sharpe, is_trades FROM candidates WHERE pair=? AND tf=? AND family=?",
+        (pair, tf, family)).fetchall()
     n_total = len(rows)
     n_missing = sum(1 for sr, _ in rows if sr is None)
     srs = [sr for sr, n in rows

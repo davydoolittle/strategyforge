@@ -20,10 +20,16 @@ base_seed, the per-pair seed and the DNA of its params (lineage.dna_of), so a
 parameter set that was already tried shows up as a duplicate. Rows from
 before P2.2 have base_seed NULL: those runs used one seed for every pair.
 
+Families (P5.2): --family picks the strategy family (app/strategies/) whose
+sample_cfg() draws the trials; default smrt_v41. Each row stores its family.
+A family's trials are its own search: adversary A2 deflates a candidate by
+the trial count of its own family on that pair/tf, not by every trial run.
+
 Usage:
   python optimizer.py --tf 1h --trials 300          # every pair in main.PAIRS
   python optimizer.py --pairs BTC-USD,ETH-USD,SOL-USD --tf 1h --trials 300
   python optimizer.py --pairs BTC-USD --tf 4h --trials 200 --seed 7
+  python optimizer.py --family core --tf 1h --trials 300 --seed 5301
 """
 
 import argparse
@@ -38,6 +44,7 @@ import engine
 import features
 import lineage
 import main as collector
+import strategies
 import validation as V
 import windows
 
@@ -68,28 +75,8 @@ def ntfy(msg):
         pass
 
 
-def sample_cfg(rng):
-    cfg = engine.default_cfg()
-    f = rng.randint(5, 13)
-    m = rng.randint(max(f + 4, 15), 35)
-    s = rng.randint(max(m + 10, 40), 80)
-    cfg["ema_fast"], cfg["ema_mid"], cfg["ema_slow"] = f, m, s
-    cfg["rsi_buy"] = round(rng.uniform(52, 60), 1)
-    cfg["rsi_sell"] = round(rng.uniform(40, 48), 1)
-    cfg["adx_threshold"] = round(rng.uniform(18, 30), 1)
-    cfg["min_ema_sep"] = round(rng.uniform(0.5, 2.5), 2)
-    cfg["min_rel_vol"] = round(rng.uniform(0.8, 1.5), 2)
-    cfg["max_compression"] = round(rng.uniform(0.8, 2.0), 2)
-    cfg["max_dist_ema"] = round(rng.uniform(2.0, 4.5), 2)
-    cfg["stop_atr"] = round(rng.uniform(1.5, 3.5), 2)
-    cfg["rr_ratio"] = round(rng.uniform(1.5, 3.5), 2)
-    cfg["use_trailing"] = rng.random() < 0.5
-    cfg["trail_atr"] = round(rng.uniform(1.2, 2.5), 2)
-    cfg["use_shorts"] = rng.random() < 0.5
-    for flag in ("use_htf", "use_vwap", "use_volume", "avoid_chop",
-                 "avoid_late", "avoid_fake"):
-        cfg[flag] = rng.random() < 0.7   # keep filters mostly on
-    return cfg
+def sample_cfg(rng, family=strategies.DEFAULT_FAMILY):
+    return strategies.get(family).sample_cfg(rng)
 
 
 def ensure_tables(conn):
@@ -109,6 +96,7 @@ def ensure_tables(conn):
             conn.execute(f"ALTER TABLE candidates ADD COLUMN {name} {typ}")
     conn.commit()
     windows.ensure_columns(conn)
+    lineage.ensure_family_column(conn, "candidates")
     backfill_dna(conn)
 
 
@@ -182,7 +170,8 @@ def seed_for_pair(base_seed, pair, pairs=None):
     return base_seed * 1000 + pairs.index(pair)
 
 
-def run_pair(conn, pair, tf, trials, base_seed):
+def run_pair(conn, pair, tf, trials, base_seed, family=strategies.DEFAULT_FAMILY):
+    fam = strategies.get(family)
     tf_s = 3600 if tf == "1h" else 14400
     seed = seed_for_pair(base_seed, pair)
     rng = random.Random(seed)
@@ -194,16 +183,14 @@ def run_pair(conn, pair, tf, trials, base_seed):
         print(f"[{pair}] no candles, skipping")
         return []
     is_start_iso, split_iso, end_iso = w
-    print(f"[{pair} {tf}] seed {seed} (base {base_seed}) | "
+    print(f"[{family} {pair} {tf}] seed {seed} (base {base_seed}) | "
           f"IS {is_start_iso} -> {split_iso} | OOS {split_iso} -> {end_iso}")
 
     survivors = []
     dupes = []
     t0 = time.time()
     for trial in range(trials):
-        cfg = sample_cfg(rng)
-        if tf == "4h":
-            cfg["htf_seconds"] = 86400
+        cfg = fam.for_timeframe(fam.sample_cfg(rng), tf_s)
         dna = lineage.dna_of(cfg)
         seen = conn.execute(
             "SELECT id, pair, tf FROM candidates WHERE dna=? ORDER BY id LIMIT 1",
@@ -245,15 +232,15 @@ def run_pair(conn, pair, tf, trials, base_seed):
                is_trades, is_net, is_pf, is_dd, is_wr,
                oos_trades, oos_net, oos_pf, oos_dd, oos_wr, passed,
                is_start, split_ts, oos_end, windows_backfilled, base_seed, dna,
-               is_sharpe, is_skew, is_kurt, oos_sharpe)
+               is_sharpe, is_skew, is_kurt, oos_sharpe, family)
                VALUES (datetime('now'), ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?,
-                       ?, ?, ?, 0, ?, ?, ?, ?, ?, ?)""",
+                       ?, ?, ?, 0, ?, ?, ?, ?, ?, ?, ?)""",
             (row["pair"], row["tf"], row["seed"], row["trial"], row["params_json"],
              row["is_trades"], row["is_net"], row["is_pf"], row["is_dd"], row["is_wr"],
              row["oos_trades"], row["oos_net"], row["oos_pf"], row["oos_dd"],
              row["oos_wr"], row["passed"],
              is_start_iso, split_iso, end_iso, base_seed, dna,
-             row["is_sharpe"], row["is_skew"], row["is_kurt"], row["oos_sharpe"]))
+             row["is_sharpe"], row["is_skew"], row["is_kurt"], row["oos_sharpe"], family))
         conn.commit()
         row["id"] = cur.lastrowid
         row["cfg"] = cfg
@@ -281,6 +268,8 @@ def parse_args(argv=None):
     ap.add_argument("--pairs", default=",".join(collector.PAIRS),
                     help="comma list, each must be in main.PAIRS (default: all of them)")
     ap.add_argument("--tf", default="1h", choices=["1h", "4h"])
+    ap.add_argument("--family", default=strategies.DEFAULT_FAMILY, choices=strategies.names(),
+                    help="strategy family to search (app/strategies/)")
     ap.add_argument("--trials", type=int, default=300)
     ap.add_argument("--seed", type=int, default=42,
                     help="base seed; each pair gets base*1000 + its index in PAIRS")
@@ -320,7 +309,7 @@ def main():
 
     all_survivors = []
     for pair in [p.strip() for p in args.pairs.split(",")]:
-        result = run_pair(conn, pair, args.tf, args.trials, args.seed)
+        result = run_pair(conn, pair, args.tf, args.trials, args.seed, args.family)
         if not result:
             continue
         survivors, full_start, full_end = result
@@ -333,8 +322,10 @@ def main():
             print(f"  candidate {row['id']}: annotated {n} trades with shadow features")
         all_survivors.extend([(pair, r) for r in survivors])
 
-    print("\n================ LEADERBOARD (ranked by OOS profit factor) ================")
+    print(f"\n========== LEADERBOARD {args.family} (ranked by OOS profit factor) ==========")
     total = conn.execute("SELECT COUNT(*) FROM candidates").fetchone()[0]
+    fam_total = conn.execute("SELECT COUNT(*) FROM candidates WHERE family=?",
+                             (args.family,)).fetchone()[0]
     if not all_survivors:
         print("No candidates survived out-of-sample validation this run.")
         print("That is a legitimate result: it means none of the sampled parameter")
@@ -353,7 +344,10 @@ def main():
              f"candidate #{best['id']} OOS pf={best['oos_pf']:.2f} "
              f"({best['oos_trades']} trades)")
     distinct = conn.execute("SELECT COUNT(DISTINCT dna) FROM candidates").fetchone()[0]
-    print(f"(total candidates in table: {total}, distinct parameter sets: {distinct})")
+    print(f"(total candidates in table: {total}, of which {args.family}: {fam_total};"
+          f" distinct parameter sets: {distinct})")
+    print(f"Read: A2 deflates a {args.family} candidate by the {args.family} trials on its"
+          f" pair/tf, so this run raised that bar for this family only.")
     print("\nInspect any candidate's parameters:")
     print("  SELECT params_json FROM candidates WHERE id=<ID>;")
     conn.close()

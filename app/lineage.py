@@ -21,6 +21,10 @@ Rules enforced here, not by convention:
 DNA = sha256 of the canonical params JSON (sorted keys, engine-relevant keys
 only, capital/costs excluded).  Two candidates with identical trading logic
 share a DNA even if found by different optimizer runs on different pairs.
+The strategy family (P5.2) is part of the DNA: a cfg names it in
+cfg["family"]. V4.1 is the default family and is hashed without the key, so
+every DNA stored before P5.2 is unchanged and the same V4.1 cfg hashes alike
+with or without an explicit family.
 
 Usage
   python lineage.py register --candidate 1033 --name "smrt-v41-btc-1033"
@@ -39,20 +43,33 @@ import os
 import sqlite3
 from datetime import datetime, timezone
 
+import strategies
+from strategies import NON_DNA_KEYS
+
 DB_PATH = os.environ.get("FORGE_DB", "/data/forge.db")
 
 LADDER = ["hypothesis", "backtest_winner", "oos_validated", "paper_validated", "approved"]
 TERMINAL = "retired"
 
-# keys that change trading behaviour; everything else (capital, fees) is
-# an execution assumption and does not change DNA
-NON_DNA_KEYS = {"initial_capital", "commission_pct", "slippage_ticks", "tick_size",
-                "fill_delay_bars", "history_start_ts"}
-
 
 def dna_of(params):
+    """NON_DNA_KEYS (capital, costs, fill delay, warmup pin) are execution
+    assumptions and never change DNA; everything else, family included, does."""
     core = {k: v for k, v in params.items() if k not in NON_DNA_KEYS}
+    if core.get("family") == strategies.DEFAULT_FAMILY:
+        del core["family"]
     return hashlib.sha256(json.dumps(core, sort_keys=True).encode()).hexdigest()[:16]
+
+
+def ensure_family_column(conn, table):
+    """candidates.family / strategies.family (P5.2): a queryable mirror of
+    strategies.family_of(params). Rows from before P5.2 are all V4.1 and get
+    the default from ADD COLUMN itself (no row-by-row backfill)."""
+    have = {r[1] for r in conn.execute(f"PRAGMA table_info({table})")}
+    if have and "family" not in have:
+        conn.execute(f"ALTER TABLE {table} ADD COLUMN family TEXT NOT NULL"
+                     f" DEFAULT '{strategies.DEFAULT_FAMILY}'")
+        conn.commit()
 
 
 def ensure_tables(conn):
@@ -76,6 +93,7 @@ def ensure_tables(conn):
         by TEXT                        -- 'cli' | 'human' | job name
     )""")
     conn.commit()
+    ensure_family_column(conn, "strategies")
 
 
 def now():
@@ -93,6 +111,7 @@ def register(conn, candidate_id, name=None, parent_id=None, note=""):
     pair, tf, pj, passed = row
     params = json.loads(pj)
     dna = dna_of(params)
+    family = strategies.family_of(params)
     name = name or f"c{candidate_id}-{pair.split('-')[0].lower()}-{tf}"
     status = "backtest_winner" if passed else "hypothesis"
     if parent_id is not None:
@@ -104,15 +123,16 @@ def register(conn, candidate_id, name=None, parent_id=None, note=""):
               f"(same trading logic). Registering anyway as a separate lineage node.")
     cur = conn.execute(
         "INSERT INTO strategies (name, created_at, parent_id, candidate_id, pair, tf, dna,"
-        " params_json, status, note) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
-        (name, now(), parent_id, candidate_id, pair, tf, dna, json.dumps(params), status, note))
+        " params_json, status, note, family) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+        (name, now(), parent_id, candidate_id, pair, tf, dna, json.dumps(params), status, note,
+         family))
     sid = cur.lastrowid
     conn.execute(
         "INSERT INTO promotions (at, strategy_id, from_status, to_status, evidence, by)"
         " VALUES (?, ?, ?, ?, ?, ?)",
         (now(), sid, None, status, f"candidate:{candidate_id} passed={passed}", "cli"))
     conn.commit()
-    print(f"registered strategy #{sid} '{name}'  dna={dna}  status={status}")
+    print(f"registered strategy #{sid} '{name}'  family={family}  dna={dna}  status={status}")
     return sid
 
 
@@ -207,7 +227,7 @@ def retire(conn, strategy_id, note):
 
 def tree(conn):
     rows = conn.execute(
-        "SELECT id, name, parent_id, pair, tf, dna, status, candidate_id FROM strategies"
+        "SELECT id, name, parent_id, pair, tf, dna, status, candidate_id, family FROM strategies"
         " ORDER BY id").fetchall()
     if not rows:
         print("no strategies registered yet. Try: python lineage.py register --candidate <ID>")
@@ -218,11 +238,11 @@ def tree(conn):
 
     def walk(parent, depth):
         for r in kids.get(parent, []):
-            sid, name, _, pair, tf, dna, status, cid = r
+            sid, name, _, pair, tf, dna, status, cid, fam = r
             rid, verdict = _latest_report(conn, conn.execute(
                 "SELECT params_json FROM strategies WHERE id=?", (sid,)).fetchone()[0])
             adv = f"adv#{rid}={verdict}" if rid else "no adversarial report"
-            print(f"{'  ' * depth}#{sid} {name}  [{pair} {tf}]  {status:16s} dna={dna}  "
+            print(f"{'  ' * depth}#{sid} {name}  [{fam} {pair} {tf}]  {status:16s} dna={dna}  "
                   f"from c{cid}  {adv}")
             walk(sid, depth + 1)
 

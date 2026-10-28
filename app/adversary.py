@@ -9,9 +9,11 @@ written to adversarial_reports so the decision is auditable later.
 
 Attacks (each returns pass/fail + evidence):
   A1 sample_size      OOS trade count below a statistical floor
-  A2 deflated_sharpe  SR is below what the best of N noise trials would show
-                      (also reports DSR at N_eff, the effective number of
-                      independent trials from neff.py — information only)
+  A2 deflated_sharpe  SR is below what the best of N noise trials would show.
+                      N = trials of the candidate's own strategy family on its
+                      pair/tf (P5.2): each family is its own search. Also
+                      reports DSR at N_eff, the effective number of
+                      independent trials from neff.py — information only
   A3 walk_forward     fewer than K of N embargoed folds are profitable
   A4 plateau          +/-10% and +/-25% parameter nudges collapse the OOS result
                       (spike, not plateau): < 70% of neighbours profitable, or
@@ -48,7 +50,9 @@ import time
 import engine
 import features
 import main as collector
+import lineage
 import neff as NE
+import strategies
 import validation as V
 import windows as W
 
@@ -100,6 +104,7 @@ def attack(conn, cid, verbose=True):
     # (all attacks copy cfg) starts its indicator warmup where the optimizer's did
     start_ts = W.history_start(is_start, tf_s)
     cfg = W.pin_cfg(cfg, is_start, tf_s)
+    family = strategies.family_of(cfg)
     cap = cfg["initial_capital"]
     t0 = time.time()
 
@@ -108,7 +113,9 @@ def attack(conn, cid, verbose=True):
     rets = V.trade_returns(full["trades"], cap)
     sr = V.sharpe(rets)
     skew, kurt = V.moments(rets)
-    sr_var, n_sampled, n_trials, n_sr_missing = V.sharpe_variance_from_candidates(conn, pair, tf)
+    sr_var, n_sampled, n_trials, n_sr_missing = V.sharpe_variance_from_candidates(
+        conn, pair, tf, family)
+    # every trial of every family: information only, the verdict uses n_trials
     n_trials_all = conn.execute("SELECT COUNT(*) FROM candidates").fetchone()[0]
 
     attacks = {}
@@ -121,18 +128,19 @@ def attack(conn, cid, verbose=True):
         "passed": oos["n_trades"] >= MIN_OOS_TRADES and full["n_trades"] >= MIN_FULL_TRADES,
     }
 
-    # A2 deflated sharpe (against this pair/tf's trial count AND the global one)
+    # A2 deflated sharpe (against this family's pair/tf trial count AND the global one)
     dsr_local, bench_local = V.deflated_sharpe(sr, len(rets), skew, kurt, n_trials, sr_var)
     dsr_global, bench_global = V.deflated_sharpe(sr, len(rets), skew, kurt, n_trials_all, sr_var)
     # INFORMATION ONLY: the same DSR with N replaced by the effective number of
     # independent trials (neff.py). The verdict below still uses N.
-    ne = NE.lookup(conn, pair, tf)
+    ne = NE.lookup(conn, pair, tf, family=family)
     dsr_neff = bench_neff = None
     if ne:
         dsr_neff, bench_neff = V.deflated_sharpe(sr, len(rets), skew, kurt, ne["n_eff"], sr_var)
     breakeven = V.breakeven_trials(sr, len(rets), skew, kurt, sr_var, MIN_DSR)
     attacks["A2"] = {
         "name": "deflated_sharpe",
+        "family": family,
         "sharpe_per_trade": sr, "skew": skew, "kurtosis": kurt, "n_obs": len(rets),
         "sr_variance_across_trials": sr_var, "sr_var_sampled_from": n_sampled,
         "sr_missing": n_sr_missing,
@@ -223,7 +231,7 @@ def attack(conn, cid, verbose=True):
         verdict = "SURVIVED"
 
     report = {
-        "candidate_id": cid, "pair": pair, "tf": tf, "params": cfg,
+        "candidate_id": cid, "pair": pair, "tf": tf, "family": family, "params": cfg,
         "windows": {"is_start": is_start, "split": split, "end": end,
                     "backfilled": bool(backfilled)},
         "full": {"n_trades": full["n_trades"], "net": full["net"],
@@ -296,7 +304,8 @@ def _f(x, nd=2):
 def print_report(r):
     a = r["attacks"]
     print("\n" + "=" * 74)
-    print(f"ADVERSARIAL REPORT — candidate #{r['candidate_id']} {r['pair']} {r['tf']}")
+    print(f"ADVERSARIAL REPORT — candidate #{r['candidate_id']} {r.get('family', strategies.DEFAULT_FAMILY)}"
+          f" {r['pair']} {r['tf']}")
     print("=" * 74)
     w = r["windows"]
     print(f"windows     : IS {w['is_start']} -> {w['split']} | OOS -> {w['end']}"
@@ -310,7 +319,8 @@ def print_report(r):
         ("A1", "sample size", f"OOS {a['A1']['oos_trades']} / full {a['A1']['full_trades']} trades",
          f"need {a['A1']['min_oos']} / {a['A1']['min_full']}"),
         ("A2", "deflated Sharpe", f"SR {a['A2']['sharpe_per_trade']:.3f}  DSR {a['A2']['dsr_pair_tf']:.3f}",
-         f"E[max SR | {a['A2']['n_trials_pair_tf']} trials] = {a['A2']['expected_max_sr_pair_tf']:.2f}; need DSR >= {a['A2']['min_dsr']}"),
+         f"E[max SR | {a['A2']['n_trials_pair_tf']} {a['A2'].get('family', '')} trials] = "
+         f"{a['A2']['expected_max_sr_pair_tf']:.2f}; need DSR >= {a['A2']['min_dsr']}"),
         ("A3", "walk-forward", f"{a['A3']['folds_profitable']}/{a['A3']['n_folds']} folds profitable",
          f"need >= {a['A3']['min_consistency']:.0%}  (embargo {a['A3']['embargo_bars']} bars)"),
         ("A4", "plateau", f"{a['A4']['plateau_score']:.0%} of {a['A4']['n_neighbours']} neighbours profitable,"
@@ -379,19 +389,22 @@ def main():
     ap.add_argument("--candidate", type=int)
     ap.add_argument("--top", type=int, help="attack the N best OOS survivors")
     ap.add_argument("--tf", default="1h", choices=["1h", "4h"])
+    ap.add_argument("--family", choices=strategies.names(),
+                    help="with --top: only this strategy family (default: all)")
     ap.add_argument("--json", action="store_true")
     args = ap.parse_args()
 
     conn = sqlite3.connect(DB_PATH)
     ensure_tables(conn)
     W.ensure_columns(conn)
+    lineage.ensure_family_column(conn, "candidates")
     ids = []
     if args.candidate:
         ids = [args.candidate]
     elif args.top:
         ids = [r[0] for r in conn.execute(
-            "SELECT id FROM candidates WHERE passed=1 AND tf=? ORDER BY oos_pf DESC LIMIT ?",
-            (args.tf, args.top))]
+            "SELECT id FROM candidates WHERE passed=1 AND tf=? AND family=COALESCE(?, family)"
+            " ORDER BY oos_pf DESC LIMIT ?", (args.tf, args.family, args.top))]
     else:
         ap.error("give --candidate ID or --top N")
 

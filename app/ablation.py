@@ -6,10 +6,12 @@ in the deflated-Sharpe bar. Ablation asks a narrower question about ONE
 parameter set: take each filter away (or add it, if it is off) and see
 whether the result gets worse. 14 variants, not 900 draws.
 
-Variants (each one change from the candidate's own cfg):
+Variants (each one change from the candidate's own cfg). Which toggles and
+traps exist is the strategy family's (strategies.<family>.toggles / .traps);
+for V4.1 that is:
   8 toggles flipped    use_shorts use_htf use_vwap use_volume avoid_chop
                        avoid_late avoid_fake use_trailing
-  6 trap thresholds    set to a value that never binds (see TRAPS). A
+  6 trap thresholds    set to a value that never binds (family .traps). A
   removed              threshold whose gating toggle is off changes nothing
                        and is reported 'inactive'.
 
@@ -48,26 +50,16 @@ import time
 import engine
 import lineage
 import optimizer
+import strategies
 import validation as V
 import windows as W
 
 DB_PATH = os.environ.get("FORGE_DB", "/data/forge.db")
 
-TOGGLES = ["use_shorts", "use_htf", "use_vwap", "use_volume", "avoid_chop",
-           "avoid_late", "avoid_fake", "use_trailing"]
-# Turning these OFF is the simpler cfg. use_shorts is a direction, not a
-# filter: switching it off throws away trades, so pruning never touches it.
-PRUNABLE_TOGGLES = [t for t in TOGGLES if t != "use_shorts"]
-
-# trap threshold -> (value that never binds, toggle that gates it or None, what it guards)
-TRAPS = {
-    "min_rel_vol":     (0.0, "use_volume", "volume trap: bar volume vs its MA"),
-    "max_compression": (0.0, "avoid_chop", "chop trap: EMA-compression arm"),
-    "max_dist_ema":    (1e9, "avoid_late", "late trap: distance-from-EMA arm"),
-    "max_big_bars":    (10 ** 9, "avoid_late", "late trap: big-bar-count arm"),
-    "min_ema_sep":     (0.0, None, "trend gate: fast/slow EMA separation"),
-    "adx_threshold":   (0.0, None, "trend gate: ADX strength (+ chop ADX arm)"),
-}
+# Toggles, prunable toggles and traps come from the cfg's family. Turning a
+# prunable toggle OFF is the simpler cfg; a direction (use_shorts) is not a
+# filter, switching it off throws away trades, so pruning never touches it.
+# Trap: threshold -> (value that never binds, toggle that gates it or None, what it guards)
 
 EARN_MIN_PF_DELTA = 0.05
 PF_CAP = 99.0
@@ -89,12 +81,13 @@ def variants(cfg):
     """[(name, kind, on_in_base, cfg)] — 8 toggle flips + 6 trap removals.
     on_in_base: whether the feature is active in the parent cfg. For a trap
     that means its gating toggle is on (and it is not already non-binding)."""
+    fam = strategies.for_cfg(cfg)
     out = []
-    for t in TOGGLES:
+    for t in fam.toggles:
         c2 = copy.deepcopy(cfg)
         c2[t] = not cfg[t]
         out.append((t, "toggle", bool(cfg[t]), c2))
-    for p, (off, gate, _) in TRAPS.items():
+    for p, (off, gate, _) in fam.traps.items():
         c2 = copy.deepcopy(cfg)
         c2[p] = off
         on = cfg[p] != off and (gate is None or bool(cfg[gate]))
@@ -154,22 +147,23 @@ def classify(base, var, on_in_base, min_delta=EARN_MIN_PF_DELTA):
 def prune(cfg, rows):
     """Switch off every feature that is on in cfg and did not earn its place.
     Returns (pruned cfg, list of what was switched off)."""
+    fam = strategies.for_cfg(cfg)
     c2 = copy.deepcopy(cfg)
     removed = []
     for r in rows:
         if not r["on_in_base"] or r["verdict"] == "earns":
             continue
-        if r["kind"] == "toggle" and r["name"] in PRUNABLE_TOGGLES:
+        if r["kind"] == "toggle" and r["name"] in fam.prunable_toggles:
             c2[r["name"]] = False
             removed.append(r["name"])
         elif r["kind"] == "trap":
-            c2[r["name"]] = TRAPS[r["name"]][0]
+            c2[r["name"]] = fam.traps[r["name"]][0]
             removed.append(r["name"])
     return c2, removed
 
 
 def active_toggles(cfg):
-    return sum(1 for t in PRUNABLE_TOGGLES if cfg.get(t))
+    return sum(1 for t in strategies.for_cfg(cfg).prunable_toggles if cfg.get(t))
 
 
 def run_cfg(conn, pair, cfg, win, tf_s):
@@ -284,14 +278,14 @@ def insert_child(conn, parent_id, pair, tf, params, w, raw, link_col):
            is_trades, is_net, is_pf, is_dd, is_wr,
            oos_trades, oos_net, oos_pf, oos_dd, oos_wr, passed,
            is_start, split_ts, oos_end, windows_backfilled, base_seed, dna,
-           is_sharpe, is_skew, is_kurt, oos_sharpe, {link_col})
+           is_sharpe, is_skew, is_kurt, oos_sharpe, family, {link_col})
            VALUES (datetime('now'), ?, ?, NULL, NULL, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?,
-                   ?, ?, ?, ?, NULL, ?, ?, ?, ?, ?, ?)""",
+                   ?, ?, ?, ?, NULL, ?, ?, ?, ?, ?, ?, ?)""",
         (pair, tf, json.dumps(params),
          is_r["n_trades"], is_r["net"], pf(is_r["pf"]), is_r["max_dd"], is_r["win_rate"],
          oos_r["n_trades"], oos_r["net"], pf(oos_r["pf"]), oos_r["max_dd"], oos_r["win_rate"],
          passed, w["is_start"], w["split"], w["end"], backfilled, dna,
-         is_sr, is_skew, is_kurt, oos_sr, parent_id))
+         is_sr, is_skew, is_kurt, oos_sr, strategies.family_of(params), parent_id))
     conn.commit()
     return cur.lastrowid, True
 

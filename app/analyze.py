@@ -17,6 +17,7 @@ StrategyForge analyzer — three honesty checks on optimizer output.
 Usage:
   python analyze.py                     # all three sections
   python analyze.py --tf 1h --transfer-top 2
+  python analyze.py --family core       # section 1 for another strategy family
 """
 
 import argparse
@@ -25,16 +26,12 @@ import os
 import sqlite3
 
 import engine
+import lineage
+import strategies
 import windows
 
 DB_PATH = os.environ.get("FORGE_DB", "/data/forge.db")
 
-NUMERIC_PARAMS = ["ema_fast", "ema_mid", "ema_slow", "rsi_buy", "rsi_sell",
-                  "adx_threshold", "min_ema_sep", "min_rel_vol",
-                  "max_compression", "max_dist_ema", "stop_atr", "rr_ratio",
-                  "trail_atr"]
-TOGGLE_PARAMS = ["use_trailing", "use_shorts", "use_htf", "use_vwap",
-                 "use_volume", "avoid_chop", "avoid_late", "avoid_fake"]
 
 
 def median(vals):
@@ -63,12 +60,14 @@ def auc_rank(winners, losers):
 
 # ------------------------- section 1: parameters ---------------------------
 
-def param_structure(conn, tf):
+def param_structure(conn, tf, family=strategies.DEFAULT_FAMILY):
+    fam = strategies.get(family)
     print("\n" + "=" * 74)
-    print("SECTION 1 — SURVIVOR PARAMETER STRUCTURE")
+    print(f"SECTION 1 — SURVIVOR PARAMETER STRUCTURE ({family})")
     print("=" * 74)
     rows = conn.execute(
-        "SELECT params_json, passed FROM candidates WHERE tf=?", (tf,)).fetchall()
+        "SELECT params_json, passed FROM candidates WHERE tf=? AND family=?",
+        (tf, family)).fetchall()
     if not rows:
         print("no candidates for this timeframe")
         return
@@ -81,7 +80,7 @@ def param_structure(conn, tf):
         return
 
     print(f"{'numeric param':18s} {'median(all)':>12s} {'median(passed)':>15s}  shift")
-    for p in NUMERIC_PARAMS:
+    for p in fam.numeric_params:
         a = median([x[p] for x in all_p if p in x])
         b = median([x[p] for x in passed_p if p in x])
         if a is None or b is None:
@@ -92,7 +91,7 @@ def param_structure(conn, tf):
         print(f"{p:18s} {a:12.2f} {b:15.2f}  {shift}")
 
     print(f"\n{'toggle':14s} {'% on (all)':>11s} {'% on (passed)':>14s}  shift")
-    for p in TOGGLE_PARAMS:
+    for p in fam.toggle_params:
         a = 100.0 * sum(1 for x in all_p if x.get(p)) / len(all_p)
         b = 100.0 * sum(1 for x in passed_p if x.get(p)) / len(passed_p)
         shift = "<-- shifted" if abs(b - a) > 15 else ""
@@ -200,11 +199,13 @@ def main():
     ap.add_argument("--tf", default="1h", choices=["1h", "4h"])
     ap.add_argument("--transfer-top", type=int, default=2)
     ap.add_argument("--min-n", type=int, default=30)
+    ap.add_argument("--family", default=strategies.DEFAULT_FAMILY, choices=strategies.names())
     args = ap.parse_args()
 
     conn = sqlite3.connect(DB_PATH)
     windows.ensure_columns(conn)
-    param_structure(conn, args.tf)
+    lineage.ensure_family_column(conn, "candidates")
+    param_structure(conn, args.tf, args.family)
     feature_separation(conn, args.min_n)
     transfer_test(conn, args.tf, args.transfer_top)
     conn.close()

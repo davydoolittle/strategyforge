@@ -17,6 +17,7 @@ sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", "app"))
 import ablation as A  # noqa: E402
 import engine  # noqa: E402
 import optimizer  # noqa: E402
+import strategies  # noqa: E402
 import windows as W  # noqa: E402
 
 
@@ -39,7 +40,8 @@ class TestVariants(unittest.TestCase):
         cfg = engine.default_cfg()
         vs = A.variants(cfg)
         self.assertEqual(len(vs), 14)
-        self.assertEqual([v[0] for v in vs], A.TOGGLES + list(A.TRAPS))
+        fam = strategies.get("smrt_v41")
+        self.assertEqual([v[0] for v in vs], list(fam.toggles) + list(fam.traps))
         for name, _, _, c2 in vs:
             diff = [k for k in cfg if cfg[k] != c2[k]]
             self.assertEqual(diff, [name])
@@ -95,7 +97,7 @@ class TestPrune(unittest.TestCase):
         pruned, removed = A.prune(cfg, rows)
         self.assertEqual(removed, ["use_vwap", "max_dist_ema"])
         self.assertFalse(pruned["use_vwap"])
-        self.assertEqual(pruned["max_dist_ema"], A.TRAPS["max_dist_ema"][0])
+        self.assertEqual(pruned["max_dist_ema"], strategies.get("smrt_v41").traps["max_dist_ema"][0])
         self.assertTrue(pruned["use_shorts"])       # a direction, never pruned
         self.assertFalse(pruned["use_trailing"])    # was off already: untouched
         self.assertEqual(A.active_toggles(pruned), A.active_toggles(cfg) - 1)

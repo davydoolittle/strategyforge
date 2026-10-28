@@ -63,6 +63,7 @@ from datetime import datetime, timezone
 
 import engine
 import lineage
+import strategies
 import windows as W
 
 DB_PATH = os.environ.get("FORGE_DB", "/data/forge.db")
@@ -145,12 +146,18 @@ def new_alerts(conn, sconn):
 
 def strategy_by_name(conn, title):
     name = title[len(NAME_PREFIX):] if title.startswith(NAME_PREFIX) else title
-    r = conn.execute("SELECT id, candidate_id, pair, tf, params_json FROM strategies WHERE name=?",
-                     (name,)).fetchone()
+    lineage.ensure_family_column(conn, "strategies")
+    r = conn.execute("SELECT id, candidate_id, pair, tf, params_json, family FROM strategies"
+                     " WHERE name=?", (name,)).fetchone()
     if not r:
         return None
+    cfg = json.loads(r[4])
+    # engine.backtest dispatches on the cfg's family (P5.2); the column must agree
+    if strategies.family_of(cfg) != r[5]:
+        raise SystemExit(f"strategy {name!r}: family column {r[5]!r} but params are "
+                         f"{strategies.family_of(cfg)!r}")
     return {"id": r[0], "candidate_id": r[1], "pair": r[2], "tf": r[3],
-            "cfg": json.loads(r[4]), "name": name}
+            "cfg": cfg, "name": name, "family": r[5]}
 
 
 def engine_entries(conn, strat, through_ts):
