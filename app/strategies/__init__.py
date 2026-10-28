@@ -43,4 +43,4 @@ def names():
     return sorted(REGISTRY)
 
 
-from strategies import smrt_v41  # noqa: E402,F401  (registers itself)
+from strategies import core, smrt_v41  # noqa: E402,F401  (each registers itself)

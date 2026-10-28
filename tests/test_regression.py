@@ -88,7 +88,13 @@ class RegressionTest(unittest.TestCase):
             raise unittest.SkipTest("no forge.db found (FORGE_DB, /data/forge.db, data/forge.db): "
                                     "the regression harness needs the real data")
         cls.tmp = scratch_dir()
-        cls.conn = sqlite3.connect(scratch_copy(src, cls.tmp))
+        try:
+            cls.conn = sqlite3.connect(scratch_copy(src, cls.tmp))
+        except sqlite3.Error:
+            # tearDownClass does not run when setUpClass fails: don't leave a
+            # half-written copy filling the temp drive
+            shutil.rmtree(cls.tmp, ignore_errors=True)
+            raise
         # family columns (P5.2) on the scratch copy, as the server's first run will
         optimizer.ensure_tables(cls.conn)
         lineage.ensure_tables(cls.conn)
@@ -135,7 +141,9 @@ class RegressionTest(unittest.TestCase):
             drawn = streams.setdefault((seed, tf, family), [random.Random(seed), []])
             while len(drawn[1]) <= trial:
                 drawn[1].append(fam.for_timeframe(fam.sample_cfg(drawn[0]), W.tf_seconds(tf)))
-            if drawn[1][trial] != json.loads(pj):
+            # tick_size is a cost the optimizer sets per pair since P5.3, not a draw
+            stored = json.loads(pj)
+            if {**drawn[1][trial], "tick_size": stored.get("tick_size")} != stored:
                 bad.append((seed, trial))
         self.assertEqual(bad, [], f"{len(bad)} of {len(rows)} seeded rows differ, e.g. {bad[:5]}")
 

@@ -174,6 +174,13 @@ def run_pair(conn, pair, tf, trials, base_seed, family=strategies.DEFAULT_FAMILY
     fam = strategies.get(family)
     tf_s = 3600 if tf == "1h" else 14400
     seed = seed_for_pair(base_seed, pair)
+    # the pair's verified tick (main.TICK_SIZE, F4), not the family default of
+    # 0.01, which made XRP's slippage 1.5-5% per side. Rows before P5.3 kept
+    # 0.01. tick_size is a cost, not DNA.
+    tick = collector.TICK_SIZE.get(pair)
+    if tick is None:
+        print(f"[{pair}] WARNING no verified tick size in main.TICK_SIZE; costs use the "
+              f"family default and may be wrong")
     rng = random.Random(seed)
 
     # computed once per pair and stored on every row (P2.1), so the windows
@@ -191,6 +198,8 @@ def run_pair(conn, pair, tf, trials, base_seed, family=strategies.DEFAULT_FAMILY
     t0 = time.time()
     for trial in range(trials):
         cfg = fam.for_timeframe(fam.sample_cfg(rng), tf_s)
+        if tick is not None:
+            cfg["tick_size"] = tick
         dna = lineage.dna_of(cfg)
         seen = conn.execute(
             "SELECT id, pair, tf FROM candidates WHERE dna=? ORDER BY id LIMIT 1",
