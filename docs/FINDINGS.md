@@ -6,6 +6,155 @@ pinned windows on each candidate (P2.1).
 
 ---
 
+## F9. Core family, 1h: the best candidate in the project still fails A2. Per-trade SR ~0.1 cannot be validated at 1h
+
+*2026-10-29. P5.3's run on the live DB: `optimizer.py --family core --tf 1h
+--trials 300 --seed 5301`, then `adversary.py` on eight core candidates
+(adversarial_reports #41–#48). Numbers below are read from those rows.*
+
+**Note on ids.** On the live DB, candidates #3901–#5100 are this run.
+F2's and F8's #3901/#3902 were children registered on scratch copies only.
+On the live DB those two ids are core BTC trials.
+
+### What was run
+
+The search used per-pair seeds 5301000–5301003: 1,200 trials, 1,200
+distinct DNAs, all `family='core'`. A2 deflates each candidate against its
+own pair's 300 core trials. The V4.1 trials are not counted (P5.2).
+
+| pair | IS window | OOS window | trials | passed OOS gate | mean IS trades | SR variance (≥ 10 trades) | E[max SR], N = 300 |
+|---|---|---|---|---|---|---|---|
+| BTC-USD | 2021-05-17 → 2025-03-07 | → 2026-10-29 | 300 | 15 | 258 | 0.0065 | 0.234 |
+| ETH-USD | 2021-05-17 → 2025-03-07 | → 2026-10-29 | 300 | 21 | 229 | 0.0055 | 0.216 |
+| SOL-USD | 2021-06-30 → 2025-03-20 | → 2026-10-29 | 300 | 1 | 147 | 0.0108 | 0.301 |
+| XRP-USD | 2023-07-26 → 2025-11-02 | → 2026-10-29 | 300 | 1 | 120 | 0.0163 | 0.369 |
+
+This is the first family run since F4. The optimizer took each pair's tick
+from `main.TICK_SIZE`, so XRP is costed correctly here, unlike in F1.
+
+**The noise ceiling is 4–5× lower than V4.1's.** V4.1's E[max SR] was
+1.07–1.11 (F1), from an across-trial SR variance of about 0.11. Core's
+trials vary 7–20× less (0.0055–0.016). That is what fewer, narrower
+parameters buy: the best of 300 draws is not far above the typical draw.
+This is the bar P2.5 and P5.3 were trying to lower, and it did come down.
+
+### Adversary verdicts
+
+| # | pair | full trades / pf | OOS trades / pf | SR/trade | PSR vs 0 | E[max SR] | DSR | SR needed to pass | break-even N | hard | soft | verdict |
+|---|---|---|---|---|---|---|---|---|---|---|---|---|
+| 4027 | BTC (long) | 151 / 1.49 | 43 / 1.64 | **0.184** | 0.990 | 0.234 | **0.264** | 0.359 | 2 | A2 | — | REJECTED |
+| 4171 | BTC (long) | 196 / 1.33 | 65 / 1.25 | 0.141 | 0.979 | 0.234 | 0.089 | 0.342 | 1 | A2 | A4 A5 A8 | REJECTED |
+| 3976 | BTC (long) | 183 / 1.28 | 65 / 1.23 | 0.130 | 0.962 | 0.234 | 0.077 | 0.351 | 1 | A2 | A4 A5 | REJECTED |
+| 5027 | XRP (long) | 114 / 1.32 | 34 / 1.71 | 0.129 | 0.923 | 0.369 | 0.004 | 0.500 | 0 | **A6** A2 | A7 | REJECTED |
+| 4471 | ETH | 207 / 1.21 | 66 / 1.22 | 0.097 | 0.924 | 0.216 | 0.040 | 0.320 | 0 | A2 | A5 A8 A9 | REJECTED |
+| 4053 | BTC (long) | 224 / 1.22 | 69 / 1.34 | 0.095 | 0.931 | 0.234 | 0.015 | 0.329 | 0 | A2 | A5 A8 A9 | REJECTED |
+| 4281 | ETH | 308 / 1.21 | 84 / 1.47 | 0.086 | 0.939 | 0.216 | 0.010 | 0.301 | 0 | A2 | A4 A8 | REJECTED |
+| 4683 | SOL | 185 / 1.14 | 67 / 1.24 | 0.060 | 0.799 | 0.301 | 0.000 | 0.396 | 0 | A2 | A4 A8 | REJECTED |
+
+"SR needed to pass" is the per-trade SR that would give DSR ≥ 0.95 at that
+candidate's own trade count, skew, kurtosis and ceiling. "(long)" means
+`use_shorts` is off.
+
+**All eight are REJECTED, and A2 alone decides it.** A1 passes for every
+one: each has ≥ 114 full and ≥ 34 OOS trades. Take A2 away and seven of the
+eight are FRAGILE or better. The SR range is 0.06–0.18, against ceilings of
+0.22–0.30 on BTC, ETH and SOL and 0.37 on XRP.
+
+### #4027 is the strongest candidate in the project, and it still fails
+
+#4027 is BTC, long only: EMA 8/28/52, ADX > 31.9, rel vol ≥ 1.39 on a
+25-bar mean, distance ≤ 3.19%, stop 3.2 ATR, R:R 2.5.
+
+- **It has no soft fails, and A2 is its only fail.** Only one other report
+  ever had that: #2716 in F1, before F4 tightened A4 and A7. Under those
+  rules #2716 fails both. #4027 passes them.
+  - A3: 5/5 folds profitable.
+  - A4: 100% of neighbours profitable; worst neighbour PF 1.11.
+  - A5: OOS PF 1.41 at 2× costs.
+  - A6: decays properly when delayed, +5,768 → +4,225.
+  - A7: ETH 1.15/44t and XRP 1.18/23t hold; SOL 0.70 does not.
+  - A8: p95 drawdown 22%.
+  - A9: +2,055 outside its best regime (chop).
+- **Its DSR is 0.264.** That is the highest in any report so far. Every
+  V4.1 candidate showed 0.000 at N.
+- **It still sits below the ceiling.** SR 0.184 against E[max] 0.234.
+  Because its SR is *below* the ceiling and not just close to it, more
+  history at the same SR would push DSR toward 0, not toward 1. To pass at
+  151 trades it would need SR 0.36, about twice what it shows.
+- **Break-even N is 2.** It would pass only if it had been one of at most
+  two trials. PSR against zero is 0.990, so as a single pre-registered
+  hypothesis it would clear the bar. It was not one: it is trial 126 of
+  the 300 BTC draws.
+
+### #5027 also fails A6
+
+#5027 (XRP) **improves when its fills are delayed one bar**: +3,102 →
++3,794 (+22%, 114 → 110 trades). That is beyond A6's 10% margin, so it is a
+second hard fail. It is the signature of #590 and #3047. It is also the
+second-best core candidate by OOS PF (1.71). Like the V4.1 leaderboard in
+F1, the top of the OOS ranking holds the candidates most likely to be
+noise. #4683 (SOL) also improves when delayed (+1,990 → +2,060, +3.5%),
+inside the margin, and it is the weakest candidate here by every measure.
+
+### What SR a candidate would need
+
+A2 requires DSR ≥ 0.95. That means the SR must exceed the ceiling by about
+1.645 standard errors, and the standard error is roughly
+√((1 − skew·SR + (kurt−1)/4·SR²)/(n−1)). With these candidates'
+skew/kurtosis (about 0.5 / 1.5):
+
+| ceiling (pair, N = 300) | 100 trades | 150 | 200 | 300 | 600 | 1,000 |
+|---|---|---|---|---|---|---|
+| 0.216 (ETH) | 0.37 | 0.34 | 0.32 | 0.30 | 0.28 | 0.27 |
+| 0.234 (BTC) | 0.38 | 0.36 | 0.34 | 0.32 | 0.30 | 0.28 |
+| 0.301 (SOL) | 0.45 | 0.42 | 0.41 | 0.39 | 0.36 | 0.35 |
+
+At the 150–300 trades a 1h strategy gets from 5½ years, a candidate needs a
+per-trade SR of **about 0.30–0.36 on BTC/ETH and 0.39–0.42 on SOL**. That
+is 2× the best core candidate and 3× the typical survivor. No amount of
+history brings the bar below the ceiling itself (0.22–0.30), and every
+candidate in both families is below it. A bigger search raises the bar:
+at BTC's variance, E[max] is 0.233 at N = 300, 0.267 at 1,200 and 0.279 at
+2,100.
+
+### Conclusion
+
+**Two families and 2,100 trials per the A2 count (900 V4.1 trials per pair
+plus 1,200 core; 3,000 distinct 1h DNAs in all) produce per-trade Sharpe of
+about 0.1, at best 0.18–0.19.** Neither family has a parameter set that can
+be told apart from the best of its own random draws at 1h on these pairs.
+
+- V4.1 failed because its ceiling was very high (about 1.08).
+- Core lowered the ceiling to 0.22–0.30, which is what a smaller, ablated
+  family should do, and still failed: the candidates' SR did not rise with
+  it.
+- The edge, if it exists, is about SR 0.1–0.2 per trade. The data offers
+  about 150–300 trades per candidate. At that size, any search over more
+  than a handful of parameter sets makes validation impossible.
+
+This is the "written finding" branch of Phase 2's definition of done,
+for **1h**, now for two families.
+
+**What this licenses.**
+
+- **No more random search at 1h on these pairs**, for either family. More
+  trials raise the ceiling. A third family searched the same way will hit
+  the same wall unless its per-trade SR is about 2× anything seen so far.
+- **A pre-registered forward test of #4027 is the one honest test left.**
+  At N = 1 the bar is PSR vs 0 ≥ 0.95, and at SR 0.184 that takes about
+  76 trades. #4027 trades about 28 times a year, so that is roughly
+  **2.7 years** of trades after 2026-10-29. Those trades must come from
+  the paper loop (P4) or `health.py`'s forward window, not from re-running
+  history. If SR holds, it passes; if it halves to 0.1, it needs about 260
+  trades (~9 years). This is slow, and it is still the only path that does
+  not pay for the 300 draws that found it.
+- **More observations per hypothesis.** Finer timeframes (P2.4.3, 15m)
+  or more liquid pairs raise n per candidate. That only helps if the
+  per-trade SR survives the change of timeframe. It is a new hypothesis,
+  to be searched with a small, fixed trial budget declared in advance.
+
+---
+
 ## F8. Trading V4.1 only on chop days doubles SR per trade, but the evidence stays the same
 
 *2026-10-28. P5.4: `filters.py --filter "regime==chop" --register` on #3214
