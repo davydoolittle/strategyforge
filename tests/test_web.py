@@ -32,6 +32,9 @@ import windows as W  # noqa: E402
 from test_squeeze import candles_db  # noqa: E402
 
 
+TOKEN = "t" * 24
+
+
 def build_db(path):
     mem = candles_db()
     optimizer.ensure_tables(mem)
@@ -66,7 +69,7 @@ class TestWeb(unittest.TestCase):
         cls.tmp = tempfile.mkdtemp()
         cls.db = os.path.join(cls.tmp, "forge.db")
         build_db(cls.db)
-        cls.srv = web.make_server("127.0.0.1", 0, cls.db)
+        cls.srv = web.make_server("127.0.0.1", 0, cls.db, TOKEN)
         cls.base = f"http://127.0.0.1:{cls.srv.server_address[1]}"
         threading.Thread(target=cls.srv.serve_forever, daemon=True).start()
 
@@ -76,8 +79,9 @@ class TestWeb(unittest.TestCase):
         cls.srv.server_close()
         shutil.rmtree(cls.tmp, ignore_errors=True)
 
-    def get(self, path, method="GET"):
-        req = urllib.request.Request(self.base + path, method=method)
+    def get(self, path, method="GET", token=TOKEN):
+        req = urllib.request.Request(self.base + path, method=method,
+                                     headers={"Authorization": f"Bearer {token}"} if token else {})
         try:
             with urllib.request.urlopen(req, timeout=60) as r:
                 return r.status, json.loads(r.read() or b"null")
@@ -151,18 +155,39 @@ class TestWeb(unittest.TestCase):
         self.assertIn("cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/", body)
         self.assertNotIn("innerHTML", body)          # DB strings go in as text, never as markup
 
+    def test_auth(self):
+        for tok in (None, "wrong" * 5, TOKEN + "x", TOKEN[:-1]):
+            st, body = self.get("/api/candidates", token=tok)
+            self.assertEqual(st, 401, tok)
+            self.assertEqual(body, {"error": "bearer token required"})
+        req = urllib.request.Request(self.base + "/api/health", headers={"Authorization": TOKEN})
+        with self.assertRaises(urllib.error.HTTPError) as cm:
+            urllib.request.urlopen(req, timeout=10)              # no "Bearer " scheme
+        self.assertEqual(cm.exception.code, 401)
+        self.assertEqual(cm.exception.headers["WWW-Authenticate"], 'Bearer realm="strategyforge"')
+        self.assertEqual(self.get("/api/health", "POST", token=None)[0], 405)   # refused either way
+        with urllib.request.urlopen(self.base + "/", timeout=10) as r:   # the page needs no token
+            self.assertEqual(r.status, 200)
+
+    def test_refuses_to_start_without_a_token(self):
+        for tok in (None, "", "short"):
+            with self.assertRaises(SystemExit):
+                web.make_server("127.0.0.1", 0, self.db, tok)
+
     def test_equity_curve(self):
         pts = web.equity_curve([{"exit_ts": 3, "pnl": -50.0}, {"exit_ts": 2, "pnl": 100.0}], 1000, 1)
         self.assertEqual([p["equity"] for p in pts], [1000, 1100, 1050])
         self.assertAlmostEqual(pts[-1]["dd_pct"], 100 * (1050 / 1100 - 1))
 
     def test_missing_db(self):
-        srv = web.make_server("127.0.0.1", 0, os.path.join(self.tmp, "nope.db"))
+        srv = web.make_server("127.0.0.1", 0, os.path.join(self.tmp, "nope.db"), TOKEN)
         threading.Thread(target=srv.serve_forever, daemon=True).start()
         self.addCleanup(srv.server_close)
         self.addCleanup(srv.shutdown)
         try:
-            urllib.request.urlopen(f"http://127.0.0.1:{srv.server_address[1]}/api/health", timeout=10)
+            urllib.request.urlopen(urllib.request.Request(
+                f"http://127.0.0.1:{srv.server_address[1]}/api/health",
+                headers={"Authorization": f"Bearer {TOKEN}"}), timeout=10)
             self.fail("expected 503")
         except urllib.error.HTTPError as e:
             self.assertEqual(e.code, 503)

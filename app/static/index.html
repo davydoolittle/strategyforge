@@ -66,6 +66,10 @@
   <h1>StrategyForge</h1>
   <span class="sub">read-only view of forge.db</span>
   <span class="sub" id="status"></span>
+  <form id="auth" hidden style="margin-left:auto">
+    <input id="token" type="password" placeholder="dashboard token" autocomplete="current-password">
+    <button>save</button>
+  </form>
 </header>
 <main>
   <section>
@@ -123,12 +127,26 @@ function el(tag, attrs = {}, ...kids) {
 }
 const badge = (v) => el("span", { class: "badge b-" + (v || "none") }, v || "no report");
 
+/* bearer token (P7.3): kept in this browser only; storage may be unavailable */
+const store = {
+  get: () => { try { return localStorage.getItem("sf_token") || ""; } catch { return ""; } },
+  set: (v) => { try { localStorage.setItem("sf_token", v); } catch { /* session only */ } },
+};
+let TOKEN = store.get();
 async function api(path) {
-  const r = await fetch(path, { headers: { "Accept": "application/json" } });
+  const r = await fetch(path, { headers: { "Accept": "application/json", "Authorization": "Bearer " + TOKEN } });
   const body = await r.json().catch(() => ({ error: r.statusText }));
+  if (r.status === 401) { $("auth").hidden = false; throw new Error("token required: enter it at the top right"); }
   if (!r.ok) throw new Error(body.error || r.statusText);
   return body;
 }
+$("auth").addEventListener("submit", (ev) => {
+  ev.preventDefault();
+  TOKEN = $("token").value.trim();
+  store.set(TOKEN);
+  $("auth").hidden = true;
+  boot();
+});
 function fail(where, e) {
   where.replaceChildren(el("div", { class: "err" }, String(e.message || e)));
 }

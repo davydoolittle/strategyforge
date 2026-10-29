@@ -18,9 +18,15 @@ nothing here can write):
   /api/paper/{strategy_id}            reconciliation, positions, daily summary
   /                                   the dashboard (static/index.html, P7.2)
 
-LAN only: no Cloudflare route. Remote access is Tailscale (P7.3).
+Auth (P7.3): every /api/ request needs "Authorization: Bearer $WEB_TOKEN"
+(constant-time compare; 401 otherwise). web.py will not start without a
+WEB_TOKEN of at least 16 characters. The page at / carries no data and is
+served without a token; it asks for the token on the first 401 and keeps it
+in that browser's localStorage. LAN only: no Cloudflare route, no router
+port forward; remote access is Tailscale.
 """
 
+import hmac
 import json
 import math
 import os
@@ -38,6 +44,7 @@ import main
 import windows as W
 
 PORT = int(os.environ.get("WEB_PORT", "8091"))
+MIN_TOKEN_LEN = 16
 BIND = os.environ.get("WEB_BIND", "0.0.0.0")
 STATIC_DIR = os.path.join(os.path.dirname(os.path.abspath(__file__)), "static")
 CSP = ("default-src 'self'; script-src 'self' 'unsafe-inline' https://cdnjs.cloudflare.com; "
@@ -277,6 +284,12 @@ ROUTES = [
 class Handler(BaseHTTPRequestHandler):
     server_version = "strategyforge-web/1.0"
     db_path = None              # set by make_server
+    token = None
+
+    def authorized(self):
+        got = self.headers.get("Authorization", "")
+        want = f"Bearer {self.token}"
+        return bool(self.token) and hmac.compare_digest(got.encode(), want.encode())
 
     def log_message(self, fmt, *args):
         main.log(f"web {self.address_string()} {fmt % args}")
@@ -319,6 +332,16 @@ class Handler(BaseHTTPRequestHandler):
     def do_GET(self):
         if urlparse(self.path).path in ("/", "/index.html"):
             return self.send_page()
+        if not self.authorized():
+            self.send_response(401)
+            self.send_header("WWW-Authenticate", 'Bearer realm="strategyforge"')
+            body = b'{"error":"bearer token required"}'
+            self.send_header("Content-Type", "application/json")
+            self.send_header("Content-Length", str(len(body)))
+            self.end_headers()
+            if self.command != "HEAD":
+                self.wfile.write(body)
+            return
         try:
             self.send_json(200, self.route())
         except HttpError as e:
@@ -335,13 +358,20 @@ class Handler(BaseHTTPRequestHandler):
     do_POST = do_PUT = do_PATCH = do_DELETE = refuse
 
 
-def make_server(bind=BIND, port=PORT, db_path=None):
-    handler = type("BoundHandler", (Handler,), {"db_path": db_path})
+def check_token(token):
+    if not token or len(token) < MIN_TOKEN_LEN:
+        raise SystemExit(f"WEB_TOKEN must be set to at least {MIN_TOKEN_LEN} characters "
+                         "(e.g. python -c 'import secrets; print(secrets.token_urlsafe(32))')")
+    return token
+
+
+def make_server(bind=BIND, port=PORT, db_path=None, token=None):
+    handler = type("BoundHandler", (Handler,), {"db_path": db_path, "token": check_token(token)})
     return ThreadingHTTPServer((bind, port), handler)
 
 
 def main_cli():
-    srv = make_server()
+    srv = make_server(token=os.environ.get("WEB_TOKEN"))
     main.log(f"web: read-only API on http://{BIND}:{PORT} (db {main.DB_PATH}, mode=ro)")
     try:
         srv.serve_forever()

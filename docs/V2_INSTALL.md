@@ -130,6 +130,45 @@ What this changes:
 - The collector image still has to be rebuilt and recreated when `app/main.py` changes (next section). `claude-dev` cannot do that for you; it is a Matrix terminal step.
 - **The ntfy topic is in the git history.** `docs/V2_PROMPT.md` §1 names it, and that line has been committed since the first commit. The remote is private, so it stays for now. ntfy.sh topics are public to anyone who knows the name, so if the repo is ever shared, or the topic starts receiving pushes you didn't send, rotate it. Pick a new random topic, subscribe to it in the ntfy app, set `NTFY_TOPIC` on the `strategyforge` collector container (Unraid Docker tab → edit → Apply), and update §1. No code changes are needed: `main.py` and `health.py` read the topic only from `NTFY_TOPIC`. `sf.sh health.py` takes `--ntfy-topic` for one-off runs.
 
+## Dashboard (Phase 7)
+
+`app/web.py` is a read-only, standard-library web server: no image to build. It
+runs in plain `python:3.12-slim` from the share, like `sf.sh`, as its own
+long-running container. On Matrix:
+
+1. Make a token and keep it somewhere safe (password manager):
+
+```
+docker run --rm python:3.12-slim python -c "import secrets; print(secrets.token_urlsafe(32))"
+```
+
+2. Start the container (replace `<token>`):
+
+```
+docker run -d --name strategyforge-web --restart unless-stopped \
+  -p 8091:8091 \
+  -e WEB_TOKEN=<token> -e FORGE_DB=/data/forge.db \
+  -v /mnt/user/appdata/strategyforge/app:/app:ro \
+  -v /mnt/user/appdata/strategyforge/data:/data \
+  -w /app python:3.12-slim python -u web.py
+```
+
+Success: `docker logs strategyforge-web` shows `web: read-only API on http://0.0.0.0:8091`.
+Failure `WEB_TOKEN must be set...`: the token is missing or shorter than 16 characters.
+
+3. Open `http://matrix:8091/` on the LAN, or `http://<matrix tailscale name>:8091/`
+   from a device on your tailnet. Paste the token into the box at the top right
+   once per browser.
+
+- **Nothing public.** Do not forward 8091 on the router and do not add a
+  Cloudflare tunnel route for it. Tailscale is the only remote path.
+- The database is opened with SQLite `mode=ro` on every request, so the
+  dashboard cannot write. `/data` is mounted read-write only so that SQLite
+  can read while the collector holds a journal; the process never writes.
+- Code changes to `web.py` or `static/index.html` need `docker restart strategyforge-web`
+  (it reads `/app` from the share, so no rebuild).
+- To rotate the token: `docker rm -f strategyforge-web`, then step 2 with the new one.
+
 ## When a rebuild IS needed
 
 Only when `app/main.py` changes (Phase 4 adds the scheduler to it). Then, on Matrix:
