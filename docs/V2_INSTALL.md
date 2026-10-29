@@ -128,6 +128,7 @@ What this changes:
 - **They must still be polite to the collector.** The `strategyforge` container writes to the same file every hour, and SQLite has one writer at a time. Any job that writes thousands of rows commits in batches and holds the write lock briefly: compute first, then write; never keep a transaction open across a backtest. Rule §10.9 in `docs/V2_PROMPT.md` has the details.
 - **`sf.sh` is still valid** for one-off runs from a Matrix terminal without opening a Claude session (`sf.sh adversary.py --candidate 4027`, `sf.sh lineage.py tree`). It starts a throwaway `python:3.12-slim` container with the same mounts, so the result is the same either way.
 - The collector image still has to be rebuilt and recreated when `app/main.py` changes (next section). `claude-dev` cannot do that for you; it is a Matrix terminal step.
+- **The ntfy topic is in the git history.** `docs/V2_PROMPT.md` §1 names it, and that line has been committed since the first commit. The remote is private, so it stays for now. ntfy.sh topics are public to anyone who knows the name, so if the repo is ever shared, or the topic starts receiving pushes you didn't send, rotate it. Pick a new random topic, subscribe to it in the ntfy app, set `NTFY_TOPIC` on the `strategyforge` collector container (Unraid Docker tab → edit → Apply), and update §1. No code changes are needed: `main.py` and `health.py` read the topic only from `NTFY_TOPIC`. `sf.sh health.py` takes `--ntfy-topic` for one-off runs.
 
 ## When a rebuild IS needed
 
