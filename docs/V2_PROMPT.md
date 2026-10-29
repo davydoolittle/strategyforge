@@ -93,7 +93,7 @@ Matrix: Intel i7, 16 GB, Unraid, shared with ~15 other containers.
 
 - StrategyForge gets **≤ 2 CPU cores and ≤ 2 GB RAM** (`deploy.resources.limits` in compose). One engine backtest is 0.14 s single-threaded; an adversarial battery is ~100 backtests. Budget accordingly: a nightly job may run ≤ 4,000 backtests (~10 min).
 - SQLite stays. At current growth (3 pairs × 24 bars/day) `candles` adds 26k rows/year. Adding 10 pairs at 15 m adds ~350k rows/year. Still trivial. Enable WAL mode on first connect in v2.
-- No local LLM. A 7B model at Q4 wants 5–6 GB and reasons poorly about statistics. If a research assistant is built (Phase 7), it calls the Claude API with read-only tools over the DB; cost is cents per question.
+- No local LLM. A 7B model at Q4 wants 5–6 GB and reasons poorly about statistics. If a research assistant is built (Phase 8), it calls the Claude API with read-only tools over the DB; cost is cents per question.
 
 ---
 
@@ -161,11 +161,21 @@ forge.db commit in batches and hold the write lock briefly (§10.9).
 
 ---
 
-## 8a. Phase 6 — Minimal dashboard  (renumbered from Phase 5 on 2026-10-28; only after Phase 4 produces data worth looking at)
+## 8a. Phase 6 — Portfolio view and a third family  (added 2026-10-29)
 
-- [ ] **P6.1** `web.py`: FastAPI, read-only, port 8091, LAN only (no Cloudflare route). Endpoints: `/api/strategies`, `/api/candidates?tf=&passed=`, `/api/reports/{id}`, `/api/health`, `/api/paper/{strategy_id}`.
-- [ ] **P6.2** One static `index.html` (vanilla JS + Chart.js from cdnjs, dark theme): lineage tree with verdict badges, candidate table with sortable DSR / WF / plateau columns, equity + drawdown chart for a selected report, paper vs engine reconciliation table, health sparkline.
-- [ ] **P6.3** Auth: single bearer token from env. Tailscale is the remote-access path; nothing public.
+Goal: two questions FINDINGS F9 leaves open. (1) Does a candidate that fails on its home pair become validatable as a book across all pairs, i.e. does more data per hypothesis rescue it? (2) Does a family built from a measured pattern (F6: big moves follow low volatility, and start near the 30-day extreme in their direction), not from V4.1, have a higher per-trade SR? Definition of done: F10 and F11 written whatever they show. Rules in §10 apply; §10.9 for the live-DB run in P6.3.
+
+- [x] **P6.1 Portfolio evaluation.** *(done 2026-10-29: `app/portfolio.py`, read-only. Each pair runs standalone through `engine.backtest`; the book re-sizes every trade as its return x the pool's realised equity at entry, because signals, stops and exits never depend on equity, only size does. An exit at the open (reverse) is realised before entries at that open; a stop/target exit comes after them. One pair = its own backtest to the cent. Daily returns spread each trade's P&L pro rata over its days (the `bucket_returns` convention), not mark-to-market. Book A2 = per-trade SR of the book's full-window trades against the home pair's own-family E[max SR], since the trials' SRs are per-trade; the daily Sharpe gets PSR vs 0 only. A trade's return is the same in the book as alone, so the book's per-trade SR is the pooled SR of the pairs. #4027 and #3214 on scratch: both books worse than the home pair alone, both still REJECTED. FINDINGS F10)* `app/portfolio.py --candidate N`: run the candidate's cfg on every pair in `main.PAIRS` with a verified tick (home pair on its pinned windows; other pairs on their windows as of the candidate's pin, as A7 cuts them), with engine execution unchanged and one shared capital pool at `risk_pct` per trade, and build one equity curve. Report per pair and for the book: trades, net, PF, max DD, per-trade Sharpe, annualised daily-return Sharpe, and the mean pairwise correlation of daily returns. A2 for the book: deflate by the trial count of the candidate's own family on its home pair (the selection happened once, there). Run on #4027 and #3214 against a scratch copy. FINDINGS F10: what the book does that the single pair doesn't, and whether any verdict changes. Tests.
+- [ ] **P6.2 Third family `squeeze`.** `app/strategies/squeeze.py`, built from F6, not from V4.1. Long when `bb_bw_pctile` (90-day, as `features.py` computes it) is at or below `compression_pctile` AND close breaks above the highest high of the previous `breakout_len` bars AND price sits nearer the 30-day high than the 30-day low (`extreme_bias` in 0..1); shorts mirrored; fixed ATR stop and R:R target; longs/shorts toggles. Six searched parameters: `compression_pctile, breakout_len, extreme_bias, stop_atr, rr_ratio, use_shorts`. Its own `sample_cfg` ranges, ablation lists, Pine template. Tests, including the regression harness.
+- [ ] **P6.3 Squeeze search, run from the claude-dev container.** On the live DB, following §10.9: `optimizer.py --family squeeze --tf 1h --trials 300 --seed 6101`, then `adversary.py` on every squeeze survivor with >= 30 OOS trades. FINDINGS F11 with the result, whatever it is.
+
+---
+
+## 8b. Phase 7 — Minimal dashboard  (renumbered from Phase 5 on 2026-10-28 and from Phase 6 on 2026-10-29; only after Phase 4 produces data worth looking at)
+
+- [ ] **P7.1** `web.py`: FastAPI, read-only, port 8091, LAN only (no Cloudflare route). Endpoints: `/api/strategies`, `/api/candidates?tf=&passed=`, `/api/reports/{id}`, `/api/health`, `/api/paper/{strategy_id}`.
+- [ ] **P7.2** One static `index.html` (vanilla JS + Chart.js from cdnjs, dark theme): lineage tree with verdict badges, candidate table with sortable DSR / WF / plateau columns, equity + drawdown chart for a selected report, paper vs engine reconciliation table, health sparkline.
+- [ ] **P7.3** Auth: single bearer token from env. Tailscale is the remote-access path; nothing public.
 
 ---
 
@@ -177,8 +187,8 @@ forge.db commit in batches and hold the write lock briefly (§10.9).
 | §8 Insider Form 4 | **not here** | Equities-only; this pipeline trades crypto. Dave's `edgar-alert` project already ingests Form 4. If a crypto-relevant use emerges (e.g. COIN, MSTR as sentiment proxies) consume its table rather than re-scrape. |
 | §9 13F / 13D / COT | **not here** | 45-day-stale disclosures are irrelevant at 1h–4h horizons. COT has no crypto coverage that matters. |
 | §6 Equities / ETFs / forex markets | **deferred** | Different data vendor, different session logic, different cost model. Get crypto validated first. |
-| §13 Local LLM research agent | **replaced** | See §3. Phase 7, if it happens, is Claude API + read-only DB tools. |
-| §14 React dashboard with 10 sections | **replaced** by §8a | One page, read-only. |
+| §13 Local LLM research agent | **replaced** | See §3. Phase 8, if it happens, is Claude API + read-only DB tools. |
+| §14 React dashboard with 10 sections | **replaced** by §8b | One page, read-only. |
 | §2 Postgres / Redis / auth stack | **replaced** | SQLite + bearer token + Tailscale. |
 | Live order execution | **never in this repo** | davesbridge `DRY_RUN` is the boundary. |
 

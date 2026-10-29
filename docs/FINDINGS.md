@@ -6,6 +6,109 @@ pinned windows on each candidate (P2.1).
 
 ---
 
+## F10. As a four-pair book, #4027 and #3214 get worse, not better; no verdict changes
+
+*2026-10-29. P6.1: `portfolio.py --candidate 4027` and `--candidate 3214`
+on a scratch copy of forge.db. Read-only; nothing was written to either DB.*
+
+**What was run.** Each candidate's cfg trades BTC, ETH, SOL and XRP out of
+one $10,000 pool at 1% risk per trade:
+
+- the home pair on its pinned windows;
+- every other pair at its own verified tick, on its windows as they stood
+  when the candidate was pinned (the A7 cut).
+
+Execution is the engine's. The book re-sizes each trade from the pool's
+realised equity at entry. The home leg reproduces the adversary report
+exactly: #4027 151 trades / +5,768 / DSR 0.264; #3214 162 / +3,882.
+
+**#4027 (core, home BTC, long only)**
+
+| full window | trades | net | PF | max DD % | SR/trade | daily SR, annualised |
+|---|---|---|---|---|---|---|
+| **BTC (home)** | 151 | +5,768 | 1.49 | 10.3 | **0.184** | **1.32** |
+| ETH | 155 | +719 | 1.07 | 15.3 | 0.035 | 0.27 |
+| SOL | 110 | −10 | 1.00 | 18.5 | 0.007 | 0.05 |
+| XRP | 72 | −512 | 0.90 | 14.6 | −0.038 | −0.22 |
+| **book** | 488 | +5,228 | 1.12 | **33.5** | 0.066 | 0.69 |
+
+On the OOS windows: BTC 43t / PF 1.64 / SR 0.243 / daily 1.90. The book
+has 152t / PF 1.11 / SR 0.066 / daily 0.71, and SOL loses 1,013.
+
+**#3214 (V4.1, home ETH)**
+
+| full window | trades | net | PF | max DD % | SR/trade | daily SR, annualised |
+|---|---|---|---|---|---|---|
+| BTC | 149 | −538 | 0.95 | 20.7 | −0.011 | −0.08 |
+| **ETH (home)** | 162 | +3,882 | 1.31 | 12.6 | **0.113** | **0.89** |
+| SOL | 157 | −2,041 | 0.83 | 32.2 | −0.072 | −0.53 |
+| XRP | 79 | +2,428 | 1.37 | 11.3 | 0.147 | 1.01 |
+| **book** | 547 | +2,185 | 1.05 | **46.3** | 0.035 | 0.38 |
+
+On the OOS windows: ETH 50t / PF 1.62 / daily 1.75. The book has 180t /
+PF 1.03 / daily 0.32.
+
+**A2 for the book.** The book is deflated against the home pair's
+own-family trials, since that is where the one selection happened.
+
+| | SR/trade | trades | PSR vs 0 | E[max SR] | DSR | break-even N | A2 |
+|---|---|---|---|---|---|---|---|
+| #4027 BTC alone | 0.184 | 151 | 0.990 | 0.234 (300 core) | 0.264 | 2 | FAIL |
+| #4027 book | 0.066 | 488 | 0.933 | 0.234 | 0.000 | 0 | FAIL |
+| #3214 ETH alone | 0.113 | 162 | 0.934 | 1.069 (900 V4.1) | 0.000 | 0 | FAIL |
+| #3214 book | 0.035 | 547 | 0.795 | 1.069 | 0.000 | 0 | FAIL |
+
+**No verdict changes.** Both stay REJECTED on A2, and the book's A2 is
+further from passing than the home pair's.
+
+### What the book does that the single pair doesn't
+
+- **It has the room to diversify, and the other pairs don't use it.** The
+  pairs' daily returns correlate weakly: mean ρ 0.18 for #4027 and 0.21
+  for #3214. The pairwise range is 0.06–0.32, with BTC–ETH and ETH–XRP the
+  highest. Suppose four legs each matched the home leg's daily Sharpe. At
+  ρ ≈ 0.2 the book's daily Sharpe would be about √(4 / (1 + 3·0.2)) ≈ 1.6×
+  the home leg's. That would be about 2.1 for #4027 instead of 1.32.
+- **It adds trades, not SR per trade.** A trade's return as a fraction of
+  the equity it was sized from is the same in the book as alone. So the
+  book's per-trade SR is just the pooled per-trade SR of the four pairs.
+  The other legs' SR is 0.01–0.04 for #4027, so pooling drags 0.184 down
+  to 0.066. That is below the ceiling of 0.234, so 3× the trades push DSR
+  from 0.264 to 0.000. This is F9's point in another form: more
+  observations help only an SR that is already above the ceiling.
+- **The daily Sharpe halves.** #4027 goes 1.32 → 0.69 and #3214 goes
+  0.89 → 0.38. The legs with no edge add variance and no return.
+- **The drawdown triples.** #4027 goes 10.3% → 33.5% and #3214 goes
+  12.6% → 46.3%. All four positions are open at once at times, each
+  risking 1% of the pool, and the zero-edge legs have long losing runs of
+  their own. A real book would need `risk_pct` near 0.3% per leg to match
+  one pair's drawdown. That scales net down by the same factor and leaves
+  every Sharpe unchanged.
+- **The XRP leg of #3214 beats its home pair.** It shows SR 0.147 and PF
+  1.37 on 79 trades, against ETH's 0.113. On the OOS window alone XRP is
+  only PF 1.06, so most of that comes from the 2023-07 → 2025-11 IS span.
+  And BTC and SOL lose. This is the A7 picture again: a pattern that holds
+  on one pair out of three is what noise looks like at these trade counts.
+- **The one number that looks better is not deflated.** #4027's book has
+  PSR(daily SR > 0) of 0.955 over 1,992 days. That says the book is
+  probably not a loser. It does not count the 300 draws that chose its
+  parameters, and there is no trial distribution of daily Sharpes to
+  count them against. It licenses nothing.
+
+### What this licenses
+
+- **A book is not a way around A2 for these candidates.** It would help
+  a parameter set that carries roughly the same per-trade SR on every
+  pair. That would be a family-level edge, not a pair-level fit. Neither
+  candidate has one. Their transfer legs are at or near zero, and #3214's
+  best leg is not its home pair.
+- **Use `portfolio.py` as a check, not a rescue.** For a future candidate,
+  a book SR per trade close to the home SR, with low pairwise correlation,
+  would be real evidence of a family-level edge. A book that dilutes it,
+  as here, is evidence of a pair-level fit.
+
+---
+
 ## F9. Core family, 1h: the best candidate in the project still fails A2. Per-trade SR ~0.1 cannot be validated at 1h
 
 *2026-10-29. P5.3's run on the live DB: `optimizer.py --family core --tf 1h
