@@ -8,7 +8,7 @@ What this adds to `strategyforge`:
 - `app/pine_export.py` — candidate → Pine Script v6
 - `app/engine.py` — one additive change: `cfg["fill_delay_bars"]`, default 0 (existing behaviour unchanged)
 - `app/analyze.py`, `app/main.py`, `app/optimizer.py` — one line each: `DB_PATH` can now be overridden with the `FORGE_DB` env var (default unchanged)
-- `sf.sh` — runs any CLI from the share against the live DB, no rebuild
+- `sf.sh` — runs any CLI from the share against the live DB, no rebuild (still valid for one-off runs; Claude Code now works from the `claude-dev` container, see below)
 - `tests/test_validation.py` — 22 tests
 - `docs/V2_PROMPT.md` — the scoped build prompt for the next phases
 
@@ -96,13 +96,38 @@ The file is at `W:\strategyforge\data\exports\SF_c1033_BTC-USD_1h.pine` on your 
 Success: most entry timestamps and directions line up (the original V4.1 matched 73 of 87). Record the count in `docs/PINE_PARITY.md`.
 Failure: if TradingView rejects the script with a compile error, paste the error line into the chat — Pine v6 cannot be compiled outside TradingView, so this is the first real compile.
 
-8. Hand off to Claude Code for Phase 2.
+8. Hand off to Claude Code.
 
-Open Claude Code in `/mnt/user/appdata/strategyforge` and start with:
+Claude Code runs on Matrix in the `claude-dev` container (see the next section). From a terminal on Matrix:
+
+```
+docker exec -it claude-dev claude
+```
+
+and start with:
 
 ```
 Read docs/V2_PROMPT.md and follow section 11.
 ```
+
+## Working from the claude-dev container (since 2026-10-29)
+
+Claude Code no longer works from a laptop against the `W:\strategyforge` SMB share. It runs in a container on Matrix, next to the collector:
+
+| inside `claude-dev` | on Matrix | access |
+|---|---|---|
+| `/work` | `/mnt/user/appdata/strategyforge` (the repo) | read-write |
+| `/work/data/forge.db` (`FORGE_DB` points here) | `/mnt/user/appdata/strategyforge/data/forge.db`, the live DB the collector writes | read-write |
+| `/bridge/signals.db` | davesbridge's `signals.db` | read-only |
+
+Open a session with `docker exec -it claude-dev claude`. Inside it, every CLI runs directly from `/work/app` (`python adversary.py --candidate 4027`, `python optimizer.py --family core ...`), and the test suite is `python -m unittest discover -s tests` from `/work`.
+
+What this changes:
+
+- **Bulk writes no longer need `sf.sh`.** The DB is on local disk, not SMB, so SQLite locking is reliable and optimizer runs, backfills and re-annotation can run from the agent's shell.
+- **They must still be polite to the collector.** The `strategyforge` container writes to the same file every hour, and SQLite has one writer at a time. Any job that writes thousands of rows commits in batches and holds the write lock briefly: compute first, then write; never keep a transaction open across a backtest. Rule §10.9 in `docs/V2_PROMPT.md` has the details.
+- **`sf.sh` is still valid** for one-off runs from a Matrix terminal without opening a Claude session (`sf.sh adversary.py --candidate 4027`, `sf.sh lineage.py tree`). It starts a throwaway `python:3.12-slim` container with the same mounts, so the result is the same either way.
+- The collector image still has to be rebuilt and recreated when `app/main.py` changes (next section). `claude-dev` cannot do that for you; it is a Matrix terminal step.
 
 ## When a rebuild IS needed
 
