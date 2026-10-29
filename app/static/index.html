@@ -1,0 +1,327 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>StrategyForge</title>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.min.js"></script>
+<style>
+  :root {
+    --bg: #0f1216; --panel: #171b21; --line: #262c35; --text: #d8dde4; --muted: #8a94a3;
+    --accent: #5aa9e6; --good: #4caf7d; --bad: #e0625b; --warn: #d9a441; --oos: #b48ef0;
+  }
+  * { box-sizing: border-box; }
+  body { margin: 0; background: var(--bg); color: var(--text);
+         font: 14px/1.45 system-ui, -apple-system, "Segoe UI", sans-serif; }
+  header { display: flex; align-items: baseline; gap: 16px; padding: 14px 20px; border-bottom: 1px solid var(--line); }
+  header h1 { margin: 0; font-size: 18px; font-weight: 600; }
+  header .sub { color: var(--muted); font-size: 13px; }
+  main { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 16px; padding: 16px 20px; }
+  section { background: var(--panel); border: 1px solid var(--line); border-radius: 8px; padding: 14px; min-width: 0; }
+  section.wide { grid-column: 1 / -1; }
+  h2 { margin: 0 0 10px; font-size: 14px; font-weight: 600; color: var(--text); }
+  h2 small { color: var(--muted); font-weight: 400; margin-left: 6px; }
+  .muted { color: var(--muted); }
+  .empty { color: var(--muted); font-style: italic; padding: 8px 0; }
+  .err { color: var(--bad); }
+  .controls { display: flex; flex-wrap: wrap; gap: 10px; align-items: center; margin-bottom: 10px; }
+  select, input, button { background: var(--bg); color: var(--text); border: 1px solid var(--line);
+                          border-radius: 5px; padding: 4px 8px; font: inherit; }
+  button { cursor: pointer; }
+  .scroll { overflow: auto; max-height: 460px; }
+  table { border-collapse: collapse; width: 100%; font-variant-numeric: tabular-nums; }
+  th, td { padding: 5px 8px; border-bottom: 1px solid var(--line); text-align: right; white-space: nowrap; }
+  th:first-child, td:first-child, td.l, th.l { text-align: left; }
+  th { position: sticky; top: 0; background: var(--panel); color: var(--muted); font-weight: 500;
+       cursor: pointer; user-select: none; }
+  th.sorted::after { content: " ▾"; }
+  th.sorted.asc::after { content: " ▴"; }
+  tbody tr.click { cursor: pointer; }
+  tbody tr.click:hover { background: #1d232b; }
+  tbody tr.sel { background: #20303f; }
+  .badge { display: inline-block; padding: 0 7px; border-radius: 10px; font-size: 12px; font-weight: 600; }
+  .b-REJECTED, .b-fail { background: #3a1f1e; color: var(--bad); }
+  .b-PASSED, .b-ACCEPTED, .b-pass { background: #183326; color: var(--good); }
+  .b-none { background: #22272f; color: var(--muted); }
+  .b-soft { background: #3a3020; color: var(--warn); }
+  .tree ul { list-style: none; margin: 0; padding-left: 18px; border-left: 1px dashed var(--line); }
+  .tree > ul { padding-left: 0; border: 0; }
+  .tree li { padding: 4px 0; }
+  .tree .name { font-weight: 600; }
+  .tree .meta { color: var(--muted); font-size: 12px; margin-left: 6px; }
+  .tree .note { color: var(--muted); font-size: 12px; display: block; margin-left: 2px; }
+  .attacks { display: grid; grid-template-columns: repeat(auto-fill, minmax(170px, 1fr)); gap: 6px; margin-top: 10px; }
+  .attack { border: 1px solid var(--line); border-radius: 6px; padding: 6px 8px; font-size: 12px; }
+  .attack b { font-size: 13px; }
+  .charts { display: grid; grid-template-rows: 260px 130px; gap: 6px; }
+  .charts > div { position: relative; }
+  .spark { display: flex; align-items: center; gap: 10px; padding: 4px 0; }
+  .spark .lbl { width: 200px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .spark canvas { height: 36px !important; width: 260px !important; }
+  @media (max-width: 1000px) { main { grid-template-columns: minmax(0, 1fr); } }
+</style>
+</head>
+<body>
+<header>
+  <h1>StrategyForge</h1>
+  <span class="sub">read-only view of forge.db</span>
+  <span class="sub" id="status"></span>
+</header>
+<main>
+  <section>
+    <h2>Lineage <small>strategies, parent → child, latest verdict</small></h2>
+    <div id="tree" class="tree"></div>
+  </section>
+
+  <section>
+    <h2>Decay monitor <small>CUSUM per strategy (health.py)</small></h2>
+    <div id="health"></div>
+  </section>
+
+  <section class="wide">
+    <h2>Candidates <small id="cand-count"></small></h2>
+    <div class="controls">
+      <label>tf <select id="f-tf"><option value="">all</option><option>1h</option><option>4h</option></select></label>
+      <label>family <select id="f-family"><option value="">all</option><option>smrt_v41</option><option>core</option><option>squeeze</option></select></label>
+      <label>OOS gate <select id="f-passed"><option value="">all</option><option value="1">passed</option><option value="0">failed</option></select></label>
+      <label>adversary <select id="f-reported"><option value="">all</option><option value="1" selected>reported</option><option value="0">not reported</option></select></label>
+      <label>limit <input id="f-limit" type="number" value="500" min="1" max="10000" style="width:80px"></label>
+    </div>
+    <div class="scroll"><table id="cands"><thead></thead><tbody></tbody></table></div>
+  </section>
+
+  <section class="wide">
+    <h2>Report <small id="rep-title">select a reported candidate</small></h2>
+    <div class="charts"><div><canvas id="eq"></canvas></div><div><canvas id="dd"></canvas></div></div>
+    <div id="attacks" class="attacks"></div>
+  </section>
+
+  <section class="wide">
+    <h2>Paper vs engine <small>reconciliation per TradingView alert (paper.py)</small></h2>
+    <div class="controls"><label>strategy <select id="p-strat"></select></label></div>
+    <div class="scroll"><table id="paper"><thead></thead><tbody></tbody></table></div>
+    <div id="paper-sum" class="muted"></div>
+  </section>
+</main>
+
+<script>
+"use strict";
+const $ = (id) => document.getElementById(id);
+const fmt = (v, d = 2) => (v === null || v === undefined || Number.isNaN(v)) ? "–" :
+  (typeof v === "number" ? v.toFixed(d) : String(v));
+const dateOf = (ts) => ts ? new Date(ts * 1000).toISOString().slice(0, 10) : "–";
+const css = (name) => getComputedStyle(document.documentElement).getPropertyValue(name).trim();
+
+function el(tag, attrs = {}, ...kids) {
+  const e = document.createElement(tag);
+  for (const [k, v] of Object.entries(attrs)) {
+    if (k === "class") e.className = v; else if (k === "on") e.addEventListener(...v);
+    else e.setAttribute(k, v);
+  }
+  for (const k of kids) e.append(k instanceof Node ? k : document.createTextNode(k ?? ""));
+  return e;
+}
+const badge = (v) => el("span", { class: "badge b-" + (v || "none") }, v || "no report");
+
+async function api(path) {
+  const r = await fetch(path, { headers: { "Accept": "application/json" } });
+  const body = await r.json().catch(() => ({ error: r.statusText }));
+  if (!r.ok) throw new Error(body.error || r.statusText);
+  return body;
+}
+function fail(where, e) {
+  where.replaceChildren(el("div", { class: "err" }, String(e.message || e)));
+}
+
+/* ---------------- lineage tree ---------------- */
+let STRATS = [];
+function renderTree() {
+  const box = $("tree");
+  if (!STRATS.length) { box.replaceChildren(el("div", { class: "empty" }, "no strategies registered (lineage.py register)")); return; }
+  const kids = {};
+  for (const s of STRATS) (kids[s.parent_id ?? "root"] ||= []).push(s);
+  const branch = (pid) => el("ul", {}, ...(kids[pid] || []).map((s) => el("li", {},
+    el("span", { class: "name" }, s.name), " ", badge(s.verdict),
+    el("span", { class: "meta" }, `#${s.id} · ${s.status} · ${s.family || "smrt_v41"} · ${s.pair} ${s.tf} · cand #${s.candidate_id}`),
+    s.note ? el("span", { class: "note" }, s.note) : "",
+    ...(s.promotions.length ? [el("span", { class: "note" }, "promotions: " +
+        s.promotions.map((p) => `${p.from_status}→${p.to_status} (${p.at})`).join(", "))] : []),
+    kids[s.id] ? branch(s.id) : "")));
+  box.replaceChildren(branch("root"));
+  const sel = $("p-strat");
+  sel.replaceChildren(...STRATS.map((s) => el("option", { value: s.id }, `#${s.id} ${s.name}`)));
+}
+
+/* ---------------- candidates ---------------- */
+const COLS = [
+  ["id", "#", 0], ["pair", "pair", null], ["tf", "tf", null], ["family", "family", null],
+  ["verdict", "verdict", null], ["dsr", "DSR", 3], ["wf_consistency", "WF", 2], ["plateau", "plateau", 2],
+  ["sharpe_per_trade", "SR/trade", 3], ["mc_dd_p95_pct", "MC DD95 %", 1],
+  ["is_trades", "IS n", 0], ["is_pf", "IS PF", 2], ["oos_trades", "OOS n", 0], ["oos_pf", "OOS PF", 2],
+  ["oos_net", "OOS net", 0], ["passed", "gate", 0],
+];
+let CANDS = [], SORT = { key: "dsr", asc: false }, SELECTED = null;
+
+function renderCands() {
+  const t = $("cands");
+  t.tHead.replaceChildren(el("tr", {}, ...COLS.map(([k, label]) => el("th", {
+    class: (k === SORT.key ? "sorted" + (SORT.asc ? " asc" : "") : "") + (["pair", "tf", "family", "verdict"].includes(k) ? " l" : ""),
+    on: ["click", () => { SORT = { key: k, asc: SORT.key === k ? !SORT.asc : false }; renderCands(); }],
+  }, label))));
+  const rows = [...CANDS].sort((a, b) => {
+    const x = a[SORT.key], y = b[SORT.key];
+    if (x === y) return 0;
+    if (x === null || x === undefined) return 1;
+    if (y === null || y === undefined) return -1;
+    return (x < y ? -1 : 1) * (SORT.asc ? 1 : -1);
+  });
+  t.tBodies[0].replaceChildren(...rows.map((c) => {
+    const tr = el("tr", { class: (c.report_id ? "click" : "") + (c.report_id && c.report_id === SELECTED ? " sel" : "") },
+      ...COLS.map(([k, , d]) => {
+        if (k === "verdict") return el("td", { class: "l" }, badge(c.verdict));
+        if (k === "passed") return el("td", {}, c.passed ? "pass" : "–");
+        return el("td", { class: ["pair", "tf", "family"].includes(k) ? "l" : "" }, d === null ? (c[k] ?? "–") : fmt(c[k], d));
+      }));
+    if (c.report_id) tr.addEventListener("click", () => loadReport(c.report_id));
+    return tr;
+  }));
+  $("cand-count").textContent = `${rows.length} shown · click a reported row for its report`;
+}
+
+async function loadCands() {
+  const q = new URLSearchParams();
+  for (const k of ["tf", "family", "passed", "reported", "limit"]) {
+    const v = $("f-" + k).value;
+    if (v !== "") q.set(k, v);
+  }
+  try { CANDS = await api("/api/candidates?" + q); renderCands(); }
+  catch (e) { fail($("cands").tBodies[0], e); }
+}
+
+/* ---------------- report: equity + drawdown ---------------- */
+let EQ_CHART = null, DD_CHART = null;
+function lineChart(canvas, datasets, yLabel, opts = {}) {
+  const grid = css("--line"), muted = css("--muted");
+  return new Chart(canvas, {
+    type: "line",
+    data: { datasets },
+    options: {
+      animation: false, maintainAspectRatio: false, parsing: false, normalized: true,
+      interaction: { mode: "index", intersect: false },
+      plugins: {
+        legend: { labels: { color: muted, boxWidth: 12 } },
+        tooltip: { callbacks: { title: (it) => dateOf(it[0].parsed.x) } },
+      },
+      scales: {
+        x: { type: "linear", grid: { color: grid }, ticks: { color: muted, maxTicksLimit: 8, callback: (v) => dateOf(v) } },
+        y: { grid: { color: grid }, ticks: { color: muted }, title: { display: true, text: yLabel, color: muted } },
+      },
+      ...opts,
+    },
+  });
+}
+
+async function loadReport(id) {
+  SELECTED = id; renderCands();
+  $("rep-title").textContent = `report #${id} · loading (re-running the pinned backtest)…`;
+  let r;
+  try { r = await api(`/api/reports/${id}?equity=1`); }
+  catch (e) { $("rep-title").textContent = `report #${id}: ${e.message}`; return; }
+  const e = r.equity, split = e.split_ts;
+  $("rep-title").textContent = `#${r.id} · candidate #${r.candidate_id} ${r.pair} ${r.tf} · ${r.verdict}` +
+    ` · ${e.n_trades} trades, net ${fmt(e.net, 0)} · IS ${e.is_start.slice(0, 10)} → OOS ${e.split.slice(0, 10)} → ${e.end.slice(0, 10)}`;
+  const accent = css("--accent"), oos = css("--oos"), bad = css("--bad");
+  const pts = e.points.map((p) => ({ x: p.ts, y: p.equity }));
+  const segColor = (ctx) => ctx.p1.parsed.x > split ? oos : accent;
+  EQ_CHART?.destroy(); DD_CHART?.destroy();
+  EQ_CHART = lineChart($("eq"), [{ label: "equity (closed trades) · purple = OOS", data: pts, borderColor: accent,
+    borderWidth: 1.5, pointRadius: 0, segment: { borderColor: segColor } }], "equity");
+  DD_CHART = lineChart($("dd"), [{ label: "drawdown %", data: e.points.map((p) => ({ x: p.ts, y: p.dd_pct })),
+    borderColor: bad, backgroundColor: bad + "33", fill: true, borderWidth: 1, pointRadius: 0 }], "DD %");
+  const A = r.report.attacks || {};
+  const hard = new Set(r.hard_fails || []), soft = new Set(r.soft_fails || []);
+  $("attacks").replaceChildren(...Object.keys(A).sort().map((k) => {
+    const a = A[k], state = hard.has(k) ? "fail" : soft.has(k) ? "soft" : a.passed === false ? "soft" : "pass";
+    const detail = {
+      A1: `OOS ${a.oos_trades} / full ${a.full_trades} trades`,
+      A2: `SR/trade ${fmt(a.sharpe_per_trade, 3)} · DSR ${fmt(a.dsr_pair_tf, 3)} · E[max] ${fmt(a.expected_max_sr_pair_tf, 2)}`,
+      A3: `${a.folds_profitable}/${a.n_folds} folds profitable`,
+      A4: `plateau ${fmt(a.plateau_score, 2)} · worst PF ${fmt(a.worst_pf, 2)}`,
+      A5: `PF at 2x costs ${fmt(a.pf_at_2x, 2)}`,
+      A6: `net ${fmt(a.base_net, 0)} → ${fmt(a.delayed_net, 0)} delayed`,
+      A7: `${a.pairs_holding}/${a.pairs_tested} other pairs hold`,
+      A8: `MC p95 DD ${fmt(a.dd_p95_pct_of_capital, 1)}% of capital`,
+      A9: `best regime ${a.best_regime} · outside ${fmt(a.net_outside_best, 0)}`,
+    }[k] || a.name;
+    return el("div", { class: "attack" }, el("b", {}, k + " "), badge(state === "soft" ? "soft" : state),
+      el("div", { class: "muted" }, a.name || ""), el("div", {}, detail));
+  }));
+}
+
+/* ---------------- health sparklines ---------------- */
+async function loadHealth() {
+  const box = $("health");
+  let rows;
+  try { rows = await api("/api/health"); } catch (e) { fail(box, e); return; }
+  if (!rows.length) {
+    box.replaceChildren(el("div", { class: "empty" },
+      "no health rows yet: the decay monitor only watches strategies promoted to paper or live"));
+    return;
+  }
+  const by = {};
+  for (const r of rows) (by[r.strategy_id] ||= []).push(r);
+  box.replaceChildren(...Object.values(by).map((rs) => {
+    const last = rs[rs.length - 1], c = el("canvas");
+    const line = el("div", { class: "spark" },
+      el("span", { class: "lbl" }, `#${last.strategy_id} ${last.name || ""}`), c,
+      el("span", {}, `${fmt(last.cusum, 2)} `, badge(last.alert ? "fail" : "pass")),
+      el("span", { class: "muted" }, ` ${last.day}`));
+    new Chart(c, { type: "line",
+      data: { labels: rs.map((r) => r.day), datasets: [{ data: rs.map((r) => r.cusum), borderColor: css(last.alert ? "--bad" : "--good"),
+        borderWidth: 1.5, pointRadius: 0 }] },
+      options: { animation: false, responsive: false, plugins: { legend: { display: false }, tooltip: { enabled: true } },
+        scales: { x: { display: false }, y: { display: false } } } });
+    return line;
+  }));
+}
+
+/* ---------------- paper reconciliation ---------------- */
+async function loadPaper() {
+  const sid = $("p-strat").value, t = $("paper");
+  if (!sid) { t.tBodies[0].replaceChildren(); $("paper-sum").textContent = "no strategy"; return; }
+  let p;
+  try { p = await api(`/api/paper/${sid}`); } catch (e) { fail(t.tBodies[0], e); return; }
+  const cols = [["bar_ts", "bar"], ["side", "side"], ["price_alert", "alert price"], ["price_engine", "engine price"],
+                ["engine_fired", "engine fired"], ["note", "note"]];
+  t.tHead.replaceChildren(el("tr", {}, ...cols.map(([, l], i) => el("th", { class: i === cols.length - 1 ? "l" : "" }, l))));
+  if (!p.reconciliation.length) {
+    t.tBodies[0].replaceChildren(el("tr", {}, el("td", { class: "l empty", colspan: cols.length },
+      "no TradingView alerts reconciled for this strategy yet")));
+  } else {
+    t.tBodies[0].replaceChildren(...p.reconciliation.map((r) => el("tr", {},
+      el("td", {}, r.bar_ts ? new Date(r.bar_ts * 1000).toISOString().slice(0, 16).replace("T", " ") : "–"),
+      el("td", {}, r.side ?? "–"), el("td", {}, fmt(r.price_alert, 4)), el("td", {}, fmt(r.price_engine, 4)),
+      el("td", {}, r.engine_fired === null ? "–" : r.engine_fired ? "yes" : badge("fail")),
+      el("td", { class: "l" }, r.note ?? ""))));
+  }
+  const s = p.summary[p.summary.length - 1];
+  const closed = p.positions.filter((x) => x.status === "closed").length;
+  $("paper-sum").textContent = s
+    ? `paper P&L through ${s.day}: ${s.n_trades} trades, cumulative net ${fmt(s.cum_net, 2)}, rolling-30d PF ${fmt(s.rolling_30d_pf, 2)} · ${closed} closed positions`
+    : `no paper P&L yet · ${p.positions.length} positions`;
+}
+
+/* ---------------- boot ---------------- */
+async function boot() {
+  $("status").textContent = "loading…";
+  try { STRATS = await api("/api/strategies"); renderTree(); }
+  catch (e) { fail($("tree"), e); }
+  await Promise.all([loadCands(), loadHealth(), loadPaper()]);
+  $("status").textContent = "updated " + new Date().toLocaleTimeString();
+}
+for (const k of ["tf", "family", "passed", "reported", "limit"]) $("f-" + k).addEventListener("change", loadCands);
+$("p-strat").addEventListener("change", loadPaper);
+boot();
+</script>
+</body>
+</html>

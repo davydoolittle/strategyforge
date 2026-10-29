@@ -44,10 +44,10 @@ def build_db(path):
     report = {"attacks": {"A2": {"dsr_pair_tf": 0.12, "sharpe_per_trade": 0.2},
                           "A3": {"consistency": 0.6}, "A4": {"plateau_score": 0.8},
                           "A8": {"dd_p95_pct_of_capital": 20.0}},
-              "full": {"pf": float("inf")}}
+              "full": {"pf": float("inf")}, "hard_fails": ["A2"], "soft_fails": []}
     mem.execute("INSERT INTO adversarial_reports (run_at, candidate_id, pair, tf, verdict, hard_fails,"
                 " soft_fails, report_json) VALUES ('2026-10-29', 2, 'BTC-USD', '1h', 'REJECTED',"
-                " '[\"A2\"]', '[]', ?)", (json.dumps(report, allow_nan=True),))
+                " 1, 0, ?)", (json.dumps(report, allow_nan=True),))
     mem.execute("INSERT INTO strategies (name, created_at, candidate_id, pair, tf, dna, params_json,"
                 " status, family) VALUES ('s1', '2026-10-29', 2, 'BTC-USD', '1h', 'x', '{}',"
                 " 'backtest_winner', 'squeeze')")
@@ -108,7 +108,8 @@ class TestWeb(unittest.TestCase):
         st, body = self.get("/api/reports/1")
         self.assertEqual(st, 200)
         self.assertIsNone(body["report"]["full"]["pf"])          # inf -> null
-        self.assertEqual(body["hard_fails"], ["A2"])
+        self.assertEqual((body["hard_fails"], body["n_hard_fails"]), (["A2"], 1))
+        self.assertEqual((body["soft_fails"], body["n_soft_fails"]), ([], 0))
         self.assertNotIn("equity", body)
         st, body = self.get("/api/reports/1?equity=1")
         self.assertEqual(st, 200)
@@ -139,6 +140,16 @@ class TestWeb(unittest.TestCase):
         self.addCleanup(conn.close)
         with self.assertRaises(sqlite3.OperationalError):
             conn.execute("DELETE FROM health")
+
+    def test_page(self):
+        with urllib.request.urlopen(self.base + "/", timeout=10) as r:
+            body = r.read().decode()
+            self.assertEqual(r.headers["Content-Type"], "text/html; charset=utf-8")
+            self.assertIn("script-src 'self' 'unsafe-inline' https://cdnjs.cloudflare.com",
+                          r.headers["Content-Security-Policy"])
+        self.assertIn("/api/candidates?", body)
+        self.assertIn("cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/", body)
+        self.assertNotIn("innerHTML", body)          # DB strings go in as text, never as markup
 
     def test_equity_curve(self):
         pts = web.equity_curve([{"exit_ts": 3, "pnl": -50.0}, {"exit_ts": 2, "pnl": 100.0}], 1000, 1)

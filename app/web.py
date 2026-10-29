@@ -16,6 +16,7 @@ nothing here can write):
                                       the equity and drawdown curve
   /api/health                         decay-monitor rows, oldest first
   /api/paper/{strategy_id}            reconciliation, positions, daily summary
+  /                                   the dashboard (static/index.html, P7.2)
 
 LAN only: no Cloudflare route. Remote access is Tailscale (P7.3).
 """
@@ -38,6 +39,10 @@ import windows as W
 
 PORT = int(os.environ.get("WEB_PORT", "8091"))
 BIND = os.environ.get("WEB_BIND", "0.0.0.0")
+STATIC_DIR = os.path.join(os.path.dirname(os.path.abspath(__file__)), "static")
+CSP = ("default-src 'self'; script-src 'self' 'unsafe-inline' https://cdnjs.cloudflare.com; "
+       "style-src 'self' 'unsafe-inline'; connect-src 'self'; img-src 'self' data:; "
+       "frame-ancestors 'none'")
 DEFAULT_LIMIT = 1000
 MAX_LIMIT = 10000
 
@@ -185,11 +190,10 @@ def report(conn, rid, with_equity=False, db_path=None):
         raise HttpError(404, f"report {rid} not found")
     r = r[0]
     r["report"] = json.loads(r.pop("report_json"))
+    # the columns hold counts; the attack codes are in the report itself
     for k in ("hard_fails", "soft_fails"):
-        try:
-            r[k] = json.loads(r[k])
-        except (TypeError, ValueError):
-            pass
+        r[f"n_{k}"] = r[k]
+        r[k] = r["report"].get(k, [])
     if with_equity:
         r["equity"] = equity_for_candidate(db_path or main.DB_PATH, r["candidate_id"])
     return r
@@ -287,6 +291,18 @@ class Handler(BaseHTTPRequestHandler):
         if self.command != "HEAD":
             self.wfile.write(body)
 
+    def send_page(self):
+        with open(os.path.join(STATIC_DIR, "index.html"), "rb") as f:
+            body = f.read()
+        self.send_response(200)
+        self.send_header("Content-Type", "text/html; charset=utf-8")
+        self.send_header("Content-Length", str(len(body)))
+        self.send_header("Content-Security-Policy", CSP)
+        self.send_header("X-Content-Type-Options", "nosniff")
+        self.end_headers()
+        if self.command != "HEAD":
+            self.wfile.write(body)
+
     def route(self):
         url = urlparse(self.path)
         qs = {k: v[-1] for k, v in parse_qs(url.query).items()}
@@ -301,6 +317,8 @@ class Handler(BaseHTTPRequestHandler):
         raise HttpError(404, f"no route {url.path}")
 
     def do_GET(self):
+        if urlparse(self.path).path in ("/", "/index.html"):
+            return self.send_page()
         try:
             self.send_json(200, self.route())
         except HttpError as e:
