@@ -37,6 +37,7 @@ References
 """
 
 import copy
+import json
 import math
 import operator
 import random
@@ -389,6 +390,57 @@ def lookahead_shift(conn, pair, cfg, tf_seconds, start_iso, end_iso, delay_bars=
 # ---------------------------------------------------- trial-variance helper ---
 
 MIN_TRADES_FOR_SR_VARIANCE = 10
+# Per-trade return std below this many risk units (risk_pct of equity) means
+# every trade ended the same way, e.g. 10 identical 1% stop-outs: SR = mean/std
+# then measures cost noise, not the strategy (FINDINGS F11: #5518 SR -19.4,
+# std 0.06 risk units; #6166 SR -32.2, 0.035). On the live table every other
+# trial with |SR| >= 0.5 is at >= 0.41, so 0.1 sits an order of magnitude
+# from both sides. The std is backed out of SR, which only works away from
+# SR = 0, and near-identical returns only mislead when their mean is not ~0,
+# i.e. when |SR| is large; so the test applies from |SR| >= 1.
+MIN_RETURN_STD_RISK_UNITS = 0.1
+DEGENERATE_MIN_ABS_SR = 1.0
+
+
+def per_trade_return_std(sr, n_trades, net, initial_capital):
+    """Std of a trial's per-trade returns, backed out of its stored SR =
+    mean/std, with the mean taken as the geometric per-trade return of its
+    IS net. That mean is off from the arithmetic one by about std^2/2, so the
+    estimate is tight exactly where it is used (small std, large |SR|) and
+    meaningless near SR = 0. None when it cannot be computed."""
+    if not sr or not n_trades or net is None or not initial_capital:
+        return None
+    growth = 1 + net / initial_capital
+    if growth <= 0:
+        return None
+    return abs((growth ** (1 / n_trades) - 1) / sr)
+
+
+def is_degenerate_trial(sr, n_trades, net, params_json):
+    """True when a trial's per-trade returns barely vary (see
+    MIN_RETURN_STD_RISK_UNITS). Only risk-sized trials have a risk unit;
+    any other, or one missing is_net, is never called degenerate."""
+    cfg = json.loads(params_json or "{}")
+    if abs(sr or 0.0) < DEGENERATE_MIN_ABS_SR:
+        return False
+    if not cfg.get("use_risk_sizing") or not cfg.get("risk_pct"):
+        return False
+    sd = per_trade_return_std(sr, n_trades, net, cfg.get("initial_capital"))
+    return sd is not None and sd < MIN_RETURN_STD_RISK_UNITS * cfg["risk_pct"] / 100
+
+
+def _variance_rows(conn, pair, tf, family):
+    return conn.execute(
+        "SELECT id, is_sharpe, is_trades, is_net, params_json FROM candidates"
+        " WHERE pair=? AND tf=? AND family=?", (pair, tf, family)).fetchall()
+
+
+def degenerate_trials(conn, pair, tf, family=strategies.DEFAULT_FAMILY):
+    """Ids of the trials sharpe_variance_from_candidates leaves out as
+    degenerate, so callers can report them."""
+    return [cid for cid, sr, n, net, pj in _variance_rows(conn, pair, tf, family)
+            if sr is not None and n is not None and n >= MIN_TRADES_FOR_SR_VARIANCE
+            and is_degenerate_trial(sr, n, net, pj)]
 
 
 def sharpe_variance_from_candidates(conn, pair, tf, family=strategies.DEFAULT_FAMILY):
@@ -404,6 +456,13 @@ def sharpe_variance_from_candidates(conn, pair, tf, family=strategies.DEFAULT_FA
     (54.8 vs 0.105) and made the benchmark absurd rather than strict.
     n_trials is still the full count — every draw was a chance to get lucky.
 
+    Trials whose per-trade returns barely vary are EXCLUDED too
+    (is_degenerate_trial). The trade floor does not catch them: one 10-trade
+    series of identical stop-outs (SR -19.4) inflated ETH squeeze's variance
+    56x and its E[max SR] from 0.47 to 3.49 (FINDINGS F11). Like the trade
+    floor, this only removes numbers that estimate nothing; they still count
+    in n_trials.
+
     Only trials of the given strategy family count (P5.2): each family is
     its own search over its own parameter space, so a second family's 300
     trials neither inherit V4.1's 900 nor raise V4.1's bar.
@@ -411,13 +470,12 @@ def sharpe_variance_from_candidates(conn, pair, tf, family=strategies.DEFAULT_FA
     Returns (variance, n_used, n_total, n_missing). n_missing counts rows
     with no is_sharpe (not backfilled, or not reproducible on their windows);
     they are left out of the variance and should be reported, not hidden."""
-    rows = conn.execute(
-        "SELECT is_sharpe, is_trades FROM candidates WHERE pair=? AND tf=? AND family=?",
-        (pair, tf, family)).fetchall()
+    rows = _variance_rows(conn, pair, tf, family)
     n_total = len(rows)
-    n_missing = sum(1 for sr, _ in rows if sr is None)
-    srs = [sr for sr, n in rows
-           if sr is not None and n is not None and n >= MIN_TRADES_FOR_SR_VARIANCE]
+    n_missing = sum(1 for _, sr, _, _, _ in rows if sr is None)
+    srs = [sr for _, sr, n, net, pj in rows
+           if sr is not None and n is not None and n >= MIN_TRADES_FOR_SR_VARIANCE
+           and not is_degenerate_trial(sr, n, net, pj)]
     var = _std(srs) ** 2 if len(srs) > 1 else 0.0
     return var, len(srs), n_total, n_missing
 

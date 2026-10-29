@@ -72,6 +72,22 @@ example a ≥ 20-trade floor or excluding trials whose returns have
 near-zero dispersion. Because the fix makes A2 easier to pass, it should
 be decided on its own, not inside a run that would benefit from it.
 
+**Fixed after this run (2026-10-29, the commit after P6.3).** The variance
+now also excludes trials whose per-trade return std is below 0.1 risk
+units (`validation.MIN_RETURN_STD_RISK_UNITS`), tested only where
+|SR| ≥ 1. The std is backed out of the stored SR and IS net, so no backfill
+was needed. On the live table it removes exactly #5518 and #6166:
+
+- ETH squeeze: E[max SR] 3.486 → 0.467.
+- XRP squeeze: 7.814 → 0.725.
+- The other 13 family/pair/tf groups are unchanged to the third decimal.
+
+The ≥ 20-trade floor was rejected. It lowers the bar in 14 of 15 groups
+(e.g. core SOL 0.301 → 0.262, squeeze SOL 0.380 → 0.346), so it loosens A2
+on trials that were never degenerate. Both trials still count in N. No
+verdict above changes: every ETH squeeze candidate stays at DSR ≈ 0
+against 0.467.
+
 ### Adversary verdicts
 
 All 14 are REJECTED, and A2 alone decides it. Columns: "need" is the SR

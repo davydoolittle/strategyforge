@@ -144,6 +144,7 @@ def attack(conn, cid, verbose=True):
         "sharpe_per_trade": sr, "skew": skew, "kurtosis": kurt, "n_obs": len(rets),
         "sr_variance_across_trials": sr_var, "sr_var_sampled_from": n_sampled,
         "sr_missing": n_sr_missing,
+        "sr_degenerate_excluded": V.degenerate_trials(conn, pair, tf, family),
         "n_trials_pair_tf": n_trials, "expected_max_sr_pair_tf": bench_local, "dsr_pair_tf": dsr_local,
         "n_trials_all": n_trials_all, "expected_max_sr_all": bench_global, "dsr_all": dsr_global,
         "n_eff_pair_tf": ne["n_eff"] if ne else None,
@@ -353,6 +354,11 @@ def print_report(r):
             print(f"     {'':5s} {'':16s} SR variance {a['A2']['sr_variance_across_trials']:.4f} "
                   f"from {a['A2']['sr_var_sampled_from']} trials with >= "
                   f"{V.MIN_TRADES_FOR_SR_VARIANCE} IS trades")
+            degen = a["A2"].get("sr_degenerate_excluded") or []
+            if degen:
+                print(f"     {'':5s} {'':16s} left out as degenerate (per-trade return std < "
+                      f"{V.MIN_RETURN_STD_RISK_UNITS} risk units): "
+                      + ", ".join(f"#{i}" for i in degen))
             a2 = a["A2"]
             if a2.get("n_eff_pair_tf") is not None:
                 print(f"     {'':5s} {'':16s} info: N_eff {a2['n_eff_pair_tf']} of "
