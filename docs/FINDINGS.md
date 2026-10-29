@@ -67,8 +67,8 @@ cost of about 1.7 points a year since 2004 (about 5 since 2010). Re-run on
 the official TSP prices once the CSV is imported (`--data tsp`): the real G
 Fund pays more than T-bills, which helps every G-heavy strategy a little,
 and the I Fund's index is not the same as VEU/EFA. The daily report's
-`live_strategy` is still `shift_capture`, the config default; change it to
-`trend_filter` if you act on this.
+`live_strategy` was switched from `shift_capture` to `trend_filter` on
+2026-10-29, after this run.
 
 ---
 

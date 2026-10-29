@@ -91,7 +91,7 @@
                         "crisis":   {"G": 100}}},
     "shift_capture": {"type": "shift_capture", "min_confidence": 0.55}
   },
-  "live_strategy": "shift_capture",
+  "live_strategy": "trend_filter",
 
   "sensitivity": {
     "dual_momentum": {"lookback_days": [126, 189, 252, 315, 378]},
