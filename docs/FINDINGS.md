@@ -6,6 +6,164 @@ pinned windows on each candidate (P2.1).
 
 ---
 
+## F11. Squeeze family, 1h: all 14 testable candidates REJECTED on A2; per-trade SR is the same ~0.1–0.2, on fewer trades
+
+*2026-10-29. P6.3, run from the claude-dev container on the live DB:
+`optimizer.py --family squeeze --tf 1h --trials 300 --seed 6101`
+(candidates #5101–#6300), then `adversary.py` on every squeeze survivor with
+≥ 30 OOS trades (adversarial_reports #49–#62). The optimizer committed one
+row per trial and is now restartable (§10.9). The run took about 6 minutes.*
+
+**The hypothesis came from F6, not from a search.** Big 24h moves follow
+low volatility and start near the 30-day extreme they move toward. Squeeze
+enters long when all three hold:
+
+- the 90-day percentile of Bollinger bandwidth (as `features.py` computes
+  it) is ≤ `compression_pctile`;
+- close breaks the previous `breakout_len` bars' high;
+- close sits at ≥ `extreme_bias` of the 30-day range.
+
+Shorts are mirrored. The stop is a fixed ATR stop with an R:R target. Six
+parameters are searched.
+
+### The search
+
+| pair | trials | mean trades per trial (IS+OOS) | trials with IS net > 0 | median IS SR (≥ 20 trades) | passed OOS gate | ≥ 30 OOS trades | E[max SR] as A2 computes it |
+|---|---|---|---|---|---|---|---|
+| BTC | 300 | 60 | 44 | −0.164 | 0 | 0 | 0.530 |
+| ETH | 300 | 57 | 107 | −0.030 | 19 | 5 | **3.486** (see below) |
+| SOL | 300 | 69 | **185** | **+0.055** | 25 | 9 | 0.380 |
+| XRP | 300 | 21 | 83 | −0.074 | 0 | 0 | **7.814** (see below) |
+
+- **The family trades rarely.** A squeeze trial takes about 60 trades in
+  5½ years. A core trial took 230–260 on BTC and ETH. The extra filtering
+  costs evidence per hypothesis, which F9 named as the binding constraint.
+- **On XRP the family barely trades.** The mean is 21 trades, and 158 of
+  300 trials have fewer than 10 IS trades, because XRP's history starts in
+  2023-07 and 90 days of it go to the percentile's warmup.
+- **SOL is the first pair where the typical trial makes money.** 185 of 300
+  squeeze trials are profitable IS, and the median IS SR is +0.055. Across
+  every family and pair since per-pair seeds, no median was above +0.005
+  (core BTC). The other medians run from −0.264 (V4.1 BTC) to −0.03, and
+  V4.1's XRP median of −1.41 comes from the mis-costed pre-F4 run.
+- **BTC is the opposite.** Only 44 of 300 squeeze trials are profitable,
+  with a median of −0.164, and none passed the OOS gate. So the squeeze
+  pattern is not a family-level edge either. See "What this licenses".
+
+### A2's benchmark on ETH and XRP is broken by one degenerate trial each
+
+`MIN_TRADES_FOR_SR_VARIANCE = 10` was set when V4.1's degenerate trials
+were the few-trade ones (V2_PROMPT §1 finding 5). Squeeze has a new kind:
+
+- **#5518 (ETH)** took exactly 10 IS trades, all stopped out. Its returns
+  are almost identical, so SR = mean/std = **−19.4**.
+- **#6166 (XRP)** did the same at **−32.2**.
+
+Either trial alone inflates its pair's SR variance about 50×. ETH goes from
+0.018 to 1.45 and XRP from 0.044 to 7.28, so the benchmark goes from about
+0.4 to 3.5 and 7.8.
+
+This only ever makes A2 stricter, so it cannot produce a false pass. But it
+could hide a real one, so every ETH candidate was re-checked at a sane
+variance: trials with ≥ 20 trades, E[max SR] 0.389. **No result changes.**
+The best ETH DSR at the sane benchmark is 0.002. Nothing was changed in
+the code. A fix would be a written change to the variance rule, for
+example a ≥ 20-trade floor or excluding trials whose returns have
+near-zero dispersion. Because the fix makes A2 easier to pass, it should
+be decided on its own, not inside a run that would benefit from it.
+
+### Adversary verdicts
+
+All 14 are REJECTED, and A2 alone decides it. Columns: "need" is the SR
+that would give DSR 0.95 at that trade count; "DSR (sane)" is DSR at the
+≥ 20-trade variance, information only.
+
+| # | pair | full trades / pf | OOS trades / pf | SR/trade | PSR vs 0 | E[max] | DSR | DSR (sane) | need | break-even N | soft fails |
+|---|---|---|---|---|---|---|---|---|---|---|---|
+| 5868 | SOL | 100 / 1.50 | 36 / 1.34 | **0.196** | 0.978 | 0.380 | 0.029 | 0.061 | 0.53 | 1 | A4 A7 A9 |
+| 5750 | SOL | 97 / 1.45 | 39 / 1.27 | 0.179 | 0.968 | 0.380 | 0.019 | 0.042 | 0.52 | 1 | A4 |
+| 5967 | SOL | 86 / 1.46 | 33 / 1.40 | 0.177 | 0.959 | 0.380 | 0.023 | 0.049 | | 1 | A3 |
+| 5841 | SOL | 106 / 1.37 | 41 / 1.24 | 0.155 | 0.954 | 0.380 | 0.008 | 0.020 | | 1 | A4 A9 |
+| **5833** | SOL | 110 / 1.35 | 42 / 1.44 | 0.145 | 0.941 | 0.380 | 0.005 | 0.015 | 0.52 | 0 | **none** |
+| 5716 | SOL | 119 / 1.31 | 40 / 1.46 | 0.127 | 0.926 | 0.380 | 0.002 | 0.006 | | 0 | A4 A5 A7 A8 |
+| 5843 | SOL | 164 / 1.29 | 60 / 1.28 | 0.122 | 0.950 | 0.380 | 0.000 | 0.001 | | 0 | A8 |
+| 5498 | ETH | 123 / 1.22 | 43 / 1.28 | 0.098 | 0.872 | 3.486 | 0.000 | 0.000 | 0.50 (sane) | 0 | A4 A8 |
+| 5610 | ETH | 92 / 1.21 | 31 / 1.31 | 0.092 | 0.821 | 3.486 | 0.000 | 0.002 | | 0 | A3 A4 A7 |
+| 5982 | SOL | 145 / 1.21 | 47 / 1.37 | 0.088 | 0.863 | 0.380 | 0.000 | 0.001 | | 0 | A4 A8 |
+| 5565 | ETH | 153 / 1.19 | 55 / 1.46 | 0.087 | 0.865 | 3.486 | 0.000 | 0.000 | | 0 | A3 A7 A8 A9 |
+| 5883 | SOL | 218 / 1.19 | 66 / 1.36 | 0.083 | 0.898 | 0.380 | 0.000 | 0.000 | | 0 | A7 A8 |
+| 5629 | ETH | 138 / 1.16 | 48 / 1.20 | 0.077 | 0.825 | 3.486 | 0.000 | 0.000 | | 0 | A4 A5 A8 |
+| 5630 | ETH | 98 / 1.14 | 35 / 1.23 | 0.070 | 0.762 | 3.486 | 0.000 | 0.001 | | 0 | A4 A5 A8 A9 |
+
+**What the table shows.**
+
+- **The per-trade SR is the same as before.** It runs 0.07–0.20 here.
+  Core showed 0.06–0.18 and V4.1 0.08–0.19. A family designed from a
+  measured pattern, with 6 parameters instead of 10 or 21, lands in the
+  same place.
+- **The bar is higher than core's, because the trials vary more.** SOL's
+  E[max] is 0.38, against core's 0.30. Fewer trades per trial mean noisier
+  trial SRs. At about 100 trades, passing needs SR ≈ 0.52–0.53, which is
+  2.7× the best candidate.
+- **#5833 (SOL) is the second report ever with no soft fails**, after
+  #4027 in F9. It has 5/5 folds, a 100% plateau (worst PF 1.02), PF 1.27
+  at 2× costs, and decays when delayed. It still has SR 0.145 against a
+  ceiling of 0.38: DSR 0.005, break-even N 0. PSR vs 0 is 0.941, so it
+  would fail even as the only trial ever run.
+- **Shorts are on in every testable candidate.** All 14 with ≥ 30 OOS
+  trades have `use_shorts` on, against 38 of 44 among all survivors. That
+  is a trade-count effect: long-only squeeze trials rarely reach 30 OOS
+  trades. It is not evidence that the short side carries the edge.
+- **A6 is clean apart from one mild flag.** #5716 nets slightly more when
+  delayed (+3,266 → +3,402, +4%). That is inside the 10% margin, so it
+  passes. The other 13 decay, several sharply (#5565 +2,589 → +509), as a
+  breakout entry should.
+- **A7 rarely holds.** No SOL candidate transfers to BTC (PF 0.61–0.90).
+  ETH holds for some (1.10–1.31), and XRP holds for none of the SOL
+  candidates. This repeats the family-level split above: SOL and ETH
+  partly agree, BTC disagrees.
+
+### Conclusion
+
+Three families and 3,300 trials per the A2 count (900 V4.1 + 1,200 core +
+1,200 squeeze; 4,200 distinct 1h parameter sets in all) produce per-trade
+SR of about 0.1–0.2. None comes within a factor of 2 of what A2 needs
+at 1h on these pairs. The squeeze family was the best-motivated of the
+three, built from F6's only Bonferroni-significant result, and it shifts
+nothing.
+
+### What this licenses
+
+- **No more 1h random searches on these four pairs.** Three families
+  designed in three different ways all land at SR 0.1–0.2. F9's
+  recommendation now rests on three families, not two.
+- **One hypothesis is worth pre-registering: squeeze on SOL.** It is the
+  only family/pair where most random trials made money IS (185/300). It
+  is a property of the family on that pair, not of one parameter set,
+  which is the kind of signal F10 said a book would need. To test it
+  honestly:
+  1. Fix one parameter set **now**, before any forward data exists: the
+     median of the 25 SOL survivors, or #5833 as the one with no soft
+     fails. Write it down.
+  2. Evaluate it at N = 1, on SOL trades after 2026-10-29 only.
+  3. At SR 0.15 that needs about 110 trades. At about 20 trades a year,
+     that is **5–6 years**.
+
+  That is too slow to be the plan, but it is the honest price of this
+  hypothesis at 1h.
+- **Fix the SR-variance rule before the next search.** The ≥ 10-trade
+  floor no longer screens out degenerate trials. A ≥ 20-trade floor, or a
+  near-zero-dispersion exclusion, needs a written reason in its commit
+  (§2: never loosen without one). It would not have changed any verdict
+  here.
+- **More observations per hypothesis remain the only lever.** A 15m
+  timeframe (P2.4.3) would multiply squeeze's trade count by up to 4×, if
+  the compression pattern survives the change of scale. F6 measured it on
+  24h moves. A 15m test would be a new hypothesis, with its trial budget
+  declared before it is run.
+
+---
+
 ## F10. As a four-pair book, #4027 and #3214 get worse, not better; no verdict changes
 
 *2026-10-29. P6.1: `portfolio.py --candidate 4027` and `--candidate 3214`

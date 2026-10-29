@@ -195,12 +195,20 @@ def run_pair(conn, pair, tf, trials, base_seed, family=strategies.DEFAULT_FAMILY
 
     survivors = []
     dupes = []
+    resumed = 0
     t0 = time.time()
     for trial in range(trials):
         cfg = fam.for_timeframe(fam.sample_cfg(rng), tf_s)
         if tick is not None:
             cfg["tick_size"] = tick
         dna = lineage.dna_of(cfg)
+        # restartable (V2_PROMPT §10.9): a run killed halfway is resumed by
+        # running it again. The sampler is drawn above either way, so the
+        # remaining trials get the same parameter sets as an unbroken run.
+        if conn.execute("SELECT 1 FROM candidates WHERE seed=? AND trial=? AND tf=? AND family=?"
+                        " AND dna=?", (seed, trial, tf, family, dna)).fetchone():
+            resumed += 1
+            continue
         seen = conn.execute(
             "SELECT id, pair, tf FROM candidates WHERE dna=? ORDER BY id LIMIT 1",
             (dna,)).fetchone()
@@ -262,6 +270,9 @@ def run_pair(conn, pair, tf, trials, base_seed, family=strategies.DEFAULT_FAMILY
             print(f"  ...{trial + 1}/{trials} trials ({rate:.1f}/s), "
                   f"{len(survivors)} passed so far")
 
+    if resumed:
+        print(f"  {resumed} of {trials} trials were already stored by an earlier, interrupted"
+              f" run of this seed and were skipped (resume)")
     if dupes:
         print(f"  {len(dupes)} of {trials} trials repeat a parameter set already in candidates:")
         for trial, dna, (sid, spair, stf) in dupes[:5]:

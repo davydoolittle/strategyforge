@@ -189,6 +189,19 @@ class TestSqueezeThroughThePipeline(unittest.TestCase):
                                                            "squeeze")[2], 4)
         self.assertEqual(V.sharpe_variance_from_candidates(self.conn, "BTC-USD", "1h", "core")[2], 0)
 
+    def test_optimizer_resumes_an_interrupted_run(self):
+        optimizer.ensure_tables(self.conn)
+        optimizer.run_pair(self.conn, "BTC-USD", "1h", 3, 61, family="squeeze")
+        optimizer.run_pair(self.conn, "BTC-USD", "1h", 5, 61, family="squeeze")
+        rows = self.conn.execute("SELECT trial, dna FROM candidates ORDER BY trial").fetchall()
+        self.assertEqual([t for t, _ in rows], [0, 1, 2, 3, 4])     # no trial stored twice
+        fresh = candles_db()
+        self.addCleanup(fresh.close)
+        optimizer.ensure_tables(fresh)
+        optimizer.run_pair(fresh, "BTC-USD", "1h", 5, 61, family="squeeze")
+        self.assertEqual(rows, fresh.execute("SELECT trial, dna FROM candidates"
+                                             " ORDER BY trial").fetchall())
+
     def test_ablation_and_sensitivity_use_squeeze_lists(self):
         cfg = loose()
         vs = ablation.variants(cfg)
