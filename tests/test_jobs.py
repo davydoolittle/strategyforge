@@ -87,6 +87,7 @@ class TestInterval(unittest.TestCase):
         self.assertEqual(names["health"], ("1d", "health.py"))
         self.assertEqual(names["feature_evals"], ("1d", "feature_evals.py --annotate-new"))
         self.assertEqual(names["adversary"], ("7d", "adversary.py --top 20"))
+        self.assertEqual(names["tsp"], ("6h", "tsp_report.py --update --notify"))
         app = os.path.join(os.path.dirname(__file__), "..", "app")
         for _, iv, cmd, timeout in main.JOB_SPECS:
             main.parse_interval(iv)

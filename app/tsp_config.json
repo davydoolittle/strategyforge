@@ -1,0 +1,115 @@
+{
+  "_doc": "TSP Tactical Allocation settings. Loaded by tsp_rules.load_config(); TSP_CONFIG overrides the path. Percentages are whole percents; days are business days unless a key says otherwise.",
+
+  "funds": ["G", "F", "C", "S", "I"],
+  "risk_funds": ["C", "S", "I"],
+
+  "data": {
+    "tsp_csv_url": "https://www.tsp.gov/data/fund-price-history.csv",
+    "user_agent": "strategyforge/1.0 (+TSP module; personal research)",
+    "stale_after_days": 4,
+    "proxies": {
+      "C": ["SPY"],
+      "S": ["VXF"],
+      "I": ["VEU", "EFA"],
+      "F": ["AGG"]
+    },
+    "g_proxy": "^IRX",
+    "macro": {
+      "vix":     {"source": "yahoo", "symbol": "^VIX"},
+      "vix3m":   {"source": "yahoo", "symbol": "^VIX3M"},
+      "y10":     {"source": "yahoo", "symbol": "^TNX"},
+      "y3m":     {"source": "yahoo", "symbol": "^IRX"},
+      "hyg":     {"source": "yahoo", "symbol": "HYG"},
+      "lqd":     {"source": "yahoo", "symbol": "LQD"},
+      "t10y2y":  {"source": "fred",  "symbol": "T10Y2Y"},
+      "hy_oas":  {"source": "fred",  "symbol": "BAMLH0A0HYM2"}
+    },
+    "history_start": "2003-01-01"
+  },
+
+  "rules": {
+    "flexible_moves_per_month": 2,
+    "cutoff_et": "12:00",
+    "fill_lag_days": 1
+  },
+
+  "base_allocation": {"C": 60, "S": 15, "I": 10, "F": 10, "G": 5},
+
+  "regime": {
+    "trend_fund": "C",
+    "ma_fast": 50,
+    "ma_slow": 200,
+    "realized_vol_days": 20,
+    "realized_vol_high": 25.0,
+    "realized_vol_extreme": 40.0,
+    "vix_high": 25.0,
+    "vix_crisis": 35.0,
+    "vix_term_stress": 1.0,
+    "drawdown_lookback": 252,
+    "drawdown_warn": 10.0,
+    "drawdown_crisis": 20.0,
+    "credit_ma": 50,
+    "credit_stress_pct": 2.0,
+    "hy_oas_stress": 5.0,
+    "risk_on_min_score": 3,
+    "risk_off_max_score": -2,
+    "crisis_max_score": -5
+  },
+
+  "shifts": {
+    "regime_persist_days": 3,
+    "vix_spike": 30.0,
+    "vix_revert_frac": 0.75,
+    "vix_spike_window": 15,
+    "ma200_band_pct": 1.0,
+    "fast_dd_pct": 7.0,
+    "fast_dd_days": 10,
+    "leadership_lookback": 126,
+    "leadership_margin_pct": 3.0,
+    "eval_horizon_days": 21,
+    "min_history_events": 5,
+    "active_days": 5
+  },
+
+  "budget_optimizer": {
+    "min_score": 0.0,
+    "min_confidence": 0.55
+  },
+
+  "strategies": {
+    "buy_hold_c":    {"type": "buy_hold", "allocation": {"C": 100}},
+    "buy_hold_6040": {"type": "buy_hold", "allocation": {"C": 60, "F": 40}},
+    "buy_hold_l2050": {"type": "buy_hold", "allocation": {"L 2050": 100}, "tsp_data_only": true},
+    "dual_momentum": {"type": "dual_momentum", "lookback_days": 252, "safe": ["F", "G"]},
+    "trend_filter":  {"type": "trend_filter", "fund": "C", "ma_days": 200, "band_pct": 1.0, "check": "monthly"},
+    "regime_switch": {"type": "regime_switch", "confirm_days": 3,
+                      "allocations": {
+                        "risk_on":  {"C": 60, "S": 20, "I": 20},
+                        "neutral":  {"C": 60, "S": 15, "I": 10, "F": 10, "G": 5},
+                        "risk_off": {"C": 30, "F": 30, "G": 40},
+                        "crisis":   {"G": 100}}},
+    "shift_capture": {"type": "shift_capture", "min_confidence": 0.55}
+  },
+  "live_strategy": "shift_capture",
+
+  "sensitivity": {
+    "dual_momentum": {"lookback_days": [126, 189, 252, 315, 378]},
+    "trend_filter":  {"ma_days": [100, 150, 200, 250, 300], "band_pct": [0.0, 1.0, 2.0]},
+    "regime_switch": {"confirm_days": [1, 3, 5, 10]},
+    "shift_capture": {"min_confidence": [0.5, 0.55, 0.6, 0.65, 0.7]}
+  },
+
+  "backtest": {
+    "start": "2004-01-01",
+    "initial_balance": 10000.0,
+    "walk_forward_train_years": 6,
+    "walk_forward_test_years": 3,
+    "periods": [["2004-01-01", "2009-12-31"], ["2010-01-01", "2019-12-31"], ["2020-01-01", "2099-12-31"]]
+  },
+
+  "report": {
+    "ntfy_title": "TSP daily",
+    "disclaimer": "Analysis only. Backtested results are hypothetical; past performance does not guarantee future results. You place every IFT yourself."
+  }
+}

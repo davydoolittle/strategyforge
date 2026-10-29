@@ -17,7 +17,8 @@ analysis will need:
 
   3) Research jobs (P4.5) on a schedule  -> jobs table, /data/jobs/*.log
      paper (hourly), health + feature_evals --annotate-new (daily),
-     adversary --top 20 (weekly), each as a child process.
+     adversary --top 20 (weekly), tsp_report --update --notify (6-hourly),
+     each as a child process.
 
 All feeds are shadow data: nothing here trades or decides anything.
 Every poll is timestamped so signals can later be joined to the market
@@ -78,6 +79,8 @@ JOB_SPECS = [
     ("health", "1d", "health.py", 3600),
     ("feature_evals", "1d", "feature_evals.py --annotate-new", 4 * 3600),
     ("adversary", "7d", "adversary.py --top 20", 12 * 3600),
+    # TSP module: fetch, report, ntfy once per new price date (re-runs are no-ops)
+    ("tsp", "6h", "tsp_report.py --update --notify", 1800),
 ]
 JOB_LOG_DIR = os.path.join(os.path.dirname(DB_PATH), "jobs")
 DB_TIMEOUT_S = 60    # wait this long for a job's write lock before an error

@@ -6,6 +6,72 @@ pinned windows on each candidate (P2.1).
 
 ---
 
+## F12. TSP module, first backtest (proxy data): no tactical strategy beats 100% C after 2009; they buy smaller drawdowns, not return
+
+*2026-10-29. Branch `feature/tsp-tactical`: `tsp_data.py --update` on the
+live DB, then `tsp_backtest.py --data proxy` (tsp_runs, tsp_ifts; full report
+in `docs/TSP_BACKTEST.md`). The official TSP share prices are not imported
+yet (tsp.gov returns 403 to scripts), so this run is on proxies: C=SPY,
+S=VXF, I=VEU (EFA before 2007), F=AGG, G = 13-week T-bill accrual. The proxy
+G understates the real G Fund, so every G-heavy line here is slightly too
+low. Trading starts 2004-10-11, once every proxy has 260 days of history.
+Fill lag 1 day; max 2 flexible IFTs per month, then G only. Parameters are
+the config defaults, set before the first run. The two code changes made
+after the first run were fixes to rule semantics, not tuning: a
+de-risking fallback that fired on risk-on flags, and up and down regime
+changes scored as one flag type.*
+
+| strategy | CAGR % | max DD % | Sharpe (over G) | IFTs | 2004-09 | 2010-19 | 2020- | walk-forward OOS Sharpe |
+|---|---|---|---|---|---|---|---|---|
+| 100% C | **11.1** | 55 | 0.56 | 0 | 1.8 | **13.3** | **15.1** | **0.86** |
+| 60/40 C/F | 9.2 | 34 | **0.61** | 0 | 3.0 | 10.0 | 12.6 | — |
+| dual momentum (12 m) | 10.1 | 36 | 0.55 | 62 | **12.9** | 7.3 | 11.4 | 0.47 |
+| trend filter (C vs MA200, monthly) | 9.5 | 34 | 0.60 | 24 | 10.1 | 8.8 | 9.5 | 0.72 |
+| regime switch | 8.1 | **22** | 0.57 | 168 | 8.0 | 7.0 | 9.3 | 0.55 |
+| shift capture | 7.5 | 35 | 0.44 | 126 | 5.0 | 8.2 | 7.9 | 0.58 |
+
+Sub-period columns are CAGR %. Walk-forward picks each strategy's parameters
+on 6 years by Sharpe and scores them on the next 3. 100% C's line is the
+same windows held throughout.
+
+- **The 2008-09 pattern is exactly what you were warned about.** Every
+  tactical strategy wins 2004-09 by 3-11 points a year, because it was out of
+  the 55% drawdown. It then trails 100% C by 4.5-6.3 points a year in 2010-19
+  and by 3.7-7.2 in 2020-26. Over the whole period none of them beats C.
+  Information ratio vs C: −0.10 to −0.39. P(beats C): 0.03 to 0.33.
+- **What they do buy is smaller drawdowns:** 22-36% against 55%. Holding
+  60/40 does that too, with no IFTs, and has the best Sharpe here.
+- **Nothing is distinguishable from luck.** Deflated against the 31
+  configurations run, every DSR is below 0.95 (0.76-0.94), including
+  buy-and-hold's. The noise ceiling is low (0.29 annualised), but none of the
+  strategies clears it by a margin.
+- **Slower is better, as expected under 2 moves a month.** The
+  monthly trend filter (24 IFTs in 22 years) has the best Sharpe of the
+  tactical set, the best walk-forward line, and a flat sensitivity
+  (Sharpe 0.54-0.66 across 15 settings). The fast, flag-driven strategies
+  trade 5-7 times as much and do worse.
+- **Shift capture is fragile; do not act on it.** Its Sharpe ranges from
+  −0.13 to 0.57 across five confidence thresholds. With the fill one day
+  later (lag 2) it goes from 7.5%/yr at Sharpe 0.44 to 10.3%/yr at 0.60.
+  A result that moves that much with timing is noise around the
+  budget-spending path, not an edge. Its flags' hit rates sit around 55%
+  with mean edges of a few tenths of a percent over 21 days: too small to
+  be worth a scarce move.
+
+**What this licenses.** Use the module for what it measures well: the regime,
+the drawdown state and the move budget. Do not use it as a source of
+return over 100% C. If you want a tactical rule, the monthly 200-day trend
+filter is the only candidate whose evidence is not contradicted by its own
+robustness checks, and what it offers is drawdown control (34% vs 55%) at a
+cost of about 1.7 points a year since 2004 (about 5 since 2010). Re-run on
+the official TSP prices once the CSV is imported (`--data tsp`): the real G
+Fund pays more than T-bills, which helps every G-heavy strategy a little,
+and the I Fund's index is not the same as VEU/EFA. The daily report's
+`live_strategy` is still `shift_capture`, the config default; change it to
+`trend_filter` if you act on this.
+
+---
+
 ## F11. Squeeze family, 1h: all 14 testable candidates REJECTED on A2; per-trade SR is the same ~0.1–0.2, on fewer trades
 
 *2026-10-29. P6.3, run from the claude-dev container on the live DB:
