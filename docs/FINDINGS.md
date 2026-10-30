@@ -6,6 +6,26 @@ pinned windows on each candidate (P2.1).
 
 ---
 
+## F13. #4027 registered as the pre-registered forward test
+
+*Registered 2026-10-30 as lineage strategy #2 `core-btc-4027` (core family,
+BTC-USD 1h, long only, DNA `1352d45c01b6bcd2`, status `backtest_winner`,
+adversary verdict REJECTED; see F9).*
+
+- **N = 1 forward test.** This is the one test F9 licensed.
+- **Pass rule:** PSR vs 0 ≥ 0.95, on forward trades only: the paper loop
+  plus `health.py`'s forward window. Re-runs of history do not count.
+- **Expected:** about 76 trades at SR 0.184.
+- **No re-tuning of any parameter from here on.** Any change creates a new
+  candidate and restarts the clock.
+
+`health.py` only watches `oos_validated` and above by default, so this one
+must be run as `health.py --strategy 2`. Paper alerts reconcile by lineage
+name, so TradingView must run the `pine_export.py --strategy 2` script
+(`SF_core-btc-4027.pine`), not the `--candidate 4027` one.
+
+---
+
 ## F12. TSP module, first backtest (proxy data): no tactical strategy beats 100% C after 2009; they buy smaller drawdowns, not return
 
 *2026-10-29. Branch `feature/tsp-tactical`: `tsp_data.py --update` on the
