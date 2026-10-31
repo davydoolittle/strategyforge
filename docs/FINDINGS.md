@@ -19,8 +19,9 @@ adversary verdict REJECTED; see F9).*
 - **No re-tuning of any parameter from here on.** Any change creates a new
   candidate and restarts the clock.
 
-`health.py` only watches `oos_validated` and above by default, so this one
-must be run as `health.py --strategy 2`. Paper alerts reconcile by lineage
+`health.py` watches this one through the `forward_test` marker on the
+lineage row (`lineage.py forward-test`, also set on #3214), which promotes
+nothing. Paper alerts reconcile by lineage
 name, so TradingView must run the `pine_export.py --strategy 2` script
 (`SF_core-btc-4027.pine`), not the `--candidate 4027` one.
 

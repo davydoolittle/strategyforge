@@ -17,6 +17,8 @@ Rules enforced here, not by convention:
   * approved is never set by code paths that run unattended.  The CLI
     requires --i-am-a-human on that promotion.
   * Nothing is ever deleted; retired strategies keep their history.
+  * forward_test only adds a strategy to health.py's daily watch. It is not a
+    rung: it never changes status and no promotion check reads it.
 
 DNA = sha256 of the canonical params JSON (sorted keys, engine-relevant keys
 only, capital/costs excluded).  Two candidates with identical trading logic
@@ -32,6 +34,7 @@ Usage
   python lineage.py promote --strategy 1 --to oos_validated --evidence report:7
   python lineage.py promote --strategy 1 --to approved --evidence "Dave 2026-10-20" --i-am-a-human
   python lineage.py retire --strategy 1 --note "edge decayed Q4"
+  python lineage.py forward-test --strategy 2           # --off to clear
   python lineage.py tree
   python lineage.py diff --strategy 2          # vs parent
 """
@@ -72,6 +75,15 @@ def ensure_family_column(conn, table):
         conn.commit()
 
 
+def ensure_forward_test_column(conn):
+    """strategies.forward_test: 1 = pre-registered forward test, watched by
+    health.py at any status below retired. Default 0 for every existing row."""
+    have = {r[1] for r in conn.execute("PRAGMA table_info(strategies)")}
+    if "forward_test" not in have:
+        conn.execute("ALTER TABLE strategies ADD COLUMN forward_test INTEGER NOT NULL DEFAULT 0")
+        conn.commit()
+
+
 def ensure_tables(conn):
     conn.execute("""CREATE TABLE IF NOT EXISTS strategies (
         id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -94,6 +106,7 @@ def ensure_tables(conn):
     )""")
     conn.commit()
     ensure_family_column(conn, "strategies")
+    ensure_forward_test_column(conn)
 
 
 def now():
@@ -223,6 +236,26 @@ def retire(conn, strategy_id, note):
     print(f"strategy #{strategy_id} '{row[1]}' retired: {note}")
 
 
+def set_forward_test(conn, strategy_id, on=True):
+    """Mark or clear the forward test. Status stays put; the promotions row is
+    the audit trail, with from_status = to_status."""
+    row = conn.execute("SELECT status, name FROM strategies WHERE id=?", (strategy_id,)).fetchone()
+    if not row:
+        raise SystemExit(f"strategy {strategy_id} not found")
+    status, name = row
+    if on and status == TERMINAL:
+        raise SystemExit(f"strategy #{strategy_id} is retired; it cannot be a forward test")
+    conn.execute("UPDATE strategies SET forward_test=? WHERE id=?", (int(on), strategy_id))
+    conn.execute(
+        "INSERT INTO promotions (at, strategy_id, from_status, to_status, evidence, by)"
+        " VALUES (?, ?, ?, ?, ?, ?)",
+        (now(), strategy_id, status, status, f"forward_test={int(on)}", "cli"))
+    conn.commit()
+    print(f"strategy #{strategy_id} '{name}': forward_test={int(on)}, status still {status}")
+    print("Read: this only decides whether health.py watches it daily. It is no evidence "
+          "and no promotion.")
+
+
 # ---------------------------------------------------------------- views ---
 
 def tree(conn):
@@ -292,6 +325,9 @@ def main():
     x = sub.add_parser("retire")
     x.add_argument("--strategy", type=int, required=True)
     x.add_argument("--note", required=True)
+    f = sub.add_parser("forward-test")
+    f.add_argument("--strategy", type=int, required=True)
+    f.add_argument("--off", action="store_true")
     sub.add_parser("tree")
     d = sub.add_parser("diff")
     d.add_argument("--strategy", type=int, required=True)
@@ -307,6 +343,8 @@ def main():
         promote(conn, args.strategy, args.to, args.evidence, human=args.i_am_a_human)
     elif args.cmd == "retire":
         retire(conn, args.strategy, args.note)
+    elif args.cmd == "forward-test":
+        set_forward_test(conn, args.strategy, on=not args.off)
     elif args.cmd == "tree":
         tree(conn)
     elif args.cmd == "diff":

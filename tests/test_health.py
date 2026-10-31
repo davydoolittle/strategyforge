@@ -100,6 +100,36 @@ class TestRun(Base):
         self.conn.execute("UPDATE strategies SET status='retired' WHERE id=1")
         self.assertEqual(health.run(self.conn, day="2026-01-02", push=False), [])
 
+    def test_forward_test_is_watched_without_promotion(self):
+        self.assertEqual(health.watched(self.conn), [])
+        P.lineage.set_forward_test(self.conn, 1)
+        self.assertEqual(health.watched(self.conn), [1])
+        self.assertEqual(len(health.run(self.conn, day="2026-01-01", push=False)), 1)  # no ids given
+        status = self.conn.execute("SELECT status FROM strategies WHERE id=1").fetchone()[0]
+        self.assertEqual(status, "backtest_winner")
+
+    def test_forward_test_off_or_retired_is_not_watched(self):
+        P.lineage.set_forward_test(self.conn, 1)
+        P.lineage.set_forward_test(self.conn, 1, on=False)
+        self.assertEqual(health.watched(self.conn), [])
+        P.lineage.set_forward_test(self.conn, 1)
+        P.lineage.retire(self.conn, 1, "test")
+        self.assertEqual(health.watched(self.conn), [])
+        with self.assertRaises(SystemExit):
+            P.lineage.set_forward_test(self.conn, 1)
+
+    def test_forward_test_opens_no_promotion_path(self):
+        P.lineage.set_forward_test(self.conn, 1)
+        with self.assertRaises(SystemExit):                                 # one rung at a time
+            P.lineage.promote(self.conn, 1, "approved", "x", human=True)
+        with self.assertRaises(SystemExit):                                 # still needs a report
+            P.lineage.promote(self.conn, 1, "oos_validated", "forward_test")
+        self.conn.execute("UPDATE strategies SET status='paper_validated' WHERE id=1")
+        with self.assertRaises(SystemExit):                                 # still human-only
+            P.lineage.promote(self.conn, 1, "approved", "x")
+        self.assertEqual(self.conn.execute("SELECT status FROM strategies WHERE id=1").fetchone()[0],
+                         "paper_validated")
+
     def test_breach_pushes_once(self):
         self.watch()
         with mock.patch.object(health, "CUSUM_H", 0.01), \

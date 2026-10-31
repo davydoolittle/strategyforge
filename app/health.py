@@ -2,7 +2,8 @@
 StrategyForge decay monitor (P4.4) — is a validated strategy still behaving
 like it did in its validation window?
 
-For every strategy at oos_validated or above (not retired):
+For every strategy at oos_validated or above, plus any marked forward_test
+(lineage.py forward-test), retired excluded:
   1. baseline  the engine runs the strategy's pinned cfg from is_start to the
                newest candle; trades with split_ts <= signal < oos_end (the
                OOS window the adversary judged) give the mean mu and stdev
@@ -32,7 +33,7 @@ Written to health (strategy_id, day, cusum, alert, ...), one row per
 strategy per UTC day; a second run on the same day replaces it.
 
 Usage
-  python health.py                    # all strategies at oos_validated+
+  python health.py                    # oos_validated+ and forward tests
   python health.py --strategy 3       # one strategy, whatever its status
   python health.py --no-ntfy          # never push
 NTFY_TOPIC (env) or --ntfy-topic sets the topic.
@@ -147,6 +148,15 @@ def send_ntfy(topic, title, msg):
         return False
 
 
+def watched(conn):
+    """Strategy ids the scheduled job measures. WATCH statuses, or forward_test
+    at any status short of retired."""
+    q = ",".join("?" * len(WATCH))
+    return [r[0] for r in conn.execute(
+        f"SELECT id FROM strategies WHERE status IN ({q})"
+        " OR (forward_test = 1 AND status != ?) ORDER BY id", WATCH + [lineage.TERMINAL])]
+
+
 def run(conn, strategy_ids=None, day=None, topic=None, push=True):
     """Measure, store and (on a new breach) push. Returns the stored rows."""
     ensure_tables(conn)
@@ -155,9 +165,7 @@ def run(conn, strategy_ids=None, day=None, topic=None, push=True):
     day = day or datetime.now(timezone.utc).strftime("%Y-%m-%d")
     now = datetime.now(timezone.utc).strftime("%Y-%m-%d %H:%M:%S")
     if strategy_ids is None:
-        q = ",".join("?" * len(WATCH))
-        strategy_ids = [r[0] for r in conn.execute(
-            f"SELECT id FROM strategies WHERE status IN ({q}) ORDER BY id", WATCH)]
+        strategy_ids = watched(conn)
     out = []
     for sid in strategy_ids:
         name = conn.execute("SELECT name FROM strategies WHERE id=?", (sid,)).fetchone()
@@ -201,7 +209,7 @@ def print_report(rows):
           f"(K={CUSUM_K:g}, H={CUSUM_H:g})")
     print("=" * 78)
     if not rows:
-        print(f"No strategy is at {' / '.join(WATCH)}: nothing to watch.")
+        print(f"No strategy is at {' / '.join(WATCH)} or marked forward_test: nothing to watch.")
         return
     f = lambda x, p=3: "-" if x is None else f"{x:+.{p}f}"   # noqa: E731
     print(f"{'strategy':28s} {'source':6s} {'base n':>6s} {'mu %':>7s} {'sigma':>6s} "

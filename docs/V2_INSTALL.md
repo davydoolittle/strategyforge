@@ -171,7 +171,7 @@ Failure `WEB_TOKEN must be set...`: the token is missing or shorter than 16 char
 
 ## When a rebuild IS needed
 
-Only when `app/main.py` changes (Phase 4 adds the scheduler to it). Then, on Matrix:
+When `app/main.py` changes, or any module the scheduled jobs run: the image bakes in a copy of `app/` (`COPY app/ /app/`), so the collector's jobs run that copy, not the share. Then, on Matrix:
 
 ```
 cd /mnt/user/appdata/strategyforge && docker build -t strategyforge:latest .
