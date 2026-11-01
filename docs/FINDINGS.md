@@ -6,6 +6,98 @@ pinned windows on each candidate (P2.1).
 
 ---
 
+## F14. TSP on official share prices: F12's verdict stands; no tactical strategy beats 100% C, and the DSRs above 0.95 are not evidence
+
+*2026-11-01. Daily G F C S I share prices from tspfolio.com (not tsp.gov, which
+still answers 403) imported to `tsp_prices` source `tsp`: 5,868 rows,
+2003-06-02 to 2026-10-30. F12's six strategies, config untouched, on F12's
+exact window, 2004-10-11 to 2026-10-28: `run_all` on
+`load_dataset(mode, end=2026-10-28)` with `start=2004-10-11`, because the
+CLI has no end date. tsp_runs `data_mode='tsp'`; full report in
+`docs/TSP_BACKTEST_OFFICIAL.md`. The same script on proxies reproduces F12 to
+every printed digit, so all the differences below come from the data. Macro
+inputs are the same in both runs.*
+
+| strategy | CAGR % (F12 → now) | max DD % | Sharpe over G | IFTs | IR vs C | 2004-09 | 2010-19 | 2020- | walk-forward OOS Sharpe |
+|---|---|---|---|---|---|---|---|---|---|
+| 100% C | 11.1 → **11.2** | 55 → 55 | 0.56 → 0.50 | 0 | 0 | 2.0 | **13.4** | **15.2** | 0.86 → **0.86** |
+| 60/40 C/F | 9.2 → 9.3 | 34 → 34 | 0.61 → **0.54** | 0 | −0.39 | 3.2 | 10.2 | 12.6 | — |
+| dual momentum (12 m) | 10.1 → 9.2 | 36 → 35 | 0.55 → 0.45 | 62 → 54 | −0.17 | 9.4 | 7.1 | 11.7 | 0.47 → 0.45 |
+| trend filter | 9.5 → 9.8 | 34 → 34 | 0.60 → 0.53 | 24 → 24 | −0.16 | **10.9** | 9.2 | 9.7 | 0.72 → 0.74 |
+| regime switch | 8.1 → 8.8 | 22 → **20** | 0.57 → 0.53 | 168 → 167 | −0.23 | 8.6 | 7.8 | 10.1 | 0.55 → 0.51 |
+| shift capture | 7.5 → 9.0 | 35 → 35 | 0.44 → 0.47 | 126 → 87 | −0.26 | 5.2 | 9.7 | 10.7 | 0.58 → 0.71 |
+
+Sub-period columns are CAGR % on official prices.
+
+- **The verdict does not change.** Every tactical strategy again wins
+  2004-09 (by 3-9 points a year), then trails 100% C by 3.7-6.3 points in
+  2010-19 and 3.5-5.5 in 2020-26. Over the whole period none beats C.
+  P(beats C): 0.11 to 0.22. Drawdowns of 20-35% against 55% are still what
+  they buy, and 60/40 still does that with no IFTs and the best Sharpe.
+- **Sharpes fall because G was understated more than F12 said.** The real G
+  Fund made 3.01%/yr against the proxy's 1.79%: 1.2 points a year, about 1.5
+  before 2020 and 0.4 after. F12 called this "slightly too low". That gap
+  alone accounts for 100% C's drop from 0.56 to 0.50; its CAGR barely moved.
+- **The DSRs above 0.95 are not evidence. Do not read them as a pass.** 100%
+  C, 60/40, trend filter and regime switch now show 0.96-0.97, although all
+  four Sharpes fell. The cause is the noise ceiling, which dropped from 0.29
+  to 0.13 because one of the 31 trials changed. On proxies, shift capture at
+  `min_confidence` 0.7 went 100% G in January 2009 and stayed there for 17
+  years (Sharpe −0.13). On official prices the same config kept trading to
+  2011 (Sharpe 0.53). That one path set F12's trial variance. Scored against
+  F12's ceiling, the official DSRs are 0.77-0.88, all failing. So the DSR
+  here moves on one config's path, and buy-and-hold passing shows that it
+  measures premium over G, not tactical skill. The test that matters is
+  against C, and that one is still negative.
+- **Trend filter is still the only tactical candidate that holds up.** 24
+  IFTs on both data sets, Sharpe 0.48-0.58 across 15 settings, 0.53 at lag 2,
+  walk-forward 0.74. Its cost against C is 1.4 points a year over the
+  whole period and 4-5.5 since 2010. Dual momentum falls to the worst Sharpe
+  of the set: its 2004-09 CAGR drops from 12.9 to 9.4. The likely reason is
+  that the I Fund made 1.7 points a year less than the proxy in that period,
+  but I did not isolate it.
+- **Shift capture looks better and is still not usable.** Its threshold
+  range tightens from −0.13..0.57 to 0.46..0.53, and lag 2 moves CAGR by 1.2
+  points instead of 2.9. But replacing the data moved its CAGR by 1.6 points
+  and cut its IFTs by 30%, while C's proxy correlates 0.99 with the fund. A
+  strategy that sensitive to small price differences is still following its
+  path, and it still trails C.
+
+**How closely the proxies tracked** (2004-10-11 to 2026-10-28, 5,522 common
+days; I is the VEU/EFA splice):
+
+| fund | proxy | daily correlation | tracking error %/yr | fund CAGR % | proxy CAGR % | gap | gap 2004-09 / 2010-19 / 2020- |
+|---|---|---|---|---|---|---|---|
+| C | SPY | 0.994 | 2.1 | 11.24 | 11.13 | +0.12 | +0.14 / +0.16 / +0.05 |
+| S | VXF | 0.997 | 1.9 | 10.29 | 10.21 | +0.08 | −0.11 / +0.27 / −0.01 |
+| I | VEU/EFA | 0.935 | 7.5 | 7.20 | 7.03 | +0.17 | −1.69 / +0.79 / +0.98 |
+| F | AGG | 0.805 | 3.1 | 3.20 | 2.93 | +0.27 | +0.38 / +0.33 / +0.11 |
+| G | 13-w bill accrual | 0.474 | 0.2 | 3.01 | 1.79 | +1.22 | +1.47 / +1.67 / +0.36 |
+
+C and S were close to perfect. I's long-run match hides offsetting gaps of
+up to 1.7 points a year. F's correlation was 0.60 before 2010 and 0.90+ after,
+and AGG fell 6.5% against the F Fund's 3.8% from 2008-09-12 to 2008-10-27. G
+was the proxy that mattered, because it sets every Sharpe here.
+
+**Data checks.** Header parsed, no blanks or duplicates, largest gap 5 days
+(2006-12-29 to 2007-01-03, and Sandy in 2012), last C 122.3804 on 2026-10-30.
+Dates line up with the proxies at lag 0. Returns on 2008-09-12..10-27,
+2020-02-19..03-23 and 2024-12-31..2025-12-31 agree with the proxies, apart
+from the F gap above. Two weaknesses, neither tested for effect: prices to
+2008-06-30 are at 2 decimals, so G shows about 200 flat days a year before
+then. Rows on Columbus and Veterans Days through 2012 look filled in: they
+carry 4 decimals among 2-decimal neighbours, and they are the only days G ever
+falls.
+
+**What this licenses.** F12 stands: use the module for regime, drawdown state
+and the move budget, not as a source of return over 100% C. `live_strategy`
+stays `trend_filter`; nothing was tuned. The TSP DSR should not be used as a
+gate while one config can move its ceiling by half. `tsp.gov` still refuses
+scripts and this CSV is a one-off, so the daily report falls back to proxies
+a few days after 2026-10-30, unless newer official prices are imported.
+
+---
+
 ## F13. #4027 registered as the pre-registered forward test
 
 *Registered 2026-10-30 as lineage strategy #2 `core-btc-4027` (core family,

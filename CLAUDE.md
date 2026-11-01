@@ -36,6 +36,7 @@ export, and the TSP allocation module. Nothing in this repo places live orders.
 - **F11:** Null. Squeeze family at 1h: all 14 testable candidates rejected on A2.
 - **F12:** TSP, proxy data: no tactical strategy beats 100% C after 2009. They buy smaller drawdowns, not return.
 - **F13:** #4027 registered as the N = 1 forward test: PSR vs 0 ≥ 0.95 on forward trades only, ~76 trades at SR 0.184, no re-tuning.
+- **F14:** TSP on official prices: F12 stands, nothing beats 100% C. DSRs above 0.95 come from one config moving the noise ceiling, not from an edge.
 
 ## State of play
 
