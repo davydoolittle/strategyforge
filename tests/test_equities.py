@@ -124,7 +124,7 @@ class TestBackfill(unittest.TestCase):
 
     def run_it(self, **kw):
         return EQ.backfill(self.conn, {}, today=date(2026, 11, 1), fetch=self.fetch,
-                           exchange=lambda s, h: "ARCA", **kw)
+                           exchange=lambda s, h: "ARCA", source="alpaca", **kw)
 
     def test_records_depth_and_resumes_after_a_failure(self):
         self.die_on = "IEF"
@@ -154,7 +154,53 @@ class TestBackfill(unittest.TestCase):
                          .fetchone()[0], 0)
 
 
+    def test_changing_vendor_refetches_and_keeps_the_exchange(self):
+        self.run_it()
+        self.fetched.clear()
+        done = EQ.backfill(self.conn, {}, today=date(2026, 11, 1), fetch=self.fetch)
+        self.assertEqual(len(done), 10)
+        self.assertEqual(self.conn.execute("SELECT source, exchange, feed FROM instruments"
+                                           " WHERE symbol='SPY'").fetchone(), ("tiingo", "ARCA", None))
+
+
+class TestVendors(unittest.TestCase):
+    def test_tiingo_uses_adjusted_fields(self):
+        row = {"date": "1993-01-29T00:00:00.000Z", "open": 43.9, "high": 44.0, "low": 43.7, "close": 43.9,
+               "volume": 1, "adjOpen": 24.0, "adjHigh": 24.1, "adjLow": 23.9, "adjClose": 24.05,
+               "adjVolume": 2}
+        got = EQ.fetch_tiingo("SPY", "1993-02-01", {}, get=lambda u, h: [row])
+        self.assertEqual(got, [(728265600, 24.0, 24.1, 23.9, 24.05, 2)])
+
+    def test_store_drops_dates_the_new_series_lacks(self):
+        conn = crypto_db()
+        EQ.ensure_tables(conn)
+        EQ.store_bars(conn, "SPY", bars(5))
+        EQ.store_bars(conn, "SPY", bars(3))
+        self.assertEqual(conn.execute("SELECT COUNT(*) FROM candles WHERE pair='SPY'").fetchone()[0], 3)
+
+    def test_compare_ignores_the_price_base_and_finds_real_differences(self):
+        a = [(i, 0, 0, 0, 100.0 + i, 0) for i in range(5)]
+        same = [(t, 0, 0, 0, c * 0.7, 0) for t, _, _, _, c, _ in a]
+        self.assertEqual(EQ.compare(a, same)["n_diff"], 0)
+        off = same[:2] + [(2, 0, 0, 0, same[2][4] * 1.02, 0)] + same[3:] + [(9, 0, 0, 0, 1.0, 0)]
+        c = EQ.compare(a, off)
+        self.assertEqual((c["n_diff"], c["only_b"]), (2, 1))
+
+    def test_ohlc_rounding_passes_but_a_real_error_does_not(self):
+        EQ.check_bars("SPY", [(D0, 100.0, 100.0 - 1e-8, 99.0, 100.0, 1.0)])
+        with self.assertRaises(ValueError):
+            EQ.check_bars("SPY", [(D0, 100.0, 99.9, 99.0, 100.0, 1.0)])
+
+
 class TestCredentials(unittest.TestCase):
+    def test_tiingo_takes_a_labelled_or_bare_token(self):
+        with tempfile.TemporaryDirectory() as d:
+            p = os.path.join(d, "tiingo.env")
+            for body in ("TIINGO_API_KEY=abc123\n", "abc123\n"):
+                with open(p, "w") as f:
+                    f.write(body)
+                self.assertEqual(EQ.load_tiingo_credentials(p), {"Authorization": "Token abc123"})
+
     def test_reads_the_two_keys(self):
         with tempfile.TemporaryDirectory() as d:
             p = os.path.join(d, "alpaca.env")
