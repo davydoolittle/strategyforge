@@ -6,6 +6,65 @@ pinned windows on each candidate (P2.1).
 
 ---
 
+## F17. Pre-registered ETF trend book: FAIL against buy-and-hold; it cut risk more than return, but that is not what was tested
+
+*2026-11-01. Phase 10, `etf_portfolio.py` on snapshot `etf-2026-10-30`. One fixed
+rule, N = 1, written in V2_PROMPT 8d before any portfolio backtest existed, and
+run once. First fill 2008-04-01, 18.6 years, 223 months, ten ETFs. Long or flat
+on the 12-month return, each sleeve sized to 10% volatility, P9.2 costs, cash
+earning nothing. Read-only: nothing was written to forge.db.*
+
+| | CAGR | max DD (daily) | Sharpe | volatility |
+|---|---|---|---|---|
+| book | 3.72% | -8.6% | 0.96 | 3.9% |
+| equal-weight benchmark | 7.17% | -32.3% | 0.76 | 9.7% |
+
+**Verdict: FAIL.** Monthly book minus benchmark: annualised Sharpe -0.46, PSR vs
+0 **0.032** against the 0.95 needed. The book trailed by about 3.7 points a year.
+
+| annualised | book | benchmark |
+|---|---|---|
+| 2008-2009 | 1.62% | -0.43% |
+| 2010-2019 | 3.77% | 6.98% |
+| 2020-2026 | 4.17% | 9.46% |
+
+**What the numbers show.**
+
+- **The same trade as F12 and F14.** It won in 2008-09 and lagged for the 17 years
+  after. It buys smaller drawdowns, not return.
+- **Most of the gap is lower risk.** Mean notional was 0.55x (highest 1.20x, above
+  1x on 3% of days), so the book sat about 45% in cash earning nothing. The rule
+  as registered compares that with a fully invested benchmark.
+- **Volatility-matched, it looks better but still does not clear the bar.**
+  Information only, and chosen after seeing the result: scaling the benchmark to
+  0.40x gives 2.91% CAGR and a -12.4% monthly drawdown, against the book's 3.72%
+  and -6.8%. Excess Sharpe +0.23, PSR 0.838, below 0.95.
+- **Robust to how it is run.** 2x costs: PSR 0.031. Fills one day later: 0.029.
+  Borrowing at 3% above 1x: 0.031. Implementation does not explain the result.
+- **Profit was not one lucky sleeve.** QQQ 23%, SPY 20%, GLD 14%, and the other
+  seven 3-8% each. Every sleeve made money.
+
+### Conclusion
+
+A diversified, volatility-scaled 12-month trend book did not beat holding the
+same ten ETFs. It gave a smoother ride with about half the return, and it did not
+show that the smoother ride was better than simply holding less stock.
+
+### What this licenses
+
+- **No forward test.** Only a pass earns one.
+- **Do not rewrite the test and call it the same one.** Changing the benchmark,
+  paying interest on cash or adding leverage after this result would be a new
+  hypothesis chosen with the answer in view. It would need its own registration
+  and could not use this run as support.
+- **Use the book's lesson as a risk choice, not a return source.** To reduce
+  drawdowns, holding less stock did nearly as well, with no monthly trades. The
+  equal-weight benchmark's 7.17% took no signals at all.
+- **Caveats.** Ten ETFs chosen today carry hindsight. Cash at 0% is against the
+  book, and 2008-2026 is one path that favoured US large-cap stocks.
+
+---
+
 ## F16. Core family, daily, ten ETFs: all 8 testable candidates REJECTED on A2; the entries show no timing skill
 
 *2026-11-01. P9.3, on the live DB: `equities.py --snapshot etf-2026-10-30`

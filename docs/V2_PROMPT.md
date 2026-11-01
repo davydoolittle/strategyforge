@@ -189,12 +189,12 @@ Goal: test the systematic-macro / CTA hypothesis on liquid ETFs under a declared
 
 ---
 
-## 8d. Phase 10 — Pre-registered ETF portfolio test  (added 2026-11-01, proposed, not started)
+## 8d. Phase 10 — Pre-registered ETF portfolio test  (added 2026-11-01, done 2026-11-01: FAIL, FINDINGS F17)
 
 Goal: the test F16 says is the honest next one: a diversified, volatility-scaled book, scored against buy-and-hold so drift cannot pass for skill. Definition of done: F17 written whatever it shows. This rule is written down before any portfolio backtest exists. It is one hypothesis, N = 1: no search, no parameter changes after the first run. A fix to rule semantics is allowed only with a written reason, as in F12.
 
-- [ ] **P10.1 Portfolio evaluator.** `app/etf_portfolio.py`, read-only on forge.db, reads snapshot `etf-2026-10-30` only. Tests with known answers.
-- [ ] **P10.2 The test.** Stop and report. Rule, fixed here:
+- [x] **P10.1 Portfolio evaluator.** *(done 2026-11-01: `app/etf_portfolio.py`, tests/test_etf_portfolio.py. Read-only; PSR is `validation.probabilistic_sharpe`. A sleeve is 1/10 of equity; the rule's cap makes 2x total notional automatic. The first signal is 2008-03-31, the first month-end with a month-end 12 back, so the first fill is 2008-04-01.)* `app/etf_portfolio.py`, read-only on forge.db, reads snapshot `etf-2026-10-30` only. Tests with known answers.
+- [x] **P10.2 The test.** Stop and report. Rule, fixed here:
   - Universe: the ten ETFs. Window: 2007-03-01 (all ten trading) to 2026-10-30, trading from 12 months later.
   - Signal, on each month's last trading day: an ETF is held if its 12-month adjusted return is > 0, otherwise that sleeve is in cash. Long or flat, no shorts (F16: shorts lost).
   - Size: each held ETF targets 10% annualised volatility, from 60 trading days of returns, capped at 1/10 of equity x 2 per sleeve; total notional at most 2x equity.
