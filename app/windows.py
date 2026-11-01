@@ -45,7 +45,7 @@ def _ts(iso):
 
 
 def tf_seconds(tf):
-    return 3600 if tf == "1h" else 14400
+    return {"1h": 3600, "1d": 86400}.get(tf, 14400)
 
 
 def ensure_columns(conn):

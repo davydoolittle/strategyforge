@@ -360,6 +360,7 @@ def cost_stress(conn, pair, cfg, tf_seconds, start_iso, end_iso, multipliers=(1.
         c2 = copy.deepcopy(cfg)
         c2["commission_pct"] = cfg["commission_pct"] * m
         c2["slippage_ticks"] = cfg["slippage_ticks"] * m
+        c2["cost_x"] = m        # the same stress on an instrument's own costs (P9.2)
         r = engine.backtest(conn, pair, c2, start_iso, end_iso, tf_seconds)
         out.append({"cost_x": m, "net": r["net"],
                     "pf": None if r["pf"] == float("inf") else r["pf"],

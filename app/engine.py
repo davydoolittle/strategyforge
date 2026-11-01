@@ -10,6 +10,20 @@ ATR trailing, reverse on opposite, history_start_ts warmup pinning, forced
 signals= (paper.py), the cfg["filters"] feature hook, and the entries /
 open_position / pending_entry outputs. 1h native, 4h by aggregation.
 
+Sessions (P9.2): a pair with no row in `instruments` is 'crypto', 24/7, costs
+from cfg, exactly as before. A 'us_equity' row switches on:
+  * daily bars only, and no weekend or unfinished bar. Bars exist only on
+    trading days, so a Friday signal fills at Monday's open, or Tuesday's
+    after a holiday.
+  * costs from the instrument, whatever cfg says: commission 0, slippage
+    spread_bps * slippage_frac as a fraction of price, because a fixed cent is
+    a different cost on every adjusted price. cfg["cost_x"] scales it (A5).
+  * notional capped at max_leverage * equity (default 2, Reg-T): risk sizing
+    on a tight stop in a low-vol ETF would otherwise borrow without limit.
+A stop gapped through at the open fills at the open, in both sessions. A
+target gapped through fills at the target: a real limit fills better, so this
+understates winners slightly.
+
 V4.1 is still validated at 73/87 exact trade matches vs TradingView, and
 tests/test_regression.py holds every stored result to the cent.
 
@@ -38,6 +52,35 @@ def default_cfg(family=strategies.DEFAULT_FAMILY):
 
 
 # ------------------------------ data ---------------------------------------
+
+def instrument(conn, pair):
+    """The pair's `instruments` row as a dict, or None for a 24/7 crypto pair.
+    An ETF whose row has no costs fails here: falling back would price it on
+    crypto costs. Crypto never reads those columns, so it runs on any schema."""
+    if not conn.execute("SELECT 1 FROM sqlite_master WHERE type='table' AND name='instruments'"
+                        ).fetchone():
+        return None
+    cur = conn.execute("SELECT * FROM instruments WHERE symbol=?", (pair,))
+    row = cur.fetchone()
+    if row is None:
+        return None
+    inst = dict(zip((d[0] for d in cur.description), row))
+    if inst["session"] != "us_equity":
+        raise ValueError(f"{pair}: unknown session {inst['session']}")
+    if inst.get("spread_bps") is None:
+        raise ValueError(f"{pair}: no spread_bps in instruments, run equities.py --report")
+    return inst
+
+
+def check_session_bars(pair, ts, tf_seconds):
+    if tf_seconds != 86400:
+        raise ValueError(f"{pair}: us_equity needs daily bars, got tf_seconds={tf_seconds}")
+    today = datetime.now(timezone.utc).date()
+    for t in ts:
+        day = datetime.fromtimestamp(t, tz=timezone.utc)
+        if t % 86400 or day.weekday() >= 5 or day.date() >= today:
+            raise ValueError(f"{pair}: {day} is not a finished trading day")
+
 
 def session_pairs(conn, pair):
     """Pairs in candles trading the same session as `pair`, itself included, so
@@ -90,6 +133,7 @@ def backtest(conn, pair, cfg, start_iso, end_iso, tf_seconds=3600, signals=None)
     TradingView alerts. Fills, sizing, stops, targets, trailing and flips are
     unchanged; a signal on the side already held is ignored, as in Pine."""
     fam = strategies.for_cfg(cfg)    # an unknown family fails before any work
+    inst = instrument(conn, pair)
     start_ts = int(datetime.fromisoformat(start_iso).replace(tzinfo=timezone.utc).timestamp())
     end_ts = int(datetime.fromisoformat(end_iso).replace(tzinfo=timezone.utc).timestamp())
     # cfg["history_start_ts"] (default None = all history): ignore candles
@@ -97,6 +141,8 @@ def backtest(conn, pair, cfg, start_iso, end_iso, tf_seconds=3600, signals=None)
     # were pinned even after older candles are backfilled.
     ts, o, h, l, c, v = load_candles(conn, pair, end_ts, tf_seconds,
                                      cfg.get("history_start_ts"))
+    if inst:
+        check_session_bars(pair, ts, tf_seconds)
 
     n = len(ts)
     # stops and the trailing distance are sized from this ATR for every family
@@ -109,9 +155,11 @@ def backtest(conn, pair, cfg, start_iso, end_iso, tf_seconds=3600, signals=None)
         sig = fam.signals({"ts": ts, "open": o, "high": h, "low": l, "close": c, "volume": v,
                            "atr": atr_v, "from_i": from_i}, cfg)
 
-    tick = cfg["tick_size"]
-    slip = cfg["slippage_ticks"] * tick
-    comm = cfg["commission_pct"] / 100.0
+    tick = inst["tick_size"] if inst else cfg["tick_size"]
+    slip = 0.0 if inst else cfg["slippage_ticks"] * tick
+    slip_rate = (inst["spread_bps"] * inst["slippage_frac"] * cfg.get("cost_x", 1.0) / 10000.0
+                 if inst else 0.0)
+    comm = (inst["commission_pct"] if inst else cfg["commission_pct"]) / 100.0
     trailing = cfg.get("use_trailing", False)
     trail_atr = cfg.get("trail_atr", 0.0)
 
@@ -144,11 +192,14 @@ def backtest(conn, pair, cfg, start_iso, end_iso, tf_seconds=3600, signals=None)
             return False, False
         return long_sig, short_sig
 
+    def slip_at(px):
+        return slip + px * slip_rate
+
     def close_position(exit_price, exit_ts, reason, is_market):
         nonlocal equity, pos
         px = exit_price
         if is_market or reason in ("stop", "trail"):
-            px = px - slip if pos["dir"] == "long" else px + slip
+            px = px - slip_at(px) if pos["dir"] == "long" else px + slip_at(px)
         gross = (px - pos["entry"]) * pos["qty"] if pos["dir"] == "long" else (pos["entry"] - px) * pos["qty"]
         fees = (pos["entry"] * pos["qty"] + px * pos["qty"]) * comm
         pnl = gross - fees
@@ -173,10 +224,12 @@ def backtest(conn, pair, cfg, start_iso, end_iso, tf_seconds=3600, signals=None)
                 close_position(o[i], bar_open_ts, "opposite", True)
             if pos is None and pending["action"] in ("long", "short"):
                 kind = pending["action"]
-                entry_px = o[i] + slip if kind == "long" else o[i] - slip
+                entry_px = o[i] + slip_at(o[i]) if kind == "long" else o[i] - slip_at(o[i])
                 stop_dist = pending["atr"] * cfg["stop_atr"]
                 risk_amt = equity * cfg["risk_pct"] / 100.0
                 qty = risk_amt / max(stop_dist, tick) if cfg["use_risk_sizing"] else equity / entry_px
+                if inst:
+                    qty = min(qty, equity * inst["max_leverage"] / entry_px)
                 pos = {
                     "dir": kind, "qty": qty, "entry": entry_px, "entry_ts": bar_open_ts,
                     "signal_ts": pending["signal_ts"], "atr": pending["atr"],
@@ -246,7 +299,7 @@ def backtest(conn, pair, cfg, start_iso, end_iso, tf_seconds=3600, signals=None)
     # still open at the last bar: marked at its close as if closed at market
     open_position = None
     if pos is not None:
-        px = c[-1] - slip if pos["dir"] == "long" else c[-1] + slip
+        px = c[-1] - slip_at(c[-1]) if pos["dir"] == "long" else c[-1] + slip_at(c[-1])
         gross = (px - pos["entry"]) * pos["qty"] if pos["dir"] == "long" else (pos["entry"] - px) * pos["qty"]
         open_position = {k: pos[k] for k in ("dir", "qty", "entry_ts", "entry", "signal_ts",
                                              "stop", "limit", "trail_active")}
@@ -289,7 +342,7 @@ def main():
     ap.add_argument("--pair", default="BTC-USD")
     ap.add_argument("--start", default="2024-09-02")
     ap.add_argument("--end", default="2026-09-01")
-    ap.add_argument("--tf", default="1h", choices=["1h", "4h"])
+    ap.add_argument("--tf", default="1h", choices=["1h", "4h", "1d"])
     ap.add_argument("--trailing", action="store_true")
     ap.add_argument("--family", default=strategies.DEFAULT_FAMILY, choices=strategies.names())
     args = ap.parse_args()
@@ -297,7 +350,7 @@ def main():
     fam = strategies.get(args.family)
     cfg = fam.default_cfg()
     cfg["use_trailing"] = args.trailing
-    tf_s = 3600 if args.tf == "1h" else 14400
+    tf_s = {"1h": 3600, "1d": 86400}.get(args.tf, 14400)
     cfg = fam.for_timeframe(cfg, tf_s)
 
     conn = sqlite3.connect(DB_PATH)

@@ -55,6 +55,13 @@ PAGE_SLEEP_S = 0.35       # Alpaca free plan: 200 requests a minute
 RETURN_TOL = 0.005        # vendors disagree if a daily return differs by this
 OHLC_TOL = 1e-6           # adjusted prices are floats: allow rounding, not errors
 
+# Quoted spread in bps, set wide on purpose: one figure has to cover 1993-2026,
+# and today's SPY spread is far under this. A5 stresses it 2x and 3x.
+SPREAD_BPS = {"SPY": 2.0, "QQQ": 2.0, "IWM": 3.0, "EFA": 4.0, "EEM": 5.0, "TLT": 3.0,
+              "IEF": 3.0, "GLD": 3.0, "DBC": 10.0, "UUP": 6.0}
+SLIPPAGE_FRAC = 0.5       # cross half the spread per side
+MAX_LEVERAGE = 2.0        # Reg-T
+
 # symbol -> fund inception. Reference dates: Alpaca does not publish them, and
 # listed_from is not the same thing as the first bar we hold (data_start).
 UNIVERSE = {
@@ -84,6 +91,11 @@ def ensure_tables(conn):
     if "source" not in {r[1] for r in conn.execute("PRAGMA table_info(instruments)")}:
         conn.execute("ALTER TABLE instruments ADD COLUMN source TEXT")
         conn.execute("UPDATE instruments SET source='alpaca' WHERE fetched_through IS NOT NULL")
+    have = {r[1] for r in conn.execute("PRAGMA table_info(instruments)")}
+    for name, typ in (("spread_bps", "REAL"), ("slippage_frac", f"REAL DEFAULT {SLIPPAGE_FRAC}"),
+                      ("commission_pct", "REAL DEFAULT 0"), ("max_leverage", f"REAL DEFAULT {MAX_LEVERAGE}")):
+        if name not in have:
+            conn.execute(f"ALTER TABLE instruments ADD COLUMN {name} {typ}")
     have = {r[1] for r in conn.execute("PRAGMA table_info(candles)")}
     if "session" not in have:
         conn.execute("ALTER TABLE candles ADD COLUMN session TEXT NOT NULL DEFAULT 'crypto'")
@@ -94,6 +106,8 @@ def seed_universe(conn):
     for sym, listed in UNIVERSE.items():
         conn.execute("INSERT OR IGNORE INTO instruments (symbol, asset_class, tick_size, session,"
                      " listed_from) VALUES (?, 'etf', ?, ?, ?)", (sym, TICK_SIZE, SESSION, listed))
+        conn.execute("UPDATE instruments SET spread_bps=? WHERE symbol=? AND spread_bps IS NULL",
+                     (SPREAD_BPS[sym], sym))
     conn.commit()
 
 
