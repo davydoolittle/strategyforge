@@ -198,7 +198,7 @@ def attack(conn, cid, verbose=True):
 
     # A7 cross-pair transfer on the other pairs' OOS windows, cut at the same
     # moment this candidate's windows were pinned
-    others = [r[0] for r in conn.execute("SELECT DISTINCT pair FROM candles") if r[0] != pair]
+    others = [p for p in engine.session_pairs(conn, pair) if p != pair]
     tr, excluded = transfer(conn, cfg, others, tf_s, end_ts, start_ts)
     n_hold = sum(1 for x in tr if x["holds"])
     attacks["A7"] = {

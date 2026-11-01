@@ -179,6 +179,16 @@ Goal: two questions FINDINGS F9 leaves open. (1) Does a candidate that fails on 
 
 ---
 
+## 8c. Phase 9 — Equities and ETFs  (added 2026-11-01)
+
+Goal: test the systematic-macro / CTA hypothesis on liquid ETFs under a declared trial budget, on data and execution that respect a trading session. Definition of done: F16 written whatever it shows. Rules in §10 apply throughout, the crypto regression harness (P5.1) must pass after every step, and work stops for review after each item.
+
+- [x] **P9.1 Data layer.** *(done 2026-11-01: `app/equities.py`, tests/test_equities.py. Bars are in `candles` with `pair` = symbol and a new `session` column, added by `ADD COLUMN ... DEFAULT 'crypto'` (no crypto row rewritten; hash of the 171,735 crypto rows before a cutoff identical before and after). `ts` is 00:00 UTC of the trading date. `instruments` also records `data_start`, `data_end`, `n_bars`, `feed`, `adjustment`, `fetched_through`. Feed SIP, adjustment=all; a symbol is always re-fetched whole, because a new dividend re-bases the adjusted series. `engine.session_pairs()` scopes A7 and analyze's transfer list to the candidate's own session. Alpaca's history starts 2016-01-04: all ten symbols have 2,723 bars, 10.82 years, so Tiingo is not required by the 10-year rule, though no window contains 2008-15. Market data is on data.alpaca.markets for paper and live keys alike; the paper endpoint is used only for GET /v2/assets.)* `app/equities.py`: daily, split- and dividend-adjusted bars from Alpaca's market data API (credentials from `/work/data/alpaca.env`, never from the repo; paper endpoint only) for a universe table `instruments` (symbol, asset_class, exchange, tick_size=0.01, session='us_equity', listed_from). Seed with 10 ETFs: SPY QQQ IWM EFA EEM TLT IEF GLD DBC UUP. Store bars in forge.db alongside crypto with a `session` column; candles for existing pairs are untouched. Backfill as far as Alpaca's free data allows and record the start date per symbol; if under 10 years, say so and propose Tiingo's free tier for deeper history (owner supplies a key). Do not scrape Yahoo. Batch commits per §10.9. Tests. Stop and report the history depth per symbol.
+- [ ] **P9.2 Session-aware execution.** `engine.py`: a session model: 'crypto' (24/7, current behaviour, default) and 'us_equity' (no fills outside trading days; a stop gapped through at the open fills at the open price, not the stop price; no partial-day bars). Tick size and a cost model per instrument (commission 0, slippage as a fraction of spread; defaults documented). The crypto regression harness must reproduce to the cent. New tests for gap-through-stop and weekend/holiday handling. Stop and report.
+- [ ] **P9.3 First equities hypothesis under a declared budget.** The existing `core` family on daily bars across the 10 ETFs (the systematic-macro / CTA test). Budget: 100 trials per ETF, seed 9101, 1d, declared here and not to be exceeded. Pinned IS/OOS windows per symbol by the same rule as crypto. Adversary on every survivor with >= 30 OOS trades, A2 deflated by this family's 1d trial count; A7 transfer across the other ETFs. Write FINDINGS F16 with per-trade SR, ceiling, verdicts, and how trades-per-hypothesis compares to crypto 1h. Stop and summarise.
+
+---
+
 ## 9. Not in scope (and why)
 
 | APEX section | status | reason |
@@ -186,7 +196,11 @@ Goal: two questions FINDINGS F9 leaves open. (1) Does a candidate that fails on 
 | §7 Sentiment (Reddit, X, StockTwits, Google Trends) | **deferred indefinitely** | X API is paid and restricted; Reddit API is hostile; literature shows weak standalone edge; Fear & Greed is already collected and is the one sentiment input worth having. Revisit only if Phase 3 fingerprinting shows the existing context feeds predict moves — then, and only then, does a richer attention signal deserve the engineering. |
 | §8 Insider Form 4 | **not here** | Equities-only; this pipeline trades crypto. Dave's `edgar-alert` project already ingests Form 4. If a crypto-relevant use emerges (e.g. COIN, MSTR as sentiment proxies) consume its table rather than re-scrape. |
 | §9 13F / 13D / COT | **not here** | 45-day-stale disclosures are irrelevant at 1h–4h horizons. COT has no crypto coverage that matters. |
-| §6 Equities / ETFs / forex markets | **deferred** | Different data vendor, different session logic, different cost model. Get crypto validated first. |
+| §6 Forex markets | **deferred** | Different data vendor, different session logic, different cost model. ETFs are Phase 9. |
+| Portfolio / cross-sectional mode for equities | **deferred** (Phase 9) | Needs F16 first. |
+| Individual stocks | **deferred** (Phase 9) | Needs a point-in-time universe to avoid survivorship bias. |
+| Insider-filing event study | **deferred** (Phase 9) | Needs stocks. |
+| Order routing from davesbridge to Alpaca | **deferred** (Phase 9) | Nothing has passed validation. |
 | §13 Local LLM research agent | **replaced** | See §3. Phase 8, if it happens, is Claude API + read-only DB tools. |
 | §14 React dashboard with 10 sections | **replaced** by §8b | One page, read-only. |
 | §2 Postgres / Redis / auth stack | **replaced** | SQLite + bearer token + Tailscale. |

@@ -39,6 +39,16 @@ def default_cfg(family=strategies.DEFAULT_FAMILY):
 
 # ------------------------------ data ---------------------------------------
 
+def session_pairs(conn, pair):
+    """Pairs in candles trading the same session as `pair`, itself included, so
+    a crypto cross-check never reaches an ETF or the reverse (P9.1)."""
+    if "session" not in {r[1] for r in conn.execute("PRAGMA table_info(candles)")}:
+        return [r[0] for r in conn.execute("SELECT DISTINCT pair FROM candles ORDER BY pair")]
+    return [r[0] for r in conn.execute(
+        "SELECT DISTINCT pair FROM candles WHERE session ="
+        " (SELECT session FROM candles WHERE pair=? LIMIT 1) ORDER BY pair", (pair,))]
+
+
 def load_candles(conn, pair, end_ts, tf_seconds=3600, start_ts=None):
     rows = conn.execute(
         "SELECT ts, open, high, low, close, volume FROM candles"

@@ -164,9 +164,9 @@ def transfer_test(conn, tf, top_n):
     if not pairs:
         print("no survivors to transfer-test")
         return
-    all_pairs = [r[0] for r in conn.execute("SELECT DISTINCT pair FROM candles")]
 
     for pair in pairs:
+        all_pairs = engine.session_pairs(conn, pair)
         tops = conn.execute(
             "SELECT id, params_json, oos_pf FROM candidates"
             " WHERE tf=? AND passed=1 AND pair=? ORDER BY oos_pf DESC LIMIT ?",
