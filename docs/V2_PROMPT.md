@@ -205,6 +205,12 @@ Goal: the test F16 says is the honest next one: a diversified, volatility-scaled
 
 ---
 
+## 8e. Noteworthy: the pattern ledger  (added 2026-11-01, done, FINDINGS F18)
+
+- [x] **Ledger.** `app/macro_data.py` (Treasury, CBOE, BLS, NY Fed, Tiingo; each value carries its release date) and `app/patterns.py`, list committed before the first run. The `patterns` job re-tests weekly; `tsp_report.py` prints live patterns with their evidence and label under "Noteworthy". All of this takes effect only after a rebuild. A new pattern needs a commit before it runs, and the failures stay in the ledger.
+
+---
+
 ## 9. Not in scope (and why)
 
 | APEX section | status | reason |

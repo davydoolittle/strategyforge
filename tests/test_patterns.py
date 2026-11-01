@@ -107,6 +107,27 @@ class TestEvaluate(unittest.TestCase):
         self.assertTrue(r["active"])
         self.assertEqual(r["last_on"], m.iso[-1])
 
+    def test_an_event_stays_active_for_its_window(self):
+        m, _ = planted(0.0, n=500)
+        on = [False] * 500
+        on[495] = True
+        self.assertTrue(P.evaluate(m, pattern(on, h=10))["active"])
+        on = [False] * 500
+        on[480] = True
+        self.assertFalse(P.evaluate(m, pattern(on, h=10))["active"])
+
+    def test_a_condition_is_active_only_while_it_holds(self):
+        m, _ = planted(0.0, n=500)
+        on = [False] * 500
+        on[495] = True
+        p = {**pattern(on, h=10), "pid": "dollar_gold"}
+        self.assertFalse(P.evaluate(m, p)["active"])
+        on[499] = True
+        self.assertTrue(P.evaluate(m, {**p, "signal": lambda m: on})["active"])
+
+    def test_every_condition_is_a_real_pattern(self):
+        self.assertLessEqual(P.CONDITIONS, {p["pid"] for p in P.registry()})
+
     def test_a_spread_is_a_minus_b(self):
         m = FakeMarket(3, {"A": [1.0, 1.0, 1.2], "B": [1.0, 1.0, 1.1]})
         self.assertAlmostEqual(P.forward(m, ("A", "B"), 0, 2), 0.1)

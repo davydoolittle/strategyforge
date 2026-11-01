@@ -21,8 +21,9 @@ windows can only say so much, and the label says so.
 History, not advice: none of these is a trading rule. Only a rule that passes
 the adversary may suggest a move (F1-F17). Nothing here does.
 
-  python patterns.py           # run, store in pattern_results, print the ledger
-  python patterns.py --show    # print what is stored
+  python patterns.py             # run, store in pattern_results, print the ledger
+  python patterns.py --refresh   # fetch new data first (the weekly job)
+  python patterns.py --show      # print what is stored
 """
 
 import argparse
@@ -36,12 +37,18 @@ import macro_data
 import main
 import validation as V
 
-SNAPSHOT = "etf-2026-10-30"
 CAL_SYMBOL = "SPY"
 BH_Q = 0.10
 SUGGESTIVE_P = 0.10
 MIN_WINDOWS = 8
 MIN_BASE_WINDOWS = 8
+
+# Conditions, as opposed to one-day events: a note shows only while one is true.
+CONDITIONS = {"below_200", "drop_3", "oversold", "long_run_up", "vix_30", "vix_13", "credit_stress",
+              "dont_fight_ease", "dont_fight_hike", "yields_up", "yields_up_bonds",
+              "inflation_stocks", "inflation_gold", "inflation_commodities", "inflation_energy",
+              "real_yields_gold", "dollar_gold", "dollar_em", "dollar_intl", "dollar_commodities",
+              "oil_spike", "gold_warning", "defensive_lead", "intl_catch_up", "value_yields"}
 
 NOT_TESTED = {
     "FOMC meeting drift": "needs the FOMC calendar",
@@ -72,18 +79,18 @@ class Market:
     from its `usable` date, and a price is None before the fund existed."""
 
     def __init__(self, conn):
-        rows = conn.execute("SELECT ts, close FROM bar_snapshots WHERE snapshot=? AND pair=?"
-                            " ORDER BY ts", (SNAPSHOT, CAL_SYMBOL)).fetchall()
+        rows = conn.execute("SELECT ts, close FROM candles WHERE pair=? AND session='us_equity'"
+                            " ORDER BY ts", (CAL_SYMBOL,)).fetchall()
         if not rows:
-            raise SystemExit(f"snapshot {SNAPSHOT} has no {CAL_SYMBOL} bars")
+            raise SystemExit(f"no {CAL_SYMBOL} bars: run equities.py --backfill")
         self.ts = [r[0] for r in rows]
         self.days = [datetime.fromtimestamp(t, tz=timezone.utc).date() for t in self.ts]
         self.iso = [d.isoformat() for d in self.days]
         self.n = len(self.days)
         self.px = {}
         for sym in equities.UNIVERSE:
-            got = dict(conn.execute("SELECT ts, close FROM bar_snapshots WHERE snapshot=? AND pair=?",
-                                    (SNAPSHOT, sym)))
+            got = dict(conn.execute("SELECT ts, close FROM candles WHERE pair=? AND session='us_equity'",
+                                    (sym,)))
             self.px[sym] = [got.get(t) for t in self.ts]
         for sym in macro_data.TIINGO_EXTRA:
             got = dict(conn.execute("SELECT date, value FROM macro_series WHERE series=?",
@@ -232,7 +239,7 @@ def registry():
     usd_down = lambda m: test_all(change(m.px["UUP"], 126), lambda x: x < 0)   # noqa: E731
 
     def years(m, pick):
-        ends = [i == m.n - 1 or m.days[i].year != m.days[i + 1].year for i in range(m.n)]
+        ends = [i < m.n - 1 and m.days[i].year != m.days[i + 1].year for i in range(m.n)]
         return [e and pick(m, i) for i, e in enumerate(ends)]
 
     def santa(m):
@@ -436,9 +443,10 @@ def welch_p(a, b, sign):
 def evaluate(m, p, on=None):
     on = p["signal"](m) if on is None else on
     h, asset, sign = p["h"], p["asset"], p["sign"]
+    active = bool(on[-1]) if p["pid"] in CONDITIONS else any(on[-h:])
     valid = [i for i in range(m.n) if forward(m, asset, i, h) is not None]
     if not valid:
-        return {"n": 0, "n_base": 0, "active": bool(on[-1]), "last_on": None}
+        return {"n": 0, "n_base": 0, "active": active, "last_on": None}
     entries = spaced([i for i in valid if on[i]], h)
     off = [i for i in range(valid[0], valid[-1] + 1, h) if not on[i] and i in set(valid)]
     a = [forward(m, asset, i, h) for i in entries]
@@ -450,12 +458,13 @@ def evaluate(m, p, on=None):
         y = [forward(m, asset, i, h) for i in off if side(i)]
         halves.append(V._mean(x) - V._mean(y) if x and y else None)
     last = max((i for i in range(m.n) if on[i]), default=None)
+    # an event stays active for its h-day window, a condition only while it holds
     return {"n": len(a), "n_base": len(b),
             "mean_on": V._mean(a) if a else None, "mean_base": V._mean(b) if b else None,
             "hit_on": sum(x > 0 for x in a) / len(a) if a else None,
             "hit_base": sum(x > 0 for x in b) / len(b) if b else None,
             "p": welch_p(a, b, sign), "first_half": halves[0], "second_half": halves[1],
-            "first_date": m.iso[valid[0]], "active": bool(on[m.n - 1]),
+            "first_date": m.iso[valid[0]], "active": active,
             "last_on": m.iso[last] if last is not None else None}
 
 
@@ -555,8 +564,14 @@ def noteworthy(conn, limit=6):
 def main_cli():
     ap = argparse.ArgumentParser(description=__doc__.split("\n\n")[0])
     ap.add_argument("--show", action="store_true", help="print the stored ledger, no run")
+    ap.add_argument("--refresh", action="store_true", help="fetch new data before the run")
     args = ap.parse_args()
     conn = sqlite3.connect(main.DB_PATH, timeout=main.DB_TIMEOUT_S)
+    if args.refresh:
+        equities.ensure_tables(conn)
+        macro_data.ensure_tables(conn)
+        macro_data.refresh(conn)
+        equities.backfill(conn, equities.load_tiingo_credentials())
     if not args.show:
         run(conn)
     show(conn)

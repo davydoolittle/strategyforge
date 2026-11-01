@@ -23,6 +23,7 @@ from datetime import date, datetime, timezone
 
 import health
 import main
+import patterns
 import tsp_backtest as B
 import tsp_data as D
 import tsp_rules as R
@@ -157,7 +158,7 @@ def build_report(conn, cfg, now_utc=None, mode="auto"):
             "weights": weights, "moves_left": moves_left, "days_left": days_left,
             "fill_date": fill_date, "deadline_utc": dl, "notes": notes + ds.notes,
             "strategy": cfg["live_strategy"], "evidence": evidence(conn, cfg["live_strategy"], mode),
-            "disclaimer": cfg["report"]["disclaimer"]}
+            "noteworthy": patterns.noteworthy(conn), "disclaimer": cfg["report"]["disclaimer"]}
 
 
 def _last_business_day(now_utc):
@@ -216,6 +217,10 @@ def render(rep, short=False):
         for n in rep["notes"]:
             if "stale" in n or "assuming" in n or "proxies" in n:
                 w(f"Note: {n}")
+    if rep.get("noteworthy"):
+        w("Noteworthy (history, not advice):")
+        for n in rep["noteworthy"]:
+            w(f"  {n}")
     w(rep["disclaimer"])
     return "\n".join(L)
 

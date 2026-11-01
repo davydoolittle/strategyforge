@@ -81,6 +81,8 @@ JOB_SPECS = [
     ("adversary", "7d", "adversary.py --top 20", 12 * 3600),
     # TSP module: fetch, report, ntfy once per new price date (re-runs are no-ops)
     ("tsp", "6h", "tsp_report.py --update --notify", 1800),
+    # pattern ledger: new macro and ETF data, then every pattern re-tested
+    ("patterns", "7d", "patterns.py --refresh", 1800),
 ]
 JOB_LOG_DIR = os.path.join(os.path.dirname(DB_PATH), "jobs")
 DB_TIMEOUT_S = 60    # wait this long for a job's write lock before an error

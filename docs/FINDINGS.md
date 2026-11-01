@@ -6,6 +6,58 @@ pinned windows on each candidate (P2.1).
 
 ---
 
+## F18. Pattern ledger: of 52 traditional market patterns, none is established; 5 are suggestive, about what luck would give
+
+*2026-11-01. `patterns.py`, list and labels committed (e68a728) before the first
+run. SPY from 1993, other ETFs from their start, macro from 1990 (Treasury, CBOE,
+BLS) and 2000 (NY Fed), through 2026-10-30. A macro value is read only from its
+release date. Windows never overlap; each pattern is compared with the same asset
+on days the signal was off; Benjamini-Hochberg at q = 0.10 across the 40 patterns
+with at least 8 windows. BLS values are today's vintage, so revisions are a small
+remaining leak. Eight more could not be tested (`patterns.NOT_TESTED`).*
+
+| label | count |
+|---|---|
+| SUPPORTED | **0** |
+| SUGGESTIVE | 5 |
+| OPPOSITE | 1 |
+| NOT SUPPORTED | 34 |
+| TOO FEW (under 8 windows) | 12 |
+
+| suggestive | asset, days | on | normal | up | windows | p |
+|---|---|---|---|---|---|---|
+| Turn of the month | SPY, 4 | +0.4% | +0.1% | 63% | 405 | 0.022 |
+| After a midterm election | SPY, 126 | +10.5% | +5.8% | 100% | 8 | 0.033 |
+| Falling dollar lifts commodities | DBC, 126 | +6.9% | +0.6% | 56% | 27 | 0.061 |
+| September is weak | SPY, 21 | -0.3% | +1.0% | 53% | 34 | 0.064 |
+| Buy a 10% correction | SPY, 126 | +10.2% | +5.8% | 76% | 17 | 0.099 |
+
+**What the table shows.**
+
+- **Five at p < 0.10 from 40 tests is close to chance.** About four would clear
+  that bar by luck alone. None survives the correction for testing this many.
+- **The one result that does survive is backwards.** After a falling dollar, foreign
+  stocks trailed US stocks: EFA minus SPY -4.2% against +0.8%, and ahead in only 15%
+  of 27 windows. Both halves of the history agree.
+- **The dollar and gold claim fails in the ledger too:** GLD +2.3% against +3.9%.
+- **Many famous warnings did not hold.** After a death cross SPY rose 8.4% against
+  5.8%. New highs, a 60% run-up, low VIX, Sell in May (still +4.0%, up in 76% of
+  windows) and rising yields all failed as warnings.
+- **Stocks' upward drift dominates.** Most stock patterns, good or bad, were up in
+  70-90% of windows. This matches F12-F17.
+- **The biggest macro events are too rare to judge.** Inversions, first Fed cuts and
+  hikes, high inflation and Sahm signals have 3 to 7 windows, in one period of
+  history. Some averages look large (inflation above 4%: SPY +0.1% against +14.1%,
+  6 windows), but that is a reason to look closer, not evidence.
+
+### What this licenses
+
+Show these as context, with the evidence and the label. Do not act on them. None
+is a trading rule, and a SUGGESTIVE label does not earn a place in one. The ledger
+re-tests weekly, so labels can change as data arrives.
+
+---
+
 ## F17. Pre-registered ETF trend book: FAIL against buy-and-hold; it cut risk more than return, but that is not what was tested
 
 *2026-11-01. Phase 10, `etf_portfolio.py` on snapshot `etf-2026-10-30`. One fixed

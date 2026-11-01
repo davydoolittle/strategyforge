@@ -39,6 +39,7 @@ export, and the TSP allocation module. Nothing in this repo places live orders.
 - **F14:** TSP on official prices: F12 stands, nothing beats 100% C. DSRs above 0.95 come from one config moving the noise ceiling, not from an edge.
 - **F16:** Core at 1d on ten ETFs: all 8 testable candidates rejected on A2. The best SR so far (#6377, 0.274) is market drift, not timing. No F15 exists.
 - **F17:** Pre-registered ETF trend book, N = 1: FAIL against buy-and-hold (PSR 0.032). It cut risk more than return, but no forward test is earned.
+- **F18:** Ledger of 52 traditional market patterns: 0 supported, 5 suggestive (about chance), 1 opposite. Context for the TSP report, never a trading rule.
 
 ## State of play
 
