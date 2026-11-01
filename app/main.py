@@ -83,6 +83,8 @@ JOB_SPECS = [
     ("tsp", "6h", "tsp_report.py --update --notify", 1800),
     # pattern ledger: new macro and ETF data, then every pattern re-tested
     ("patterns", "7d", "patterns.py --refresh", 1800),
+    # insider activity from Edgar: pull, then one digest, or a warning if it is down
+    ("insider", "1d", "insider_feed.py --notify", 600),
 ]
 JOB_LOG_DIR = os.path.join(os.path.dirname(DB_PATH), "jobs")
 DB_TIMEOUT_S = 60    # wait this long for a job's write lock before an error

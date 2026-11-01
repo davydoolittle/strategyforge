@@ -14,6 +14,7 @@ export, and the TSP allocation module. Nothing in this repo places live orders.
 - Live DB: `/work/data/forge.db` (`FORGE_DB` is set). The collector writes to it
   every hour, so see the bulk-write rule below.
 - davesbridge data, read-only: `/bridge` (`/bridge/signals.db`).
+- Edgar Alert: separate repo on Matrix, port 8433. `insider_feed.py` reads its `/api/export`; nothing here writes to it.
 - CLIs run from `/work/app`. Tests: `python -m unittest discover -s tests`.
 - The collector's jobs run the copy of `app/` baked into its image, not this
   share. A change to `main.py` or to a module a job runs takes effect only after
@@ -46,5 +47,6 @@ export, and the TSP allocation module. Nothing in this repo places live orders.
 - F10, F11 null.
 - No further 1h family searches.
 - The core 1d ETF budget is spent (`optimizer.DECLARED_BUDGETS`). ETF bars are frozen in snapshot `etf-2026-10-30`.
+- Insider data is UNTESTED context. No message may predict a move until a pre-registered study passes.
 - No strategy in this repo has beaten buy-and-hold. Changing Phase 10's rule after F17 is a new hypothesis and needs its own registration.
 - Forward tests #3214 and #4027 running. Both are marked `forward_test`; neither has a forward trade yet.

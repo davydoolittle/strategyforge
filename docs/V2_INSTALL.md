@@ -146,21 +146,22 @@ docker run --rm python:3.12-slim python -c "import secrets; print(secrets.token_
 
 ```
 docker run -d --name strategyforge-web --restart unless-stopped \
-  -p 8091:8091 \
+  -p 8093:8091 \
   -e WEB_TOKEN=<token> -e FORGE_DB=/data/forge.db \
   -v /mnt/user/appdata/strategyforge/app:/app:ro \
   -v /mnt/user/appdata/strategyforge/data:/data \
   -w /app python:3.12-slim python -u web.py
 ```
 
-Success: `docker logs strategyforge-web` shows `web: read-only API on http://0.0.0.0:8091`.
+Port 8091 on Matrix belongs to another app, so the host side is 8093.
+Success: `docker logs strategyforge-web` shows `web: read-only API on http://0.0.0.0:8091` (the port inside the container).
 Failure `WEB_TOKEN must be set...`: the token is missing or shorter than 16 characters.
 
-3. Open `http://matrix:8091/` on the LAN, or `http://<matrix tailscale name>:8091/`
+3. Open `http://matrix:8093/` on the LAN, or `http://<matrix tailscale name>:8093/`
    from a device on your tailnet. Paste the token into the box at the top right
    once per browser.
 
-- **Nothing public.** Do not forward 8091 on the router and do not add a
+- **Nothing public.** Do not forward 8093 on the router and do not add a
   Cloudflare tunnel route for it. Tailscale is the only remote path.
 - The database is opened with SQLite `mode=ro` on every request, so the
   dashboard cannot write. `/data` is mounted read-write only so that SQLite
@@ -177,7 +178,7 @@ When `app/main.py` changes, or any module the scheduled jobs run: the image bake
 cd /mnt/user/appdata/strategyforge && docker build -t strategyforge:latest .
 ```
 
-and in the Unraid Docker tab, edit the `strategyforge` container and click **Apply** without changing anything — that recreates the container from the new image. `docker restart` alone does **not** pick up a rebuilt image.
+then recreate the container from the new image. It was started with `docker run`, so Unraid has no Edit option for it. Save `BACKFILL_DAYS`, `NTFY_TOPIC` and the network mode from `docker inspect strategyforge` first, then `docker rm` it and `docker run -d` it again with those, restart policy `unless-stopped`, and the mounts `/mnt/user/appdata/strategyforge/data:/data` and `/mnt/user/appdata/davesbridge/data:/bridge:ro`. `docker restart` alone does **not** pick up a rebuilt image.
 
 ## Undo
 

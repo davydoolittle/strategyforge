@@ -211,6 +211,13 @@ Goal: the test F16 says is the honest next one: a diversified, volatility-scaled
 
 ---
 
+## 8f. Edgar insider feed  (added 2026-11-01)
+
+- [x] **Stage 1, feed and digest.** `app/insider_feed.py` pulls Edgar's read-only `/api/export` into `insider_txns` and `insider_clusters` and sends one daily ntfy digest of clusters and open-market buys of at least $100K, or a warning if Edgar is down or stale. Lines say UNTESTED and predict nothing. The S&P 100 and four crypto-linked tickers are muted in Edgar, so they store data without pushing. Crypto tokens have no insiders; only listed companies link to them.
+- [ ] **Stage 2, the event study.** Pre-register a rule on SEC's Form 4 history before testing. Score each stock against the market. The universe must include companies that later shrank or vanished. Only a pass may change the message.
+
+---
+
 ## 9. Not in scope (and why)
 
 | APEX section | status | reason |
