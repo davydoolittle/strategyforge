@@ -189,6 +189,22 @@ Goal: test the systematic-macro / CTA hypothesis on liquid ETFs under a declared
 
 ---
 
+## 8d. Phase 10 — Pre-registered ETF portfolio test  (added 2026-11-01, proposed, not started)
+
+Goal: the test F16 says is the honest next one: a diversified, volatility-scaled book, scored against buy-and-hold so drift cannot pass for skill. Definition of done: F17 written whatever it shows. This rule is written down before any portfolio backtest exists. It is one hypothesis, N = 1: no search, no parameter changes after the first run. A fix to rule semantics is allowed only with a written reason, as in F12.
+
+- [ ] **P10.1 Portfolio evaluator.** `app/etf_portfolio.py`, read-only on forge.db, reads snapshot `etf-2026-10-30` only. Tests with known answers.
+- [ ] **P10.2 The test.** Stop and report. Rule, fixed here:
+  - Universe: the ten ETFs. Window: 2007-03-01 (all ten trading) to 2026-10-30, trading from 12 months later.
+  - Signal, on each month's last trading day: an ETF is held if its 12-month adjusted return is > 0, otherwise that sleeve is in cash. Long or flat, no shorts (F16: shorts lost).
+  - Size: each held ETF targets 10% annualised volatility, from 60 trading days of returns, capped at 1/10 of equity x 2 per sleeve; total notional at most 2x equity.
+  - Fills: next trading day's open, costs from `instruments`. Cash earns nothing, which is against the rule.
+  - Benchmark: equal-weight buy-and-hold of the same ten, rebalanced monthly, same costs.
+  - Pass: PSR vs 0 >= 0.95 on monthly returns of book minus benchmark, N = 1 (about annualised excess Sharpe 0.38 over 18.6 years). Report also: CAGR, max drawdown, 2x cost, fills one day later, each sleeve's share of return, and a benchmark volatility-matched to the book.
+  - A pass earns a forward test on data after 2026-10-30, not a promotion.
+
+---
+
 ## 9. Not in scope (and why)
 
 | APEX section | status | reason |
@@ -197,7 +213,7 @@ Goal: test the systematic-macro / CTA hypothesis on liquid ETFs under a declared
 | §8 Insider Form 4 | **not here** | Equities-only; this pipeline trades crypto. Dave's `edgar-alert` project already ingests Form 4. If a crypto-relevant use emerges (e.g. COIN, MSTR as sentiment proxies) consume its table rather than re-scrape. |
 | §9 13F / 13D / COT | **not here** | 45-day-stale disclosures are irrelevant at 1h–4h horizons. COT has no crypto coverage that matters. |
 | §6 Forex markets | **deferred** | Different data vendor, different session logic, different cost model. ETFs are Phase 9. |
-| Portfolio / cross-sectional mode for equities | **deferred** (Phase 9) | Needs F16 first. |
+| Cross-sectional mode for equities | **deferred** (Phase 9) | Needs F16 first. The time-series book is Phase 10. |
 | Individual stocks | **deferred** (Phase 9) | Needs a point-in-time universe to avoid survivorship bias. |
 | Insider-filing event study | **deferred** (Phase 9) | Needs stocks. |
 | Order routing from davesbridge to Alpaca | **deferred** (Phase 9) | Nothing has passed validation. |
