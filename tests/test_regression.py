@@ -141,8 +141,10 @@ class RegressionTest(unittest.TestCase):
             drawn = streams.setdefault((seed, tf, family), [random.Random(seed), []])
             while len(drawn[1]) <= trial:
                 drawn[1].append(fam.for_timeframe(fam.sample_cfg(drawn[0]), W.tf_seconds(tf)))
-            # tick_size is a cost the optimizer sets per pair since P5.3, not a draw
+            # tick_size is a cost the optimizer sets per pair since P5.3, and
+            # bars_snapshot pins an ETF's data since P9.3: neither is a draw
             stored = json.loads(pj)
+            stored.pop("bars_snapshot", None)
             if {**drawn[1][trial], "tick_size": stored.get("tick_size")} != stored:
                 bad.append((seed, trial))
         self.assertEqual(bad, [], f"{len(bad)} of {len(rows)} seeded rows differ, e.g. {bad[:5]}")

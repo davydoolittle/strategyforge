@@ -6,6 +6,120 @@ pinned windows on each candidate (P2.1).
 
 ---
 
+## F16. Core family, daily, ten ETFs: all 8 testable candidates REJECTED on A2; the entries show no timing skill
+
+*2026-11-01. P9.3, on the live DB: `equities.py --snapshot etf-2026-10-30`
+(62,266 Tiingo adjusted bars, 1993-01-29 to 2026-10-30, sha256 c4d4ab7b...),
+then `optimizer.py --family core --tf 1d --trials 100 --seed 9101` on SPY QQQ
+IWM EFA EEM TLT IEF GLD DBC UUP (candidates #6301-#7300), then `adversary.py`
+on every survivor with >= 30 OOS trades (adversarial_reports #63-#70). The
+budget was declared before the run and spent once: 1,000 trials, all distinct.
+Costs are the P9.2 model: no commission, half of a wide spread per side,
+notional capped at 2x equity. There is no F15; the number was skipped.*
+
+### The search
+
+| ETF | passed OOS gate | of those >= 30 OOS trades | mean IS trades | trials with IS net > 0 |
+|---|---|---|---|---|
+| SPY | 19 | 5 | 18.7 | 97 |
+| QQQ | 7 | 1 | 11.1 | 54 |
+| IWM | 0 | 0 | 11.7 | 44 |
+| EFA | 12 | 0 | 16.2 | 95 |
+| EEM | 2 | 0 | 10.9 | 60 |
+| TLT | 2 | 0 | 23.2 | 32 |
+| IEF | 16 | 1 | 32.3 | 80 |
+| GLD | 25 | 1 | 20.5 | 89 |
+| DBC | 5 | 0 | 12.9 | 56 |
+| UUP | 7 | 0 | 17.6 | 69 |
+| **all** | **95** | **8** | 17.5 | |
+
+### Adversary verdicts
+
+All 8 are REJECTED. A2 is deflated by every core 1d trial (N = 1,000, pooled
+SR variance 0.1103 on 626 trials with >= 10 trades): E[max SR] **1.081**. "Long
+days" is the ETF's mean close-to-close return on days the candidate was long,
+against its mean on all days of the window, in bps.
+
+| # | ETF | full / OOS trades | SR/trade | PSR vs 0 | DSR | shorts | hard fails | soft fails | long days vs all days |
+|---|---|---|---|---|---|---|---|---|---|
+| 6377 | SPY | 111 / 40 | **0.274** | 0.999 | 0.000 | off | A2 | none | 3.4 vs 4.8 |
+| 6389 | SPY | 100 / 32 | 0.235 | 0.992 | 0.000 | on | A2 | none | 5.6 vs 4.8 |
+| 6321 | SPY | 107 / 40 | 0.224 | 0.990 | 0.000 | on | A2 A6 | A9 | 5.6 vs 4.8 |
+| 6355 | SPY | 102 / 38 | 0.213 | 0.985 | 0.000 | off | A2 A6 | A9 | 3.4 vs 4.8 |
+| 6331 | SPY | 128 / 44 | 0.179 | 0.982 | 0.000 | on | A2 | A9 | 3.8 vs 4.8 |
+| 6460 | QQQ | 134 / 51 | 0.174 | 0.978 | 0.000 | off | A2 A6 | none | 6.8 vs 4.7 |
+| 7045 | GLD | 96 / 31 | 0.158 | 0.943 | 0.000 | on | A2 | A9 | 9.7 vs 4.6 |
+| 6954 | IEF | 128 / 39 | 0.125 | 0.926 | 0.000 | on | A2 A6 | A9 | 2.7 vs 1.2 |
+
+**What the table shows.**
+
+- **The bar is out of reach as computed, but the ceiling is partly noise.** One
+  10-trade TLT trial (#6802, SR -5.6) accounts for almost half the variance, and
+  the median trial has 21 trades. The verdict does not depend on that. These
+  readings are information only; the rule is unchanged:
+
+  | variance used | N | E[max SR] | best DSR (#6377) |
+  |---|---|---|---|
+  | declared: all >= 10 trades | 1,000 | 1.081 | 0.000 |
+  | without #6802 | 1,000 | 0.787 | 0.000 |
+  | only the 46 trials with >= 50 trades | 1,000 | 0.290 | 0.433 |
+  | those 46, and N = 100 (one ETF's trials) | 100 | 0.225 | 0.702 |
+  | SPY's own 100 trials | 100 | 0.490 | 0.010 |
+
+  No candidate reaches 0.95 on any row, including rows built to be generous.
+- **The best SR in the project is mostly market drift.** #6377's 0.274 beats
+  every crypto candidate, but SPY returned less on its long days (3.4 bps) than
+  on an average day (4.8 bps). No long-days gap reaches t = 2 on any candidate:
+  the largest are GLD (1.49) and IEF (1.41). All 53 of SPY's long-only trials
+  made money in-sample, and TLT, which fell, had 32 of 100 positive. A trial's
+  profit tracks whether the ETF rose, not the signal.
+- **Shorts lose.** Of the five candidates with shorts on, four lost money on
+  them and one made +71. On IS net, DBC is the exception: 45 of 48 trials with
+  shorts on were positive against 11 of 52 long-only.
+- **A6 failed on 4 of 8.** They earn more entering a day later (#6355 +3,682 to
+  +5,260). On daily bars these breakouts tend to pull back at once.
+- **A7 is not evidence of a shared edge here.** Every candidate holds on at
+  least one other ETF, but these ETFs also rose, and the bar needs only one of nine.
+
+### Trades per hypothesis, against crypto 1h
+
+| | crypto core, 1h | ETF core, 1d | |
+|---|---|---|---|
+| mean IS trades per trial | 188.5 | 17.5 | **10.8x fewer** |
+| trials too thin for the SR variance (< 10 trades) | 0 of 300 (BTC) | 374 of 1,000 | |
+| best candidate's trades per year | ~27 (#4027) | ~3.4 (#6377) | **~8x fewer** |
+| best SR/trade | 0.184 | 0.274 | |
+| E[max SR] | 0.234 (N = 300) | 1.081 (N = 1,000) | **4.6x higher** |
+
+Daily bars gave 3 to 6 times the years and still far fewer trades per
+hypothesis. A daily single-ETF breakout rule fires about three times a year,
+so per-trade evidence builds at about an eighth of the 1h rate.
+
+### Conclusion
+
+Core on daily bars across ten ETFs and up to 33 years of data produced no
+validated candidate. It has the highest per-trade SR so far, but that SR comes
+from being long assets that rose, not from when it enters. Nothing passes A2 on
+any reading of the ceiling, and four of eight also fail A6.
+
+### What this licenses
+
+- **No forward test from this run.** #6377 would need about 36 forward trades
+  at SR 0.274, which is about 11 years, and its entries show no timing skill.
+  A forward test would mostly measure SPY's drift.
+- **This tests `core` at 1d, not trend following.** Core's ranges were set for
+  1h crypto (EMAs of 5-80 bars, entries within 1-4% of the fast EMA), and it
+  trades one ETF at a time with fixed-risk sizing. A real CTA holds a
+  diversified, volatility-scaled book. F16 does not reject that.
+- **The next honest test is the deferred portfolio mode, with drift removed.**
+  It adds observations per hypothesis, which is what this run lacked. Score it
+  against buy-and-hold of the same assets, or the drift will pass for skill.
+- **Caveats.** The ten ETFs were chosen today, so the universe has hindsight.
+  One spread figure covers 1993-2026, though A5 passes on all 8 at 2x. A target
+  gapped through fills at the target, which understates winners slightly.
+
+---
+
 ## F14. TSP on official share prices: F12's verdict stands; no tactical strategy beats 100% C, and the DSRs above 0.95 are not evidence
 
 *2026-11-01. Daily G F C S I share prices from tspfolio.com (not tsp.gov, which

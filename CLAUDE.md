@@ -37,9 +37,11 @@ export, and the TSP allocation module. Nothing in this repo places live orders.
 - **F12:** TSP, proxy data: no tactical strategy beats 100% C after 2009. They buy smaller drawdowns, not return.
 - **F13:** #4027 registered as the N = 1 forward test: PSR vs 0 ≥ 0.95 on forward trades only, ~76 trades at SR 0.184, no re-tuning.
 - **F14:** TSP on official prices: F12 stands, nothing beats 100% C. DSRs above 0.95 come from one config moving the noise ceiling, not from an edge.
+- **F16:** Core at 1d on ten ETFs: all 8 testable candidates rejected on A2. The best SR so far (#6377, 0.274) is market drift, not timing. No F15 exists.
 
 ## State of play
 
 - F10, F11 null.
 - No further 1h family searches.
+- The core 1d ETF budget is spent (`optimizer.DECLARED_BUDGETS`). ETF bars are frozen in snapshot `etf-2026-10-30`.
 - Forward tests #3214 and #4027 running. Both are marked `forward_test`; neither has a forward trade yet.
