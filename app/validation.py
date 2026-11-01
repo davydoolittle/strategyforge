@@ -431,9 +431,10 @@ def is_degenerate_trial(sr, n_trades, net, params_json):
 
 
 def _variance_rows(conn, pair, tf, family):
+    """pair=None: every pair, for a search that spans a universe (P9.3)."""
     return conn.execute(
         "SELECT id, is_sharpe, is_trades, is_net, params_json FROM candidates"
-        " WHERE pair=? AND tf=? AND family=?", (pair, tf, family)).fetchall()
+        " WHERE pair=COALESCE(?, pair) AND tf=? AND family=?", (pair, tf, family)).fetchall()
 
 
 def degenerate_trials(conn, pair, tf, family=strategies.DEFAULT_FAMILY):

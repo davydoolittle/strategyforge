@@ -113,8 +113,12 @@ def attack(conn, cid, verbose=True):
     rets = V.trade_returns(full["trades"], cap)
     sr = V.sharpe(rets)
     skew, kurt = V.moments(rets)
+    # crypto searches a pair at a time. ETFs are one search across the universe
+    # (P9.3), so they are deflated by every 1d trial of the family, not one symbol's.
+    etf = engine.instrument(conn, pair) is not None
+    scope = None if etf else pair
     sr_var, n_sampled, n_trials, n_sr_missing = V.sharpe_variance_from_candidates(
-        conn, pair, tf, family)
+        conn, scope, tf, family)
     # every trial of every family: information only, the verdict uses n_trials
     n_trials_all = conn.execute("SELECT COUNT(*) FROM candidates").fetchone()[0]
 
@@ -144,7 +148,9 @@ def attack(conn, cid, verbose=True):
         "sharpe_per_trade": sr, "skew": skew, "kurtosis": kurt, "n_obs": len(rets),
         "sr_variance_across_trials": sr_var, "sr_var_sampled_from": n_sampled,
         "sr_missing": n_sr_missing,
-        "sr_degenerate_excluded": V.degenerate_trials(conn, pair, tf, family),
+        "sr_degenerate_excluded": V.degenerate_trials(conn, scope, tf, family),
+        "trial_scope": "family_tf" if etf else "family_pair_tf",
+        "n_trials_home_pair": V.sharpe_variance_from_candidates(conn, pair, tf, family)[2],
         "n_trials_pair_tf": n_trials, "expected_max_sr_pair_tf": bench_local, "dsr_pair_tf": dsr_local,
         "n_trials_all": n_trials_all, "expected_max_sr_all": bench_global, "dsr_all": dsr_global,
         "n_eff_pair_tf": ne["n_eff"] if ne else None,
@@ -281,7 +287,8 @@ def transfer(conn, cfg, others, tf_s, end_ts, start_ts):
     we have not checked cannot count as evidence either way."""
     tr, excluded = [], []
     for other in others:
-        tick = collector.TICK_SIZE.get(other)
+        inst = engine.instrument(conn, other)
+        tick = inst["tick_size"] if inst else collector.TICK_SIZE.get(other)
         if tick is None:
             excluded.append(other)
             continue
@@ -394,7 +401,7 @@ def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("--candidate", type=int)
     ap.add_argument("--top", type=int, help="attack the N best OOS survivors")
-    ap.add_argument("--tf", default="1h", choices=["1h", "4h"])
+    ap.add_argument("--tf", default="1h", choices=["1h", "4h", "1d"])
     ap.add_argument("--family", choices=strategies.names(),
                     help="with --top: only this strategy family (default: all)")
     ap.add_argument("--json", action="store_true")

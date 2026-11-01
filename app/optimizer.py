@@ -30,6 +30,12 @@ Usage:
   python optimizer.py --pairs BTC-USD,ETH-USD,SOL-USD --tf 1h --trials 300
   python optimizer.py --pairs BTC-USD --tf 4h --trials 200 --seed 7
   python optimizer.py --family core --tf 1h --trials 300 --seed 5301
+  python optimizer.py --family core --tf 1d --trials 100 --seed 9101 \\
+      --pairs SPY,QQQ,IWM,EFA,EEM,TLT,IEF,GLD,DBC,UUP --snapshot NAME
+
+ETFs (P9.3): a symbol in instruments takes its seed from its place in
+equities.UNIVERSE, needs --snapshot so its bars stay frozen, and is held to
+DECLARED_BUDGETS. Shadow features are not annotated: they need crypto context.
 """
 
 import argparse
@@ -41,6 +47,7 @@ import time
 import urllib.request
 
 import engine
+import equities
 import features
 import lineage
 import main as collector
@@ -59,6 +66,10 @@ OOS_MIN_TRADES = 8
 OOS_MIN_PF = 1.2
 # how many survivors get full-window feature annotation
 ANNOTATE_TOP = 3
+
+# (family, tf) -> trials per symbol, on one base seed. Declared before the run
+# (V2_PROMPT P9.3) and not to be exceeded: more draws are more chances to be lucky.
+DECLARED_BUDGETS = {("core", "1d"): 100}
 
 NTFY_TOPIC = None  # set from env in main
 
@@ -170,14 +181,31 @@ def seed_for_pair(base_seed, pair, pairs=None):
     return base_seed * 1000 + pairs.index(pair)
 
 
-def run_pair(conn, pair, tf, trials, base_seed, family=strategies.DEFAULT_FAMILY):
+def check_budget(conn, pair, tf, family, trials, base_seed):
+    budget = DECLARED_BUDGETS.get((family, tf))
+    if budget is None:
+        return
+    if trials > budget:
+        raise SystemExit(f"{family} {tf}: {trials} trials exceeds the declared {budget}")
+    other = conn.execute("SELECT DISTINCT base_seed FROM candidates WHERE pair=? AND tf=? AND family=?"
+                         " AND base_seed<>?", (pair, tf, family, base_seed)).fetchone()
+    if other:
+        raise SystemExit(f"{pair} {family} {tf} was already run on seed {other[0]}: "
+                         f"a second seed would spend trials outside the budget")
+
+
+def run_pair(conn, pair, tf, trials, base_seed, family=strategies.DEFAULT_FAMILY, snapshot=None):
     fam = strategies.get(family)
-    tf_s = 3600 if tf == "1h" else 14400
-    seed = seed_for_pair(base_seed, pair)
+    tf_s = windows.tf_seconds(tf)
+    inst = engine.instrument(conn, pair)
+    if inst and not snapshot:
+        raise SystemExit(f"{pair}: ETF runs need --snapshot, or a refresh would move their bars")
+    check_budget(conn, pair, tf, family, trials, base_seed)
+    seed = seed_for_pair(base_seed, pair, list(equities.UNIVERSE) if inst else None)
     # the pair's verified tick (main.TICK_SIZE, F4), not the family default of
     # 0.01, which made XRP's slippage 1.5-5% per side. Rows before P5.3 kept
     # 0.01. tick_size is a cost, not DNA.
-    tick = collector.TICK_SIZE.get(pair)
+    tick = inst["tick_size"] if inst else collector.TICK_SIZE.get(pair)
     if tick is None:
         print(f"[{pair}] WARNING no verified tick size in main.TICK_SIZE; costs use the "
               f"family default and may be wrong")
@@ -201,6 +229,8 @@ def run_pair(conn, pair, tf, trials, base_seed, family=strategies.DEFAULT_FAMILY
         cfg = fam.for_timeframe(fam.sample_cfg(rng), tf_s)
         if tick is not None:
             cfg["tick_size"] = tick
+        if inst:
+            cfg["bars_snapshot"] = snapshot
         dna = lineage.dna_of(cfg)
         # restartable (V2_PROMPT §10.9): a run killed halfway is resumed by
         # running it again. The sampler is drawn above either way, so the
@@ -287,9 +317,10 @@ def parse_args(argv=None):
     ap = argparse.ArgumentParser()
     ap.add_argument("--pairs", default=",".join(collector.PAIRS),
                     help="comma list, each must be in main.PAIRS (default: all of them)")
-    ap.add_argument("--tf", default="1h", choices=["1h", "4h"])
+    ap.add_argument("--tf", default="1h", choices=["1h", "4h", "1d"])
     ap.add_argument("--family", default=strategies.DEFAULT_FAMILY, choices=strategies.names(),
                     help="strategy family to search (app/strategies/)")
+    ap.add_argument("--snapshot", help="bar_snapshots name; required for ETFs")
     ap.add_argument("--trials", type=int, default=300)
     ap.add_argument("--seed", type=int, default=42,
                     help="base seed; each pair gets base*1000 + its index in PAIRS")
@@ -329,14 +360,14 @@ def main():
 
     all_survivors = []
     for pair in [p.strip() for p in args.pairs.split(",")]:
-        result = run_pair(conn, pair, args.tf, args.trials, args.seed, args.family)
+        result = run_pair(conn, pair, args.tf, args.trials, args.seed, args.family, args.snapshot)
         if not result:
             continue
         survivors, full_start, full_end = result
         # annotate top OOS performers with shadow features over the FULL window
         survivors.sort(key=lambda r: r["oos_pf"] or 0, reverse=True)
-        tf_s = 3600 if args.tf == "1h" else 14400
-        for row in survivors[:ANNOTATE_TOP]:
+        tf_s = windows.tf_seconds(args.tf)
+        for row in [] if engine.instrument(conn, pair) else survivors[:ANNOTATE_TOP]:
             full = engine.backtest(conn, pair, row["cfg"], full_start, full_end, tf_s)
             n = features.annotate_trades(conn, row["id"], pair, tf_s, full["trades"])
             print(f"  candidate {row['id']}: annotated {n} trades with shadow features")
@@ -367,7 +398,7 @@ def main():
     print(f"(total candidates in table: {total}, of which {args.family}: {fam_total};"
           f" distinct parameter sets: {distinct})")
     print(f"Read: A2 deflates a {args.family} candidate by the {args.family} trials on its"
-          f" pair/tf, so this run raised that bar for this family only.")
+          f" pair/tf (all ETFs together at 1d), so this run raised that bar for this family only.")
     print("\nInspect any candidate's parameters:")
     print("  SELECT params_json FROM candidates WHERE id=<ID>;")
     conn.close()

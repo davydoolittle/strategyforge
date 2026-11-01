@@ -70,6 +70,7 @@ class TestTransfer(unittest.TestCase):
             return outcomes[pair]
         with mock.patch.object(A.engine, "backtest", fake), \
                 mock.patch.object(A.W, "compute", lambda *a: ("s", "split", "end")), \
+                mock.patch.object(A.engine, "instrument", lambda *a: None), \
                 mock.patch.object(A.collector, "TICK_SIZE", ticks):
             tr, excluded = A.transfer(None, engine.default_cfg(), list(outcomes), 3600, 0, 0)
         return {x["pair"]: x for x in tr}, excluded, seen

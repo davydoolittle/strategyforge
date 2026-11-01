@@ -26,10 +26,12 @@ token), alpaca.env (APCA_API_KEY_ID, APCA_API_SECRET_KEY).
   python equities.py --backfill --force   # all of them
   python equities.py --backfill --source alpaca
   python equities.py --compare            # Tiingo vs Alpaca, daily returns
+  python equities.py --snapshot NAME      # freeze today's bars for a research run
   python equities.py --report             # history depth per symbol
 """
 
 import argparse
+import hashlib
 import json
 import os
 import sqlite3
@@ -62,7 +64,8 @@ SPREAD_BPS = {"SPY": 2.0, "QQQ": 2.0, "IWM": 3.0, "EFA": 4.0, "EEM": 5.0, "TLT":
 SLIPPAGE_FRAC = 0.5       # cross half the spread per side
 MAX_LEVERAGE = 2.0        # Reg-T
 
-# symbol -> fund inception. Reference dates: Alpaca does not publish them, and
+# Append only: a symbol's position here sets its optimizer seed, as main.PAIRS
+# does for crypto. symbol -> fund inception. Reference dates: Alpaca does not publish them, and
 # listed_from is not the same thing as the first bar we hold (data_start).
 UNIVERSE = {
     "SPY": "1993-01-29", "QQQ": "1999-03-10", "IWM": "2000-05-22",
@@ -96,6 +99,15 @@ def ensure_tables(conn):
                       ("commission_pct", "REAL DEFAULT 0"), ("max_leverage", f"REAL DEFAULT {MAX_LEVERAGE}")):
         if name not in have:
             conn.execute(f"ALTER TABLE instruments ADD COLUMN {name} {typ}")
+    conn.execute("""CREATE TABLE IF NOT EXISTS bar_snapshots (
+        snapshot TEXT NOT NULL, pair TEXT NOT NULL, ts INTEGER NOT NULL,
+        open REAL, high REAL, low REAL, close REAL, volume REAL,
+        PRIMARY KEY (snapshot, pair, ts)
+    )""")
+    conn.execute("""CREATE TABLE IF NOT EXISTS snapshot_meta (
+        snapshot TEXT PRIMARY KEY, created_at TEXT, n_rows INTEGER, sha256 TEXT,
+        data_end TEXT, sources TEXT     -- written last: the restart marker
+    )""")
     have = {r[1] for r in conn.execute("PRAGMA table_info(candles)")}
     if "session" not in have:
         conn.execute("ALTER TABLE candles ADD COLUMN session TEXT NOT NULL DEFAULT 'crypto'")
@@ -292,6 +304,36 @@ def report(conn):
         print(f"Read: every symbol has at least {MIN_YEARS:.0f} years. All ten overlap from {first}.")
 
 
+def snapshot(conn, name):
+    """Copy every us_equity bar to bar_snapshots under `name`. Restartable:
+    rerun after a kill and only the missing rows go in. A finished snapshot is
+    never changed, so reusing its name is refused unless the bars still match."""
+    rows = conn.execute("SELECT pair, ts, open, high, low, close, volume FROM candles"
+                        " WHERE session=? ORDER BY pair, ts", (SESSION,)).fetchall()
+    if not rows:
+        raise ValueError("no us_equity bars to snapshot")
+    digest = hashlib.sha256(repr(rows).encode()).hexdigest()
+    done = conn.execute("SELECT sha256 FROM snapshot_meta WHERE snapshot=?", (name,)).fetchone()
+    if done:
+        if done[0] != digest:
+            raise ValueError(f"snapshot {name} exists with different bars")
+        return digest
+    have = {(r[0], r[1]) for r in conn.execute(
+        "SELECT pair, ts FROM bar_snapshots WHERE snapshot=?", (name,))}
+    todo = [(name, *r) for r in rows if (r[0], r[1]) not in have]
+    for i in range(0, len(todo), BATCH_ROWS):
+        conn.executemany("INSERT INTO bar_snapshots VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
+                         todo[i:i + BATCH_ROWS])
+        conn.commit()
+    sources = ",".join(sorted({r[0] for r in conn.execute(
+        "SELECT source FROM instruments WHERE session=? AND source IS NOT NULL", (SESSION,))}))
+    conn.execute("INSERT INTO snapshot_meta VALUES (?, ?, ?, ?, ?, ?)",
+                 (name, datetime.now(timezone.utc).isoformat(timespec="seconds"), len(rows), digest,
+                  _date(max(r[1] for r in rows)), sources))
+    conn.commit()
+    return digest
+
+
 def compare_report(conn):
     """Read-only: fetches both vendors and prints where they disagree."""
     th, ah = load_tiingo_credentials(), load_credentials()
@@ -317,6 +359,7 @@ def main_cli():
     ap.add_argument("--force", action="store_true", help="re-fetch symbols already current")
     ap.add_argument("--source", choices=("tiingo", "alpaca"), default="tiingo")
     ap.add_argument("--compare", action="store_true", help="Tiingo vs Alpaca, read-only")
+    ap.add_argument("--snapshot", metavar="NAME")
     ap.add_argument("--report", action="store_true")
     args = ap.parse_args()
     conn = sqlite3.connect(main.DB_PATH, timeout=main.DB_TIMEOUT_S)
@@ -329,6 +372,8 @@ def main_cli():
                  exchange=fetch_exchange, source="alpaca")
     elif args.backfill:
         backfill(conn, load_tiingo_credentials(), force=args.force)
+    if args.snapshot:
+        print(f"snapshot {args.snapshot}: sha256 {snapshot(conn, args.snapshot)}")
     report(conn)
 
 

@@ -92,14 +92,20 @@ def session_pairs(conn, pair):
         " (SELECT session FROM candles WHERE pair=? LIMIT 1) ORDER BY pair", (pair,))]
 
 
-def load_candles(conn, pair, end_ts, tf_seconds=3600, start_ts=None):
+def load_candles(conn, pair, end_ts, tf_seconds=3600, start_ts=None, snapshot=None):
+    """snapshot (P9.3): read a frozen copy from bar_snapshots instead. A new
+    dividend re-bases adjusted bars, so an ETF candidate names its snapshot in
+    cfg["bars_snapshot"] and keeps reproducing after candles are refreshed."""
+    source, args = "candles WHERE", ()
+    if snapshot:
+        source, args = "bar_snapshots WHERE snapshot = ? AND", (snapshot,)
     rows = conn.execute(
-        "SELECT ts, open, high, low, close, volume FROM candles"
-        " WHERE pair = ? AND ts <= ? AND ts >= ? ORDER BY ts",
-        (pair, end_ts, start_ts if start_ts is not None else 0),
+        f"SELECT ts, open, high, low, close, volume FROM {source}"
+        " pair = ? AND ts <= ? AND ts >= ? ORDER BY ts",
+        (*args, pair, end_ts, start_ts if start_ts is not None else 0),
     ).fetchall()
     if not rows:
-        raise RuntimeError(f"no candles for {pair}")
+        raise RuntimeError(f"no candles for {pair}" + (f" in snapshot {snapshot}" if snapshot else ""))
     if tf_seconds == 3600:
         return ([r[0] for r in rows], [r[1] for r in rows], [r[2] for r in rows],
                 [r[3] for r in rows], [r[4] for r in rows], [r[5] for r in rows])
@@ -140,7 +146,7 @@ def backtest(conn, pair, cfg, start_iso, end_iso, tf_seconds=3600, signals=None)
     # before it, so indicator warmup is the same as when a candidate's windows
     # were pinned even after older candles are backfilled.
     ts, o, h, l, c, v = load_candles(conn, pair, end_ts, tf_seconds,
-                                     cfg.get("history_start_ts"))
+                                     cfg.get("history_start_ts"), cfg.get("bars_snapshot"))
     if inst:
         check_session_bars(pair, ts, tf_seconds)
 

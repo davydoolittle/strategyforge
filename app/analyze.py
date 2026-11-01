@@ -158,7 +158,7 @@ def transfer_test(conn, tf, top_n):
     print("\n" + "=" * 74)
     print("SECTION 3 — CROSS-PAIR TRANSFER (tuned on X, tested on Y's OOS)")
     print("=" * 74)
-    tf_s = 3600 if tf == "1h" else 14400
+    tf_s = windows.tf_seconds(tf)
     pairs = [r[0] for r in conn.execute(
         "SELECT DISTINCT pair FROM candidates WHERE tf=? AND passed=1", (tf,))]
     if not pairs:
@@ -196,7 +196,7 @@ def transfer_test(conn, tf, top_n):
 
 def main():
     ap = argparse.ArgumentParser()
-    ap.add_argument("--tf", default="1h", choices=["1h", "4h"])
+    ap.add_argument("--tf", default="1h", choices=["1h", "4h", "1d"])
     ap.add_argument("--transfer-top", type=int, default=2)
     ap.add_argument("--min-n", type=int, default=30)
     ap.add_argument("--family", default=strategies.DEFAULT_FAMILY, choices=strategies.names())

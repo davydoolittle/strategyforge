@@ -18,7 +18,7 @@ import copy
 
 # trade-logic-neutral execution assumptions: never part of DNA
 NON_DNA_KEYS = {"initial_capital", "commission_pct", "slippage_ticks", "tick_size",
-                "fill_delay_bars", "history_start_ts"}
+                "fill_delay_bars", "history_start_ts", "bars_snapshot"}
 
 
 class Strategy:
