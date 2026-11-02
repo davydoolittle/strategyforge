@@ -70,7 +70,9 @@ KRAKEN_PERP_MAP = {
 }
 DVOL_CURRENCIES = ["BTC", "ETH"]
 
-# P4.5 research jobs: (name, cron_like_interval, command in app/, timeout s).
+# P4.5 research jobs: (name, schedule, command in app/, timeout s). A schedule
+# is an interval ('1h', '7d': due that long after the last start) or a weekly
+# UTC time ('mon@06:00': due once per slot, at once if a slot was missed).
 # This list is the source of truth for interval and command; the jobs table
 # mirrors it and keeps last_run plus an `enabled` switch you may set to 0 by
 # hand (it survives restarts).
@@ -85,6 +87,8 @@ JOB_SPECS = [
     ("patterns", "7d", "patterns.py --refresh", 1800),
     # insider activity from Edgar: pull, then one digest, or a warning if it is down
     ("insider", "1d", "insider_feed.py --notify", 600),
+    # momentum screen for the dashboard: read-only ranking, Mondays 06:00 UTC
+    ("screen", "mon@06:00", "screen.py", 600),
 ]
 JOB_LOG_DIR = os.path.join(os.path.dirname(DB_PATH), "jobs")
 DB_TIMEOUT_S = 60    # wait this long for a job's write lock before an error
@@ -354,6 +358,37 @@ def parse_interval(spec: str) -> int:
     return int(spec[:-1]) * units[spec[-1]]
 
 
+WEEKDAYS = ["mon", "tue", "wed", "thu", "fri", "sat", "sun"]
+
+
+def parse_weekly(spec: str):
+    """'mon@06:00' -> (0, 6, 0): weekday (Monday = 0), hour, minute, UTC."""
+    day, _, hm = spec.partition("@")
+    h, _, m = hm.partition(":")
+    if day not in WEEKDAYS or not (h.isdigit() and m.isdigit()) or int(h) > 23 or int(m) > 59:
+        raise ValueError(f"bad weekly schedule {spec!r}: use e.g. mon@06:00 (UTC)")
+    return WEEKDAYS.index(day), int(h), int(m)
+
+
+def parse_schedule(spec: str):
+    """A job's schedule: (interval_s, weekly) where weekly is None for an
+    interval ('15m', '1h', '1d', '7d') or (weekday, hour, minute) UTC for a
+    fixed weekly time ('mon@06:00')."""
+    if "@" in spec:
+        return 7 * 86400, parse_weekly(spec)
+    return parse_interval(spec), None
+
+
+def last_weekly_slot(now: float, weekly) -> float:
+    """Unix ts of the latest weekday hh:mm UTC at or before now."""
+    wd, h, m = weekly
+    t = datetime.fromtimestamp(now, timezone.utc).replace(hour=h, minute=m, second=0, microsecond=0)
+    t -= timedelta(days=(t.weekday() - wd) % 7)
+    if t.timestamp() > now:
+        t -= timedelta(days=7)
+    return t.timestamp()
+
+
 class JobRunner:
     """Starts due jobs as child processes (python -u <script> <args>, cwd =
     app dir) and checks on them; the collector loop calls step() every pass.
@@ -371,7 +406,8 @@ class JobRunner:
         self.conn = conn
         self.specs = {}
         for name, interval, command, timeout in (JOB_SPECS if specs is None else specs):
-            self.specs[name] = {"interval": parse_interval(interval), "spec": interval,
+            iv, weekly = parse_schedule(interval)
+            self.specs[name] = {"interval": iv, "weekly": weekly, "spec": interval,
                                 "command": command, "timeout": timeout}
         self.app_dir = app_dir or os.path.dirname(os.path.abspath(__file__))
         self.log_dir = log_dir or JOB_LOG_DIR
@@ -382,7 +418,7 @@ class JobRunner:
     def ensure_table(self):
         self.conn.execute("""CREATE TABLE IF NOT EXISTS jobs (
             name TEXT PRIMARY KEY,
-            cron_like_interval TEXT,        -- 15m / 1h / 1d / 7d
+            cron_like_interval TEXT,        -- 15m / 1h / 1d / 7d / mon@06:00 (UTC)
             command TEXT,                   -- script in app/ + args
             enabled INTEGER DEFAULT 1,      -- set 0 by hand to pause a job
             last_run INTEGER,               -- unix ts the latest run STARTED
@@ -460,7 +496,12 @@ class JobRunner:
         for name, enabled, last_run in rows:
             if name not in self.specs or name in self.running or not enabled:
                 continue
-            if last_run is not None and now - last_run < self.specs[name]["interval"]:
+            weekly = self.specs[name]["weekly"]
+            if weekly is not None:
+                # due once per slot; a job never run (or a missed slot) runs at once
+                if last_run is not None and last_run >= last_weekly_slot(now, weekly):
+                    continue
+            elif last_run is not None and now - last_run < self.specs[name]["interval"]:
                 continue
             try:
                 self._start(name, now)

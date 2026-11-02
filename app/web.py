@@ -16,6 +16,8 @@ nothing here can write):
                                       the equity and drawdown curve
   /api/health                         decay-monitor rows, oldest first
   /api/paper/{strategy_id}            reconciliation, positions, daily summary
+  /api/screen                         momentum screen (screen.json next to
+                                      forge.db, written by screen.py weekly)
   /                                   the dashboard (static/index.html, P7.2)
 
 Auth (P7.3): every /api/ request needs "Authorization: Bearer $WEB_TOKEN"
@@ -269,6 +271,16 @@ def paper(conn, sid):
     return out
 
 
+def screen_json(db_path):
+    """The latest screen.py output. Read from a file, not the DB."""
+    path = os.path.join(os.path.dirname(os.path.abspath(db_path)), "screen.json")
+    if not os.path.exists(path):
+        return {"rows": [], "note": "ranking, not a validated signal",
+                "missing": "no screen yet: screen.py runs Mondays 06:00 UTC"}
+    with open(path) as f:
+        return json.load(f)
+
+
 # ----------------------------------------------------------------- server ---
 
 ROUTES = [
@@ -278,6 +290,7 @@ ROUTES = [
      lambda c, m, qs, db: report(c, int(m.group(1)), _flag(qs, "equity") == 1, db)),
     (re.compile(r"^/api/health$"), lambda c, m, qs, db: health(c)),
     (re.compile(r"^/api/paper/(\d+)$"), lambda c, m, qs, db: paper(c, int(m.group(1)))),
+    (re.compile(r"^/api/screen$"), lambda c, m, qs, db: screen_json(db)),
 ]
 
 

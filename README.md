@@ -9,6 +9,7 @@ paper trading, health). Nothing in this repo places live orders.
 - `docs/V2_PROMPT.md`: scope, phases and working rules
 - `docs/V2_INSTALL.md`: deployment on Matrix (collector image, `sf.sh`, `claude-dev`)
 - `docs/FINDINGS.md`: every result, newest first
+- Momentum screen: `app/screen.py` ranks the ETF universe by 12-month return / volatility (weekly, Mondays 06:00 UTC; a ranking, not a validated signal)
 - Dashboard: `app/web.py` (read-only, port 8091, bearer token, LAN/Tailscale only); see `docs/V2_INSTALL.md`
 - Tests: `python -m unittest discover -s tests` (stdlib only, no pip packages)
 

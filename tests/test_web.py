@@ -136,6 +136,18 @@ class TestWeb(unittest.TestCase):
         self.assertEqual(body["summary"][0]["net"], 15.0)
         self.assertEqual(body["reconciliation"], [])
 
+    def test_screen(self):
+        st, body = self.get("/api/screen")
+        self.assertEqual(st, 200)
+        self.assertEqual((body["rows"], body["note"]), ([], "ranking, not a validated signal"))
+        self.assertIn("no screen yet", body["missing"])
+        path = os.path.join(self.tmp, "screen.json")
+        with open(path, "w") as f:
+            json.dump({"note": "ranking, not a validated signal", "rows": [{"symbol": "SPY", "rank": 1}]}, f)
+        self.addCleanup(os.remove, path)
+        self.assertEqual(self.get("/api/screen")[1]["rows"], [{"symbol": "SPY", "rank": 1}])
+        self.assertEqual(self.get("/api/screen", token=None)[0], 401)
+
     def test_read_only(self):
         self.assertEqual(self.get("/api/health", "POST")[0], 405)
         self.assertEqual(self.get("/api/health", "DELETE")[0], 405)
@@ -153,7 +165,8 @@ class TestWeb(unittest.TestCase):
                           r.headers["Content-Security-Policy"])
         self.assertIn("/api/candidates?", body)
         self.assertIn("cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/", body)
-        self.assertNotIn("innerHTML", body)          # DB strings go in as text, never as markup
+        self.assertNotIn("innerHTML", body)
+        self.assertIn("ranking, not a validated signal", body)  # the Screen panel's caveat is static          # DB strings go in as text, never as markup
 
     def test_auth(self):
         for tok in (None, "wrong" * 5, TOKEN + "x", TOKEN[:-1]):

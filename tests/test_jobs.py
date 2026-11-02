@@ -88,14 +88,54 @@ class TestInterval(unittest.TestCase):
         self.assertEqual(names["feature_evals"], ("1d", "feature_evals.py --annotate-new"))
         self.assertEqual(names["adversary"], ("7d", "adversary.py --top 20"))
         self.assertEqual(names["tsp"], ("6h", "tsp_report.py --update --notify"))
+        self.assertEqual(names["screen"], ("mon@06:00", "screen.py"))
         app = os.path.join(os.path.dirname(__file__), "..", "app")
         for _, iv, cmd, timeout in main.JOB_SPECS:
-            main.parse_interval(iv)
+            main.parse_schedule(iv)
             self.assertTrue(os.path.exists(os.path.join(app, cmd.split()[0])), cmd)
             self.assertGreater(timeout, 0)
 
 
+class TestWeekly(unittest.TestCase):
+    MON_0600 = 1793599200.0          # Mon 2026-11-02 06:00:00 UTC
+
+    def test_parse(self):
+        self.assertEqual(main.parse_schedule("mon@06:00"), (604800, (0, 6, 0)))
+        self.assertEqual(main.parse_schedule("sun@23:59"), (604800, (6, 23, 59)))
+        self.assertEqual(main.parse_schedule("7d"), (604800, None))
+        for bad in ("monday@06:00", "mon@6", "mon@24:00", "mon@06:60", "@06:00", "mon@"):
+            with self.assertRaises(ValueError, msg=bad):
+                main.parse_schedule(bad)
+
+    def test_last_slot(self):
+        wk = (0, 6, 0)
+        self.assertEqual(main.last_weekly_slot(self.MON_0600, wk), self.MON_0600)
+        self.assertEqual(main.last_weekly_slot(self.MON_0600 - 1, wk), self.MON_0600 - 7 * 86400)
+        self.assertEqual(main.last_weekly_slot(self.MON_0600 + 3 * 86400, wk), self.MON_0600)
+        self.assertEqual(main.last_weekly_slot(self.MON_0600, (2, 0, 0)), self.MON_0600 - 5 * 86400 - 6 * 3600)
+
+
 class TestRunner(Base):
+    def test_weekly_job_runs_once_per_slot(self):
+        mon = TestWeekly.MON_0600
+        r = self.runner([("wk", "mon@06:00", "ok.py", 60)])
+        r.step(mon + 2 * 86400)                              # first ever (a Wednesday): runs at once
+        self.assertIn("wk", r.running)
+        self.settle(r, mon + 2 * 86400)
+        for t in (mon + 3 * 86400, mon + 7 * 86400 - 1):     # rest of the week: not due
+            r.step(t)
+            self.assertEqual(r.running, {}, t)
+        r.step(mon + 7 * 86400)                              # next Monday 06:00: due
+        self.assertIn("wk", r.running)
+        self.settle(r, mon + 7 * 86400)
+        r.step(mon + 7 * 86400 + 3600)
+        self.assertEqual(r.running, {})
+        r.step(mon + 21 * 86400 + 60)                        # two slots missed: runs once, now
+        self.assertIn("wk", r.running)
+        self.settle(r, mon + 21 * 86400 + 60)
+        self.assertEqual(self.job("wk")["cron_like_interval"], "mon@06:00")
+        self.assertEqual(self.conn.execute("SELECT COUNT(*) FROM ran").fetchone()[0], 3)
+
     def test_due_jobs_run_and_wait_their_interval(self):
         r = self.runner([("ok", "1h", "ok.py --x 1", 60)])
         r.step(1000.0)
