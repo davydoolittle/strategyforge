@@ -26,8 +26,9 @@ one each side).
 The JSON is what the dashboard's Screen panel shows (web.py /api/screen). It
 is written to a temp file and renamed, so the dashboard never reads half of
 it. The collector runs this weekly, Monday 06:00 UTC (main.JOB_SPECS). It
-does not fetch bars: ETF bars are refreshed by the weekly `patterns` job, so
-each row carries its own last bar date and stale rows are marked.
+does not fetch bars: ETF bars are refreshed by the `patterns` job, Sunday
+22:00 UTC, so Friday's close is in. If that run failed or was missed, each row
+still carries its own last bar date and stale rows are marked.
 """
 
 import argparse

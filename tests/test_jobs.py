@@ -89,6 +89,13 @@ class TestInterval(unittest.TestCase):
         self.assertEqual(names["adversary"], ("7d", "adversary.py --top 20"))
         self.assertEqual(names["tsp"], ("6h", "tsp_report.py --update --notify"))
         self.assertEqual(names["screen"], ("mon@06:00", "screen.py"))
+        self.assertEqual(names["patterns"], ("sun@22:00", "patterns.py --refresh"))
+        # the ETF bar refresh is scheduled to finish (timeout included) before the screen
+        sched = {n: (main.parse_schedule(iv)[1], t) for n, iv, _, t in main.JOB_SPECS}
+        (pd, ph, pm), ptimeout = sched["patterns"]
+        (sd, sh, sm), _ = sched["screen"]
+        gap = ((sd - pd) % 7) * 86400 + (sh - ph) * 3600 + (sm - pm) * 60
+        self.assertGreater(gap, ptimeout)
         app = os.path.join(os.path.dirname(__file__), "..", "app")
         for _, iv, cmd, timeout in main.JOB_SPECS:
             main.parse_schedule(iv)

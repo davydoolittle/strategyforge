@@ -83,8 +83,9 @@ JOB_SPECS = [
     ("adversary", "7d", "adversary.py --top 20", 12 * 3600),
     # TSP module: fetch, report, ntfy once per new price date (re-runs are no-ops)
     ("tsp", "6h", "tsp_report.py --update --notify", 1800),
-    # pattern ledger: new macro and ETF data, then every pattern re-tested
-    ("patterns", "7d", "patterns.py --refresh", 1800),
+    # pattern ledger: new macro and ETF data, then every pattern re-tested.
+    # Sunday 22:00 UTC so Friday's ETF bars are in before the Monday screen.
+    ("patterns", "sun@22:00", "patterns.py --refresh", 1800),
     # insider activity from Edgar: pull, then one digest, or a warning if it is down
     ("insider", "1d", "insider_feed.py --notify", 600),
     # momentum screen for the dashboard: read-only ranking, Mondays 06:00 UTC
