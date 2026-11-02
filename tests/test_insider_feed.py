@@ -5,7 +5,7 @@ import os
 import sqlite3
 import sys
 import unittest
-from datetime import date
+from datetime import date, datetime, timezone
 
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", "app"))
 
@@ -26,10 +26,12 @@ def cluster(key="XYZ|a~b", ticker="XYZ", end="2026-10-30"):
             "created_at": 1}
 
 
-def edgar(txns=(), clusters=(), last=NOW_MS):
+def edgar(txns=(), clusters=(), last="recent"):
+    # "recent" = polled a minute before the real clock, because run() checks staleness against now
     def get(url):
+        lp = (datetime.now(timezone.utc).timestamp() - 60) * 1000 if last == "recent" else last
         return {"txns": [t for t in txns if t["id"] > int(url.split("after=")[1].split("&")[0])],
-                "clusters": list(clusters), "last_poll_ok": last}
+                "clusters": list(clusters), "last_poll_ok": lp}
     return get
 
 
