@@ -14,6 +14,9 @@ import time
 import unittest
 
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", "app"))
+sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+
+import fast_tmp  # noqa: E402,F401  (temp files in RAM, see fast_tmp.py)
 
 import main  # noqa: E402
 

@@ -21,6 +21,8 @@ HERE = os.path.dirname(__file__)
 sys.path.insert(0, os.path.join(HERE, "..", "app"))
 sys.path.insert(0, HERE)
 
+import fast_tmp  # noqa: E402,F401  (temp files in RAM, see fast_tmp.py)
+
 import adversary  # noqa: E402
 import engine  # noqa: E402
 import health as HEALTH  # noqa: E402

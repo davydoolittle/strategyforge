@@ -13,7 +13,7 @@ The DB is FORGE_DB, else /data/forge.db, else data/forge.db in the repo. If
 none exists the tests are skipped with a message saying so: this harness
 needs the real data, a synthetic DB cannot stand in for it. The copy goes in
 SF_SCRATCH_DIR if set (e.g. data/scratch on the share when the laptop's
-temp drive is full), else the system temp dir.
+temp drive is full), else the system temp dir, never fast_tmp's /dev/shm.
 
   python -m unittest tests.test_regression -v
   python tests/test_regression.py --write-fixture   # only to (re)create the fixture
@@ -30,6 +30,9 @@ import unittest
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 sys.path.insert(0, os.path.join(HERE, "..", "app"))
+sys.path.insert(0, HERE)
+
+import fast_tmp  # noqa: E402  (only for SYSTEM_TMP: this harness stays off /dev/shm)
 
 import engine  # noqa: E402
 import lineage  # noqa: E402
@@ -54,7 +57,8 @@ def scratch_dir():
     base = os.environ.get("SF_SCRATCH_DIR")
     if base:
         os.makedirs(base, exist_ok=True)
-    return tempfile.mkdtemp(prefix="sf-regression-", dir=base)
+    # explicit dir: the 110 MB copy must not follow fast_tmp into a 64 MB /dev/shm
+    return tempfile.mkdtemp(prefix="sf-regression-", dir=base or fast_tmp.SYSTEM_TMP)
 
 
 def scratch_copy(src, dst_dir):
