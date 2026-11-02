@@ -214,7 +214,60 @@ Goal: the test F16 says is the honest next one: a diversified, volatility-scaled
 ## 8f. Edgar insider feed  (added 2026-11-01)
 
 - [x] **Stage 1, feed and digest.** `app/insider_feed.py` pulls Edgar's read-only `/api/export` into `insider_txns` and `insider_clusters` and sends one daily ntfy digest of clusters and open-market buys of at least $100K, or a warning if Edgar is down or stale. Lines say UNTESTED and predict nothing. The S&P 100 and four crypto-linked tickers are muted in Edgar, so they store data without pushing. Crypto tokens have no insiders; only listed companies link to them.
-- [ ] **Stage 2, the event study.** Pre-register a rule on SEC's Form 4 history before testing. Score each stock against the market. The universe must include companies that later shrank or vanished. Only a pass may change the message.
+- [ ] **Stage 2, the event study.** Pre-register a rule on SEC's Form 4 history before testing. Score each stock against the market. The universe must include companies that later shrank or vanished. Only a pass may change the message. *(Folded into P13 below, as its Form 4 family.)*
+
+---
+
+## 8g. Modules and roadmap  (added 2026-11-02)
+
+Roadmap only: nothing here is built until it gets its own section with checklist items. Phase numbers 9 and 10 are used, so the deferred phases start at 11.
+
+### Modules
+
+| module | state | evidence |
+|---|---|---|
+| **crypto** | Live research. Forward tests #3214 and #4027 running (`forward_test`), no forward trade yet. No further 1h family searches. | F9-F11, F13 |
+| **equities** | Phase 9 done: Tiingo adjusted daily bars for 10 ETFs, frozen in snapshot `etf-2026-10-30`; core 1d budget spent, all 8 testable candidates REJECTED. Phase 10's pre-registered ETF trend book FAILED against buy-and-hold. | F16, F17 |
+| **tsp** | Analysis and alerts only. `live_strategy` = `trend_filter`. F12/F14: nothing beats 100% C. | F12, F14, F18 |
+
+**TSP, one open item: drawdown control stated as a risk preference.** `trend_filter` already is a monthly drawdown-control rule (at most 1 move a month, inside the 2-a-month limit). What is missing is the report saying what it costs. On official prices (F14): CAGR 9.8% vs 11.2% for 100% C, max drawdown 34% vs 55%. The cost is not even over time: it won 2004-09 (10.9 vs 2.0) and trailed by 4.2 and 5.5 points a year in 2010-19 and 2020-. The daily report should present it as "you give up return to avoid deep drawdowns", with those numbers, never as a way to beat C. A different drawdown rule would be a new hypothesis, registered before it runs, max 2 transfers a month.
+
+### Deferred phases
+
+| phase | scope | deferred because |
+|---|---|---|
+| **P11** Portfolio / regime mode across asset classes | One book over crypto, ETFs and TSP funds, sized by volatility or regime. | Needs a fresh rationale. F16 (no timing skill per ETF) and F17 (the ETF trend book failed against buy-and-hold) remove the case it was meant to build on. Needs its own pre-registration and a benchmark that drift cannot beat by itself. |
+| **P12** S&P 100 stocks | Daily bars for the S&P 100 with a **point-in-time** constituent list (members as of each date, including names later dropped, merged or bankrupt). | Survivorship bias: today's list only contains the winners. Needs a constituent-history source first; a vendor will be proposed when the phase starts. Follows P11's verdict, not its success. |
+| **P13** EDGAR event study | Measure what each SEC filing type does to the filer's price before any notification claims it means anything. Universe P12's. | Needs P12's point-in-time universe and daily bars. |
+| Derivatives (options, futures) | Out of scope. | No engine (no greeks, expiries, margin or roll model) and no evidence of an edge in the underlyings to express. |
+
+### P13 in detail: filing types to study
+
+Data: Edgar Alert's data where it carries the type; otherwise SEC EDGAR's own free submissions and full-index files (declared User-Agent, within SEC's rate limit). Every event is timestamped by EDGAR's **acceptance time**, not the period it covers: a filing accepted after 16:00 ET or on a non-trading day enters at the next open. No pushing of any of these until their study passes.
+
+| family | forms / items | why it might move the price |
+|---|---|---|
+| Insider trades | Form 4 (open-market buy P, sale S, option exercise, 10b5-1 flag), Form 3, Form 5, Form 144 (proposed sale) | Insiders know the business; clustered buys are the classic claim. Absorbs §8f Stage 2. |
+| Ownership and activists | SC 13D and 13D/A (≥5% with intent to influence), SC 13G/13G/A (passive ≥5%), 13F-HR (quarterly holdings, 45 days late) | An activist stake often moves the stock; 13G and 13F mostly do not, which is itself worth measuring. |
+| 8-K: results and guidance | Item 2.02 results of operations (earnings), 7.01 Reg FD, 8.01 other events | Earnings surprise and post-announcement drift. |
+| 8-K: deals and financing | 1.01 material agreement, 1.02 termination of one, 2.01 acquisition or disposal completed, 2.03 new debt, 2.04 debt accelerated, 3.02 unregistered share sales, 3.03 change to holders' rights | Financing and dilution, deal risk, default triggers. |
+| 8-K: distress and accounting | 1.03 bankruptcy, 2.05 exit or restructuring costs, 2.06 impairments, 3.01 delisting notice or listing-rule failure, 4.01 auditor change, 4.02 prior financials can no longer be relied on (restatement) | The largest negative moves; 4.02 and 3.01 are the classic red flags. |
+| 8-K: people and control | 5.01 change in control, 5.02 officer or director departure or appointment (CEO and CFO exits separately), 5.03 bylaw or charter change, 5.07 shareholder vote results | Surprise CFO exits are a known negative signal. |
+| 8-K: cyber | 1.05 material cybersecurity incident | New item since Dec 2023, few events; may stay too thin to test. |
+| Periodic reports | 10-K, 10-Q (going-concern language, material weaknesses), NT 10-K and NT 10-Q (late filing) | A late-filing notice is a known negative signal. |
+| Offerings | S-1, S-3, 424B prospectuses, S-8 | New shares mean dilution; shelf takedowns often drop the price on the day. |
+| M&A and tender offers | S-4, 425, SC TO-T (third-party tender), SC TO-I (issuer buyback tender), SC 14D9 (target's response), DEFM14A | Target premium, acquirer discount, arbitrage spread. |
+| Proxy | DEF 14A, PRE 14A, DEFA14A, DFAN14A (proxy fight material from dissidents) | Proxy fights and contested votes. |
+| Exits and structure | Form 25 (delisting), Form 15 (deregistration), Form 10 (spin-off registration) | Delisting and going dark are negative; spin-offs have a documented post-spin drift claim. |
+| SEC correspondence | CORRESP and UPLOAD (SEC comment letters, released with a delay) | Comment letters on revenue recognition are a claimed warning sign. |
+| Foreign filers | 6-K, 20-F, 40-F | Same events for non-US issuers; kept separate because timing and content differ. |
+
+Rules for P13, written now so they cannot be bent later:
+
+- **Each (filing type × direction × horizon) is one trial.** The list above is roughly 50 types; at three horizons (1, 5 and 20 trading days) that is ~150 trials, and the significance bar is deflated by that count, the same way A2 is. Adding a type later adds to the count; dropping a type that failed does not remove it.
+- **Score against the market**, as abnormal return over a beta-adjusted benchmark, with costs. Overlapping events for the same stock in the same window are flagged, not double-counted.
+- **Registered before the first run**: the type list, the horizons, the benchmark and the pass rule are committed first; the results, including every type that shows nothing, go into FINDINGS.
+- **Notifications only quote measured numbers.** A type that passes may say "historically, N events, mean abnormal return X% over D days, CI ...". A type that has not been tested says UNTESTED. Nothing says "buy" or "sell".
 
 ---
 
@@ -226,10 +279,11 @@ Goal: the test F16 says is the honest next one: a diversified, volatility-scaled
 | §8 Insider Form 4 | **not here** | Equities-only; this pipeline trades crypto. Dave's `edgar-alert` project already ingests Form 4. If a crypto-relevant use emerges (e.g. COIN, MSTR as sentiment proxies) consume its table rather than re-scrape. |
 | §9 13F / 13D / COT | **not here** | 45-day-stale disclosures are irrelevant at 1h–4h horizons. COT has no crypto coverage that matters. |
 | §6 Forex markets | **deferred** | Different data vendor, different session logic, different cost model. ETFs are Phase 9. |
-| Cross-sectional mode for equities | **deferred** (Phase 9) | Needs F16 first. The time-series book is Phase 10. |
-| Individual stocks | **deferred** (Phase 9) | Needs a point-in-time universe to avoid survivorship bias. |
-| Insider-filing event study | **deferred** (Phase 9) | Needs stocks. |
-| Order routing from davesbridge to Alpaca | **deferred** (Phase 9) | Nothing has passed validation. |
+| Cross-sectional mode for equities | **deferred** (P11, §8g) | F16 and F17 are in; needs a fresh rationale and its own registration. The time-series book was Phase 10 and failed. |
+| Individual stocks | **deferred** (P12, §8g) | Needs a point-in-time universe to avoid survivorship bias. |
+| SEC filing event study (insider trades and all other filing types) | **deferred** (P13, §8g) | Needs P12's stocks. |
+| Order routing from davesbridge to Alpaca | **deferred** | Nothing has passed validation. |
+| Derivatives (options, futures) | **out of scope** | No engine for greeks, expiries, margin or rolls, and no edge in the underlyings to express. |
 | §13 Local LLM research agent | **replaced** | See §3. Phase 8, if it happens, is Claude API + read-only DB tools. |
 | §14 React dashboard with 10 sections | **replaced** by §8b | One page, read-only. |
 | §2 Postgres / Redis / auth stack | **replaced** | SQLite + bearer token + Tailscale. |
