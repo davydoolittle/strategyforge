@@ -56,7 +56,12 @@ def build_db(path):
     mem.execute("INSERT INTO strategies (name, created_at, candidate_id, pair, tf, dna, params_json,"
                 " status, family) VALUES ('s1', '2026-10-29', 2, 'BTC-USD', '1h', 'x', '{}',"
                 " 'backtest_winner', 'squeeze')")
+    mem.execute("INSERT INTO strategies (name, created_at, candidate_id, pair, tf, dna, params_json,"
+                " status, family, forward_test) VALUES ('s2', '2026-10-30', 3, 'BTC-USD', '1h', 'y',"
+                " '{}', 'backtest_winner', 'squeeze', 1)")
     mem.execute("INSERT INTO health (strategy_id, day, cusum, alert) VALUES (1, '2026-10-28', -0.5, 0)")
+    mem.execute("INSERT INTO health (strategy_id, day, cusum, alert, n_forward) VALUES (2, '2026-10-31', 0, 0, 3)")
+    mem.execute("INSERT INTO health (strategy_id, day, cusum, alert, n_forward) VALUES (2, '2026-11-01', 0, 0, 4)")
     mem.execute("INSERT INTO paper_summary (strategy_id, day, n_trades, net) VALUES (1, '2026-10-28', 2, 15.0)")
     mem.commit()
     disk = sqlite3.connect(path)
@@ -95,6 +100,42 @@ class TestWeb(unittest.TestCase):
         self.assertEqual(st, 200)
         self.assertEqual(body[0]["name"], "s1")
         self.assertEqual((body[0]["report_id"], body[0]["verdict"]), (1, "REJECTED"))
+        self.assertEqual((body[0]["forward_test"], body[0]["n_forward"]), (False, None))
+        self.assertEqual((body[1]["forward_test"], body[1]["n_forward"], body[1]["forward_day"]),
+                         (True, 4, "2026-11-01"))      # the latest health row
+
+    def test_jobs(self):
+        st, body = self.get("/api/jobs")
+        self.assertEqual((st, body["jobs"]), (200, []))           # no jobs table: empty, not an error
+        self.assertEqual(body["heartbeat"]["last_candle_ts"],
+                         web.connect(self.db).execute("SELECT MAX(ts) FROM candles").fetchone()[0])
+        self.assertTrue(body["heartbeat"]["stale"])              # synthetic candles are from 2020
+        self.assertEqual(self.get("/api/jobs", token=None)[0], 401)
+
+    def test_jobs_due_and_overdue(self):
+        conn = sqlite3.connect(":memory:")
+        self.addCleanup(conn.close)
+        conn.execute("CREATE TABLE jobs (name TEXT PRIMARY KEY, cron_like_interval TEXT, command TEXT,"
+                     " enabled INTEGER DEFAULT 1, last_run INTEGER, last_exit INTEGER,"
+                     " last_duration_s REAL, last_error TEXT)")
+        mon = 1793577600                                   # Mon 2026-11-02 00:00 UTC
+        conn.executemany("INSERT INTO jobs VALUES (?, ?, 'x.py', ?, ?, ?, 1.0, ?)", [
+            ("hourly", "1h", 1, mon, 0, None),
+            ("late", "1h", 1, mon - 4 * 3600, 0, None),
+            ("paused", "1h", 0, mon - 4 * 3600, 0, None),
+            ("broke", "1d", 1, mon, 2, "x" * 1000),
+            ("weekly", "mon@06:00", 1, mon - 86400, 0, None),  # Sunday: next slot Mon 06:00
+            ("new", "1d", 1, None, None, None)])
+        j = {r["name"]: r for r in web.jobs(conn, now=mon + 60)["jobs"]}
+        self.assertEqual(j["hourly"]["next_due"], mon + 3600)
+        self.assertFalse(j["hourly"]["overdue"])
+        self.assertTrue(j["late"]["overdue"])
+        self.assertFalse(j["paused"]["overdue"])
+        self.assertTrue(j["broke"]["failed"])
+        self.assertEqual(len(j["broke"]["last_error"]), 300)
+        self.assertEqual(j["weekly"]["next_due"], mon + 6 * 3600)
+        self.assertTrue(j["new"]["overdue"])
+        self.assertIsNone(j["new"]["next_due"])
 
     def test_candidates_and_filters(self):
         st, body = self.get("/api/candidates")
@@ -168,6 +209,8 @@ class TestWeb(unittest.TestCase):
         self.assertIn("/api/candidates?", body)
         self.assertIn("cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/", body)
         self.assertNotIn("innerHTML", body)
+        self.assertIn("/api/jobs", body)
+        self.assertIn("<option>1d</option>", body)
         self.assertIn("ranking, not a validated signal", body)  # the Screen panel's caveat is static          # DB strings go in as text, never as markup
 
     def test_auth(self):

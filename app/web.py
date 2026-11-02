@@ -16,6 +16,9 @@ nothing here can write):
                                       the equity and drawdown curve
   /api/health                         decay-monitor rows, oldest first
   /api/paper/{strategy_id}            reconciliation, positions, daily summary
+  /api/jobs                           scheduled collector jobs: last run,
+                                      exit, next due, overdue; plus the
+                                      newest crypto candle as a heartbeat
   /api/screen                         momentum screen (screen.json next to
                                       forge.db, written by screen.py weekly)
   /                                   the dashboard (static/index.html, P7.2)
@@ -36,6 +39,7 @@ import re
 import sqlite3
 import sys
 import threading
+import time
 import traceback
 from functools import lru_cache
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
@@ -129,8 +133,13 @@ def strategies(conn):
         for p in rows(conn, "SELECT * FROM promotions ORDER BY id"):
             promos.setdefault(p["strategy_id"], []).append(p)
     out = []
+    fwd = forward_counts(conn)
+    cols = {r["name"] for r in rows(conn, "PRAGMA table_info(strategies)")}
+    ft = "forward_test" if "forward_test" in cols else "0 AS forward_test"
     for s in rows(conn, "SELECT id, name, created_at, parent_id, candidate_id, pair, tf, family,"
-                        " dna, status, note FROM strategies ORDER BY id"):
+                        f" dna, status, note, {ft} FROM strategies ORDER BY id"):
+        s["forward_test"] = bool(s["forward_test"])
+        s["n_forward"], s["forward_day"] = fwd.get(s["id"], (None, None))
         rep = reps.get(s["candidate_id"])
         s["report_id"] = rep["id"] if rep else None
         s["verdict"] = rep["verdict"] if rep else None
@@ -254,6 +263,57 @@ def equity_for_candidate(db_path, cid):
         return _equity_cached(db_path, cid)
 
 
+def forward_counts(conn):
+    """strategy_id -> (forward trades, day measured) from health.py's latest
+    row: the trades since the validation window that the forward test counts."""
+    if not has_table(conn, "health"):
+        return {}
+    return {r["strategy_id"]: (r["n_forward"], r["day"]) for r in rows(
+        conn, "SELECT h.strategy_id, h.n_forward, h.day FROM health h JOIN"
+              " (SELECT strategy_id, MAX(day) AS day FROM health GROUP BY strategy_id) m"
+              " ON m.strategy_id=h.strategy_id AND m.day=h.day")}
+
+
+JOB_GRACE_S = 2 * 3600      # a job is overdue this long after it was due
+HEARTBEAT_STALE_S = 3 * 3600
+
+
+def next_due(spec, last_run):
+    """When the collector will next start a job: an interval after its last
+    start, or the first weekly slot after it. None if it never ran (it is due
+    at once) or the schedule is unreadable."""
+    try:
+        iv, weekly = main.parse_schedule(spec)
+    except (ValueError, TypeError):
+        return None
+    if last_run is None:
+        return None
+    if weekly is None:
+        return last_run + iv
+    return main.last_weekly_slot(last_run, weekly) + 7 * 86400
+
+
+def jobs(conn, now=None):
+    now = time.time() if now is None else now
+    out = {"now": int(now), "jobs": [], "heartbeat": None}
+    if has_table(conn, "jobs"):
+        for j in rows(conn, "SELECT name, cron_like_interval AS schedule, command, enabled, last_run,"
+                            " last_exit, last_duration_s, last_error FROM jobs ORDER BY name"):
+            j["next_due"] = due = next_due(j["schedule"], j["last_run"])
+            j["overdue"] = bool(j["enabled"]) and (due is None or now > due + JOB_GRACE_S)
+            j["failed"] = j["last_exit"] not in (None, 0)
+            if j["last_error"]:
+                j["last_error"] = j["last_error"][-300:]
+            out["jobs"].append(j)
+    if has_table(conn, "candles"):
+        last = [r["ts"] for r in (rows(conn, "SELECT MAX(ts) AS ts FROM candles WHERE pair=?", (p,))[0]
+                                  for p in main.PAIRS) if r["ts"] is not None]
+        if last:
+            ts = max(last)
+            out["heartbeat"] = {"last_candle_ts": ts, "stale": now - ts > HEARTBEAT_STALE_S}
+    return out
+
+
 def health(conn):
     if not has_table(conn, "health"):
         return []
@@ -290,6 +350,7 @@ ROUTES = [
      lambda c, m, qs, db: report(c, int(m.group(1)), _flag(qs, "equity") == 1, db)),
     (re.compile(r"^/api/health$"), lambda c, m, qs, db: health(c)),
     (re.compile(r"^/api/paper/(\d+)$"), lambda c, m, qs, db: paper(c, int(m.group(1)))),
+    (re.compile(r"^/api/jobs$"), lambda c, m, qs, db: jobs(c)),
     (re.compile(r"^/api/screen$"), lambda c, m, qs, db: screen_json(db)),
 ]
 

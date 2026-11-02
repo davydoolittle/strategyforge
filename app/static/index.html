@@ -55,6 +55,7 @@
   .attack b { font-size: 13px; }
   .charts { display: grid; grid-template-rows: 260px 130px; gap: 6px; }
   .charts > div { position: relative; }
+  .b-fwd { background: #1d2a3a; color: var(--accent); }
   .spark { display: flex; align-items: center; gap: 10px; padding: 4px 0; }
   .spark .lbl { width: 200px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
   .spark canvas { height: 36px !important; width: 260px !important; }
@@ -85,9 +86,14 @@
   </section>
 
   <section class="wide">
+    <h2>Jobs <small id="jobs-meta">collector schedule (main.JOB_SPECS)</small></h2>
+    <div class="scroll"><table id="jobs"><thead></thead><tbody></tbody></table></div>
+  </section>
+
+  <section class="wide">
     <h2>Candidates <small id="cand-count"></small></h2>
     <div class="controls">
-      <label>tf <select id="f-tf"><option value="">all</option><option>1h</option><option>4h</option></select></label>
+      <label>tf <select id="f-tf"><option value="">all</option><option>1h</option><option>4h</option><option>1d</option></select></label>
       <label>family <select id="f-family"><option value="">all</option><option>smrt_v41</option><option>core</option><option>squeeze</option></select></label>
       <label>OOS gate <select id="f-passed"><option value="">all</option><option value="1">passed</option><option value="0">failed</option></select></label>
       <label>adversary <select id="f-reported"><option value="">all</option><option value="1" selected>reported</option><option value="0">not reported</option></select></label>
@@ -169,6 +175,9 @@ function renderTree() {
   for (const s of STRATS) (kids[s.parent_id ?? "root"] ||= []).push(s);
   const branch = (pid) => el("ul", {}, ...(kids[pid] || []).map((s) => el("li", {},
     el("span", { class: "name" }, s.name), " ", badge(s.verdict),
+    ...(s.forward_test ? [" ", el("span", { class: "badge b-fwd",
+      title: "pre-registered forward test: judged on forward trades only, no re-tuning (FINDINGS F13)" },
+      `forward test · ${s.n_forward ?? "?"} forward trades` + (s.forward_day ? ` (${s.forward_day})` : ""))] : []),
     el("span", { class: "meta" }, `#${s.id} · ${s.status} · ${s.family || "smrt_v41"} · ${s.pair} ${s.tf} · cand #${s.candidate_id}`),
     s.note ? el("span", { class: "note" }, s.note) : "",
     ...(s.promotions.length ? [el("span", { class: "note" }, "promotions: " +
@@ -338,6 +347,35 @@ async function loadPaper() {
     : `no paper P&L yet · ${p.positions.length} positions`;
 }
 
+/* ---------------- jobs ---------------- */
+const utc = (ts) => ts ? new Date(ts * 1000).toISOString().slice(0, 16).replace("T", " ") : "–";
+async function loadJobs() {
+  const t = $("jobs");
+  let j;
+  try { j = await api("/api/jobs"); } catch (e) { fail(t.tBodies[0], e); return; }
+  const cols = ["job", "schedule", "command", "last start (UTC)", "took s", "exit", "next due (UTC)", "state"];
+  t.tHead.replaceChildren(el("tr", {}, ...cols.map((c, i) => el("th", { class: i < 3 || i === 7 ? "l" : "" }, c))));
+  if (!j.jobs.length) {
+    t.tBodies[0].replaceChildren(el("tr", {}, el("td", { class: "l empty", colspan: cols.length },
+      "no jobs table yet: the collector creates it on start")));
+  } else {
+    t.tBodies[0].replaceChildren(...j.jobs.map((r) => {
+      const state = !r.enabled ? el("span", { class: "badge b-none" }, "paused")
+        : r.last_run === null ? el("span", { class: "badge b-soft" }, "never run")
+        : r.failed ? el("span", { class: "badge b-fail", title: r.last_error || "" }, `failed (exit ${r.last_exit})`)
+        : r.overdue ? el("span", { class: "badge b-soft" }, "overdue")
+        : el("span", { class: "badge b-pass" }, "ok");
+      return el("tr", {},
+        el("td", {}, r.name), el("td", { class: "l" }, r.schedule), el("td", { class: "l muted" }, r.command),
+        el("td", {}, utc(r.last_run)), el("td", {}, fmt(r.last_duration_s, 0)),
+        el("td", {}, r.last_exit ?? "–"), el("td", {}, utc(r.next_due)), el("td", { class: "l" }, state));
+    }));
+  }
+  const hb = j.heartbeat;
+  $("jobs-meta").replaceChildren("collector schedule (main.JOB_SPECS) · newest crypto candle ",
+    hb ? el("span", { class: hb.stale ? "err" : "" }, utc(hb.last_candle_ts) + " UTC" + (hb.stale ? ": collector stalled?" : "")) : "–");
+}
+
 /* ---------------- momentum screen ---------------- */
 async function loadScreen() {
   const t = $("screen");
@@ -368,7 +406,7 @@ async function boot() {
   $("status").textContent = "loading…";
   try { STRATS = await api("/api/strategies"); renderTree(); }
   catch (e) { fail($("tree"), e); }
-  await Promise.all([loadCands(), loadHealth(), loadPaper(), loadScreen()]);
+  await Promise.all([loadJobs(), loadCands(), loadHealth(), loadPaper(), loadScreen()]);
   $("status").textContent = "updated " + new Date().toLocaleTimeString();
 }
 for (const k of ["tf", "family", "passed", "reported", "limit"]) $("f-" + k).addEventListener("change", loadCands);
