@@ -88,8 +88,9 @@ JOB_SPECS = [
     ("patterns", "sun@22:00", "patterns.py --refresh", 1800),
     # insider activity from Edgar: pull, then one digest, or a warning if it is down
     ("insider", "1d", "insider_feed.py --notify", 600),
-    # momentum screen for the dashboard: read-only ranking, Mondays 06:00 UTC
-    ("screen", "mon@06:00", "screen.py", 600),
+    # momentum screen: read-only ranking for the dashboard, pushed via ntfy
+    # once per data date, Mondays 06:00 UTC
+    ("screen", "mon@06:00", "screen.py --notify", 600),
 ]
 JOB_LOG_DIR = os.path.join(os.path.dirname(DB_PATH), "jobs")
 DB_TIMEOUT_S = 60    # wait this long for a job's write lock before an error

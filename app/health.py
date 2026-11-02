@@ -133,14 +133,14 @@ def measure(conn, strat):
     return row
 
 
-def send_ntfy(topic, title, msg):
+def send_ntfy(topic, title, msg, priority="high", tags="warning"):
     """True if ntfy.sh accepted the push."""
     if not topic:
         return False
     try:
         req = urllib.request.Request(f"https://ntfy.sh/{topic}", data=msg.encode(),
-                                     headers={"Title": title, "Priority": "high",
-                                              "Tags": "warning"})
+                                     headers={"Title": title, "Priority": priority,
+                                              "Tags": tags})
         with urllib.request.urlopen(req, timeout=10):
             return True
     except Exception as e:  # noqa: BLE001 — reported, retried next run

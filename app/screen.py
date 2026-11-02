@@ -22,10 +22,15 @@ one each side).
   python screen.py                  # table to stdout, JSON to <db dir>/screen.json
   python screen.py --out x.json     # JSON elsewhere
   python screen.py --no-json        # table only
+  python screen.py --notify         # also push a short version via ntfy
 
 The JSON is what the dashboard's Screen panel shows (web.py /api/screen). It
 is written to a temp file and renamed, so the dashboard never reads half of
 it. The collector runs this weekly, Monday 06:00 UTC (main.JOB_SPECS). It
+also pushes a short version via ntfy (`--notify`, topic NTFY_TOPIC, the
+channel health.py and tsp_report.py use), once per data date: the date last
+pushed is kept in screen_notified.json next to forge.db, so the DB stays
+read-only and a re-run or a missed slot caught up does not push twice. It
 does not fetch bars: ETF bars are refreshed by the `patterns` job, Sunday
 22:00 UTC, so Friday's close is in. If that run failed or was missed, each row
 still carries its own last bar date and stale rows are marked.
@@ -38,6 +43,7 @@ import os
 import sqlite3
 from datetime import datetime, timezone
 
+import health
 import main
 
 HORIZONS = {"1m": 21, "3m": 63, "6m": 126, "12m": 252}
@@ -45,6 +51,7 @@ VOL_DAYS = 252
 EXTREME_PCT = 10
 STALE_DAYS = 5          # calendar days behind the freshest instrument
 NOTE = "ranking, not a validated signal"
+NTFY_TITLE = "StrategyForge momentum screen"
 EXTREME_LABEL = "short-term extreme (reversal risk)"
 
 
@@ -146,6 +153,48 @@ def render(screen):
     return "\n".join(L)
 
 
+def render_push(screen):
+    """The ntfy body: one line per instrument, narrow enough for a phone."""
+    L = [f"Data as of {screen['as_of']}. {screen['note'].capitalize()}."]
+    for r in screen["rows"]:
+        tags = []
+        if r["extreme"]:
+            tags.append(f"1m {r['extreme']} {screen['extreme_pct']}%, reversal risk")
+        if r["stale"]:
+            tags.append(f"stale, last bar {r['as_of']}")
+        L.append(f"{r['rank']}. {r['symbol']} 12m {100 * r['ret_12m']:+.1f}%, "
+                 f"12m/vol {r['vol_adj_12m']:+.2f}" + (f" [{'; '.join(tags)}]" if tags else ""))
+    for s in screen["skipped"]:
+        L.append(f"skipped {s['symbol']}: {s['why']}")
+    if not screen["rows"] and not screen["skipped"]:
+        L.append("no us_equity instruments")
+    L.append("F16/F17: no timing skill found in this universe. Not a trade list.")
+    return "\n".join(L)
+
+
+def default_state(db_path=None):
+    return os.path.join(os.path.dirname(os.path.abspath(db_path or main.DB_PATH)),
+                        "screen_notified.json")
+
+
+def notify_once(screen, topic, state_path):
+    """Push once per data date. True if pushed now. The date is recorded only
+    after ntfy accepted the push, so a failed push is retried next run."""
+    try:
+        with open(state_path) as f:
+            last = json.load(f).get("as_of")
+    except (OSError, ValueError):
+        last = None
+    if screen["as_of"] is not None and screen["as_of"] == last:
+        return False
+    if not health.send_ntfy(topic, NTFY_TITLE, render_push(screen),
+                            priority="default", tags="bar_chart"):
+        return False
+    write_json({"as_of": screen["as_of"],
+                "pushed_at": datetime.now(timezone.utc).isoformat(timespec="seconds")}, state_path)
+    return True
+
+
 def write_json(screen, path):
     tmp = path + ".tmp"
     with open(tmp, "w") as f:
@@ -164,6 +213,8 @@ def main_cli(argv=None):
     ap = argparse.ArgumentParser(description=__doc__.split("\n\n")[0])
     ap.add_argument("--out", help="JSON path (default: screen.json next to forge.db)")
     ap.add_argument("--no-json", action="store_true")
+    ap.add_argument("--notify", action="store_true", help="push via ntfy, once per data date")
+    ap.add_argument("--ntfy-topic", default=os.environ.get("NTFY_TOPIC", ""))
     args = ap.parse_args(argv)
     conn = connect_ro()
     try:
@@ -175,6 +226,13 @@ def main_cli(argv=None):
         path = args.out or default_out()
         write_json(screen, path)
         print(f"wrote {path}")
+    if args.notify:
+        if not args.ntfy_topic:
+            print("!! NTFY_TOPIC not set: screen NOT pushed")
+        elif notify_once(screen, args.ntfy_topic, default_state()):
+            print("pushed via ntfy")
+        else:
+            print(f"not pushed: already sent for {screen['as_of']}, or ntfy failed (see above)")
 
 
 if __name__ == "__main__":

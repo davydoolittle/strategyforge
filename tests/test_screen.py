@@ -177,5 +177,65 @@ class TestCli(unittest.TestCase):
             conn.execute("DELETE FROM candles")
 
 
+class TestNotify(unittest.TestCase):
+    def setUp(self):
+        self.dir = tempfile.mkdtemp()
+        self.addCleanup(shutil.rmtree, self.dir, True)
+        self.state = os.path.join(self.dir, "screen_notified.json")
+        conn = make_db()
+        for i, sym in enumerate("ABCDEFGHIJ"):
+            add(conn, sym, zigzag(300, 1.0010 - 0.0002 * i, 0.01))
+        add(conn, "OLD", zigzag(300, 1.0, 0.01), end_day=380)
+        add(conn, "NEW", zigzag(50, 1.0, 0.01))
+        self.sc = SC.compute(conn)
+        conn.close()
+
+    def test_push_text(self):
+        text = SC.render_push(self.sc)
+        lines = text.splitlines()
+        self.assertIn("Ranking, not a validated signal.", lines[0])
+        self.assertIn(self.sc["as_of"], lines[0])
+        self.assertTrue(lines[1].startswith("1. A 12m "))
+        self.assertIn("reversal risk", text)
+        self.assertIn("stale, last bar", text)
+        self.assertIn("skipped NEW", text)
+        self.assertIn("Not a trade list.", lines[-1])
+        self.assertLess(len(text.encode()), 4096)            # ntfy's message limit
+        self.assertTrue(all(len(x) <= 80 for x in lines[1:-1]))
+
+    def test_once_per_data_date(self):
+        with unittest.mock.patch.object(SC.health, "send_ntfy", return_value=True) as push:
+            self.assertTrue(SC.notify_once(self.sc, "t", self.state))
+            self.assertFalse(SC.notify_once(self.sc, "t", self.state))
+            self.assertEqual(push.call_count, 1)
+            topic, title, body = push.call_args.args
+            self.assertEqual((topic, title), ("t", SC.NTFY_TITLE))
+            self.assertEqual(push.call_args.kwargs["priority"], "default")
+            later = {**self.sc, "as_of": "2099-01-01"}
+            self.assertTrue(SC.notify_once(later, "t", self.state))
+            self.assertEqual(push.call_count, 2)
+
+    def test_failed_push_is_retried(self):
+        with unittest.mock.patch.object(SC.health, "send_ntfy", return_value=False):
+            self.assertFalse(SC.notify_once(self.sc, "t", self.state))
+        self.assertFalse(os.path.exists(self.state))
+        with unittest.mock.patch.object(SC.health, "send_ntfy", return_value=True) as push:
+            self.assertTrue(SC.notify_once(self.sc, "t", self.state))
+            push.assert_called_once()
+
+    def test_cli_without_topic_does_not_push(self):
+        db = os.path.join(self.dir, "forge.db")
+        conn = make_db(db)
+        add(conn, "A", zigzag(300, 1.001, 0.01))
+        conn.close()
+        with unittest.mock.patch.object(SC.main, "DB_PATH", db), \
+                unittest.mock.patch.object(SC.health, "send_ntfy") as push, \
+                unittest.mock.patch("sys.stdout"):
+            SC.main_cli(["--notify", "--ntfy-topic", "", "--no-json"])
+            push.assert_not_called()
+            SC.main_cli(["--notify", "--ntfy-topic", "t", "--no-json"])
+            push.assert_called_once()
+
+
 if __name__ == "__main__":
     unittest.main()
