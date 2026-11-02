@@ -415,6 +415,23 @@ class TestReport(unittest.TestCase):
         self.assertEqual(rep["fill_date"], R.next_business_day(self.last))
         self.assertEqual(rep["moves_left"], 2)
 
+    def test_cost_line(self):
+        c = {"cagr": 11.2, "max_dd": 55.2}
+        line = REP.cost_line({"cagr": 9.8, "max_dd": 33.8}, c)
+        self.assertIn("risk preference, not an edge", line)
+        self.assertIn("gave up 1.4 points a year", line)
+        self.assertIn("worst drawdown from 55% to 34%", line)
+        self.assertIn("did not cut drawdowns", REP.cost_line({"cagr": 9.0, "max_dd": 60.0}, c))
+        self.assertIn("+0.8 points", REP.cost_line({"cagr": 12.0, "max_dd": 40.0}, c))
+        self.assertIsNone(REP.cost_line(c, None))
+        self.assertIsNone(REP.cost_line(c, c))
+
+    def test_framing_comes_from_config(self):
+        cfg = copy.deepcopy(CFG)
+        cfg["report"]["framing"] = {cfg["live_strategy"]: "FRAMING TEXT"}
+        text = REP.render(REP.build_report(self.conn, cfg, self.now(), mode="tsp"))
+        self.assertIn("FRAMING TEXT", text)
+
     def test_record_ift_counts_and_refuses(self):
         d = R.next_business_day(self.last)
         self.assertEqual(REP.record_ift(self.conn, CFG, {"C": 100}, d), "flexible")

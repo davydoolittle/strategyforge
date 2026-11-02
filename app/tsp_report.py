@@ -158,7 +158,8 @@ def build_report(conn, cfg, now_utc=None, mode="auto"):
             "weights": weights, "moves_left": moves_left, "days_left": days_left,
             "fill_date": fill_date, "deadline_utc": dl, "notes": notes + ds.notes,
             "strategy": cfg["live_strategy"], "evidence": evidence(conn, cfg["live_strategy"], mode),
-            "noteworthy": patterns.noteworthy(conn), "disclaimer": cfg["report"]["disclaimer"]}
+            "noteworthy": patterns.noteworthy(conn), "disclaimer": cfg["report"]["disclaimer"],
+            "framing": cfg["report"].get("framing", {}).get(cfg["live_strategy"])}
 
 
 def _last_business_day(now_utc):
@@ -208,8 +209,13 @@ def render(rep, short=False):
           f"{ev['max_dd']:.0f}%, Sharpe {ev['sharpe']:.2f}, DSR {ev.get('dsr') or 0:.2f}"
           + (f"; walk-forward OOS Sharpe {ev['wf_oos_sharpe']:.2f}" if ev.get("wf_oos_sharpe") is not None else "")
           + (f" | 100% C: CAGR {c['cagr']:.1f}%, max DD {c['max_dd']:.0f}%, Sharpe {c['sharpe']:.2f}" if c else ""))
+        cost = cost_line(ev, c)
+        if cost:
+            w(cost)
     else:
         w("Backtest: none stored for this strategy (run tsp_backtest.py)")
+    if rep.get("framing"):
+        w(rep["framing"])
     if not short:
         for n in rep["notes"]:
             w(f"Note: {n}")
@@ -223,6 +229,20 @@ def render(rep, short=False):
             w(f"  {n}")
     w(rep["disclaimer"])
     return "\n".join(L)
+
+
+def cost_line(ev, c):
+    """What the live strategy costs or buys against 100% C, from the stored backtests."""
+    if not c or ev is c:
+        return None
+    gap = ev["cagr"] - c["cagr"]
+    dd = f"max drawdown {ev['max_dd']:.0f}% vs {c['max_dd']:.0f}%"
+    if gap < 0 and ev["max_dd"] < c["max_dd"]:
+        return (f"Cost: a risk preference, not an edge. It gave up {-gap:.1f} points a year of return "
+                f"against 100% C to cut the worst drawdown from {c['max_dd']:.0f}% to {ev['max_dd']:.0f}%.")
+    if gap < 0:
+        return f"Cost: it gave up {-gap:.1f} points a year against 100% C and did not cut drawdowns ({dd})."
+    return f"Against 100% C: {gap:+.1f} points a year, {dd} (backtest, see disclaimer)."
 
 
 def notify_once(conn, rep, topic, title):

@@ -110,6 +110,9 @@
 
   "report": {
     "ntfy_title": "TSP daily",
+    "framing": {
+      "trend_filter": "Why use it: to avoid deep drawdowns, not to beat C. The cost is uneven: it was ahead of C in 2004-09 and trailed C by about 4-5 points a year in 2010-19 and since 2020 (FINDINGS F14). If you can sit through a 50% drop, 100% C has returned more."
+    },
     "disclaimer": "Analysis only. Backtested results are hypothetical; past performance does not guarantee future results. You place every IFT yourself."
   }
 }
