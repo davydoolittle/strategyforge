@@ -56,6 +56,8 @@
   .charts { display: grid; grid-template-rows: 260px 130px; gap: 6px; }
   .charts > div { position: relative; }
   .b-fwd { background: #1d2a3a; color: var(--accent); }
+  pre.report { white-space: pre-wrap; margin: 0 0 10px; font: 12.5px/1.5 ui-monospace, Menlo, Consolas, monospace;
+               background: var(--bg); border: 1px solid var(--line); border-radius: 6px; padding: 10px; }
   .spark { display: flex; align-items: center; gap: 10px; padding: 4px 0; }
   .spark .lbl { width: 200px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
   .spark canvas { height: 36px !important; width: 260px !important; }
@@ -113,6 +115,31 @@
     <div class="caveat">ranking, not a validated signal</div>
     <div class="scroll"><table id="screen"><thead></thead><tbody></tbody></table></div>
     <div id="scr-foot" class="muted"></div>
+  </section>
+
+  <section class="wide">
+    <h2>TSP <small id="tsp-meta">weekly report (tsp_report.py)</small></h2>
+    <pre id="tsp-text" class="report"></pre>
+    <div class="scroll"><table id="tsp-runs"><thead></thead><tbody></tbody></table></div>
+    <div id="tsp-ifts" class="muted"></div>
+    <div class="muted">Analysis only. Backtested results are hypothetical; past performance does not guarantee
+      future results. You place every IFT yourself. F12/F14: nothing tactical beat 100% C after 2009.</div>
+  </section>
+
+  <section class="wide">
+    <h2>Pattern ledger <small id="pat-meta">52 traditional patterns, each tested once (patterns.py, F18)</small></h2>
+    <div class="scroll"><table id="patterns"><thead></thead><tbody></tbody></table></div>
+    <div class="muted">History, not advice: none of these is a trading rule. SUGGESTIVE means it did not survive
+      the multiple-testing correction and could be luck. "on now" = the pattern's condition holds today.</div>
+  </section>
+
+  <section class="wide">
+    <h2>Insider activity <span class="badge b-soft">UNTESTED, no prediction</span>
+      <small id="ins-meta">from Edgar Alert (insider_feed.py)</small></h2>
+    <div class="scroll"><table id="ins-clusters"><thead></thead><tbody></tbody></table></div>
+    <div class="scroll" style="margin-top:10px"><table id="ins-buys"><thead></thead><tbody></tbody></table></div>
+    <div class="muted">What insiders reported doing, nothing more. No study has tested whether any of it predicts
+      a move. Sales are not shown: most large-company selling is routine.</div>
   </section>
 
   <section class="wide">
@@ -376,6 +403,72 @@ async function loadJobs() {
     hb ? el("span", { class: hb.stale ? "err" : "" }, utc(hb.last_candle_ts) + " UTC" + (hb.stale ? ": collector stalled?" : "")) : "–");
 }
 
+/* ---------------- small table helper ---------------- */
+// cols: [label, (row) => cell text or Node, left-aligned?]
+function fillTable(t, cols, data, emptyMsg) {
+  t.tHead.replaceChildren(el("tr", {}, ...cols.map(([l, , left]) => el("th", { class: left ? "l" : "" }, l))));
+  t.tBodies[0].replaceChildren(...(data.length ? data.map((r) => el("tr", {},
+    ...cols.map(([, f, left]) => el("td", { class: left ? "l" : "" }, f(r)))))
+    : [el("tr", {}, el("td", { class: "l empty", colspan: cols.length }, emptyMsg))]));
+}
+const pct1 = (v, scale = 1) => v === null || v === undefined ? "–" : (v >= 0 ? "+" : "") + (scale * v).toFixed(1);
+const money = (v) => v === null || v === undefined ? "–" : v >= 1e6 ? `$${(v / 1e6).toFixed(1)}M` : `$${(v / 1e3).toFixed(0)}K`;
+
+/* ---------------- TSP ---------------- */
+async function loadTsp() {
+  let d;
+  try { d = await api("/api/tsp"); } catch (e) { fail($("tsp-text"), e); return; }
+  $("tsp-text").textContent = d.report ? d.report.text : "no TSP report yet: the tsp job writes one per new price date";
+  if (d.report) $("tsp-meta").textContent = `report for ${d.report.data_date} (${d.report.data_mode} data), written ${String(d.report.created_at).slice(0, 16).replace("T", " ")} UTC`;
+  fillTable($("tsp-runs"), [
+    [`backtest (${d.runs_mode || "–"} prices)`, (r) => r.strategy, true],
+    ["period", (r) => `${r.start} – ${r.end}`, true],
+    ["CAGR %", (r) => fmt(r.cagr, 1)], ["max DD %", (r) => fmt(r.max_dd, 1)], ["vol %", (r) => fmt(r.vol, 1)],
+    ["Sharpe", (r) => fmt(r.sharpe, 2)], ["DSR", (r) => fmt(r.dsr, 2)], ["PSR beats C", (r) => fmt(r.psr_beats_c, 2)],
+    ["WF OOS Sharpe", (r) => fmt(r.wf_oos_sharpe, 2)], ["moves / month", (r) => fmt(r.moves_per_month, 2)],
+  ], d.runs, "no TSP backtests stored (tsp_backtest.py)");
+  $("tsp-ifts").textContent = d.my_ifts.length
+    ? "Your recorded IFTs: " + d.my_ifts.map((i) => `${i.fill_date} ${i.kind}: ` +
+        Object.entries(i.target).map(([f, w]) => `${f} ${w}%`).join(" ")).join(" · ")
+    : "No IFT recorded: the report assumes the base allocation (tsp_report.py --record-ift).";
+}
+
+/* ---------------- pattern ledger ---------------- */
+async function loadPatterns() {
+  let rows;
+  try { rows = await api("/api/patterns"); } catch (e) { fail($("patterns").tBodies[0], e); return; }
+  const cls = { SUPPORTED: "b-pass", SUGGESTIVE: "b-soft", OPPOSITE: "b-fail" };
+  fillTable($("patterns"), [
+    ["claim", (r) => r.claim, true], ["asset", (r) => r.asset, true], ["h days", (r) => String(r.h)],
+    ["status", (r) => el("span", { class: "badge " + (cls[r.status] || "b-none") }, r.status), true],
+    ["windows", (r) => `${r.n ?? "–"} / ${r.n_base ?? "–"}`],
+    ["mean on %", (r) => pct1(r.mean_on, 100)], ["mean base %", (r) => pct1(r.mean_base, 100)],
+    ["p", (r) => fmt(r.p, 3)], ["on now", (r) => r.active ? "yes" : ""], ["last on", (r) => r.last_on ?? "–"],
+  ], rows, "no pattern results yet: the patterns job runs Sundays 22:00 UTC");
+  const counts = {};
+  for (const r of rows) counts[r.status] = (counts[r.status] || 0) + 1;
+  if (rows.length) $("pat-meta").textContent = `${rows.length} patterns, run ${String(rows[0].run_at).slice(0, 16).replace("T", " ")} UTC · ` +
+    Object.entries(counts).map(([k, v]) => `${v} ${k.toLowerCase()}`).join(", ");
+}
+
+/* ---------------- insider activity ---------------- */
+async function loadInsider() {
+  let d;
+  try { d = await api("/api/insider"); } catch (e) { fail($("ins-clusters").tBodies[0], e); return; }
+  const name = (t) => d.crypto_linked.includes(t) ? `${t} (crypto-linked)` : t;
+  fillTable($("ins-clusters"), [
+    ["cluster", (r) => name(r.ticker), true], ["window", (r) => `${r.window_start} – ${r.window_end}`, true],
+    ["insiders", (r) => String(r.insider_count)], ["buys", (r) => String(r.buy_count)],
+    ["total", (r) => money(r.total_value)], ["who", (r) => r.buyers, true],
+  ], d.clusters, `no buying clusters in the last ${d.days} days`);
+  fillTable($("ins-buys"), [
+    ["open-market buy", (r) => name(r.ticker), true], ["insider", (r) => r.owner_title ? `${r.owner_name} (${r.owner_title})` : r.owner_name, true],
+    ["traded", (r) => r.txn_date ?? "–"], ["filed", (r) => r.filing_date ?? "–"],
+    ["shares", (r) => fmt(r.shares, 0)], ["price", (r) => fmt(r.price, 2)], ["value", (r) => money(r.value)],
+  ], d.buys, `no open-market buys of ${money(d.min_buy_usd)}+ in the last ${d.days} days`);
+  $("ins-meta").textContent = `last ${d.days} days, buys of ${money(d.min_buy_usd)}+ (newest ${d.buys.length} shown) · newest filing ${d.last_filing ?? "–"}`;
+}
+
 /* ---------------- momentum screen ---------------- */
 async function loadScreen() {
   const t = $("screen");
@@ -406,7 +499,8 @@ async function boot() {
   $("status").textContent = "loading…";
   try { STRATS = await api("/api/strategies"); renderTree(); }
   catch (e) { fail($("tree"), e); }
-  await Promise.all([loadJobs(), loadCands(), loadHealth(), loadPaper(), loadScreen()]);
+  await Promise.all([loadJobs(), loadCands(), loadHealth(), loadPaper(), loadScreen(),
+                     loadTsp(), loadPatterns(), loadInsider()]);
   $("status").textContent = "updated " + new Date().toLocaleTimeString();
 }
 for (const k of ["tf", "family", "passed", "reported", "limit"]) $("f-" + k).addEventListener("change", loadCands);

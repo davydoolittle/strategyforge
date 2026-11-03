@@ -19,6 +19,11 @@ nothing here can write):
   /api/jobs                           scheduled collector jobs: last run,
                                       exit, next due, overdue; plus the
                                       newest crypto candle as a heartbeat
+  /api/tsp                            latest TSP report text, recorded IFTs,
+                                      the latest backtest batch (analysis only)
+  /api/patterns                       pattern ledger (F18): history, not advice
+  /api/insider                        insider clusters and large open-market
+                                      buys, last 90 days: UNTESTED, no prediction
   /api/screen                         momentum screen (screen.json next to
                                       forge.db, written by screen.py weekly)
   /                                   the dashboard (static/index.html, P7.2)
@@ -41,11 +46,13 @@ import sys
 import threading
 import time
 import traceback
+from datetime import datetime, timedelta, timezone
 from functools import lru_cache
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from urllib.parse import parse_qs, urlparse
 
 import engine
+import insider_feed as IF
 import main
 import windows as W
 
@@ -314,6 +321,75 @@ def jobs(conn, now=None):
     return out
 
 
+TSP_METRICS = ("cagr", "max_dd", "vol", "sharpe", "dsr", "psr_beats_c", "moves_per_month",
+               "wf_oos_sharpe")
+
+
+def tsp(conn):
+    """The report the tsp job last wrote (one per data date), the IFTs you
+    recorded, and the newest backtest batch: official prices if there are any
+    runs on them, else the proxies."""
+    out = {"report": None, "my_ifts": [], "runs": [], "runs_mode": None}
+    if has_table(conn, "tsp_reports"):
+        r = rows(conn, "SELECT data_date, data_mode, created_at, text FROM tsp_reports"
+                       " ORDER BY data_date DESC LIMIT 1")
+        out["report"] = r[0] if r else None
+    if has_table(conn, "tsp_my_ifts"):
+        out["my_ifts"] = rows(conn, "SELECT fill_date, target_json, kind, recorded_at, note"
+                                    " FROM tsp_my_ifts ORDER BY fill_date DESC, id DESC")
+        for i in out["my_ifts"]:
+            i["target"] = json.loads(i.pop("target_json") or "{}")
+    if has_table(conn, "tsp_runs"):
+        modes = {r["data_mode"] for r in rows(conn, "SELECT DISTINCT data_mode FROM tsp_runs")}
+        mode = "tsp" if "tsp" in modes else ("proxy" if "proxy" in modes else None)
+        if mode:
+            out["runs_mode"] = mode
+            for r in rows(conn, "SELECT run_at, strategy, start, end, metrics_json FROM tsp_runs"
+                                " WHERE data_mode=? AND run_at=(SELECT MAX(run_at) FROM tsp_runs"
+                                " WHERE data_mode=?) ORDER BY id", (mode, mode)):
+                m = json.loads(r.pop("metrics_json") or "{}")
+                r.update({k: m.get(k) for k in TSP_METRICS})
+                out["runs"].append(r)
+    return out
+
+
+PATTERN_ORDER = ("SUPPORTED", "SUGGESTIVE", "OPPOSITE", "NOT SUPPORTED", "TOO FEW")
+
+
+def patterns(conn):
+    if not has_table(conn, "pattern_results"):
+        return []
+    out = rows(conn, "SELECT pid, family, claim, asset, h, sign, status, n, n_base, mean_on, mean_base,"
+                     " hit_on, hit_base, p, first_half, second_half, active, last_on, run_at"
+                     " FROM pattern_results")
+    rank = {s: i for i, s in enumerate(PATTERN_ORDER)}
+    out.sort(key=lambda r: (rank.get(r["status"], len(rank)), r["p"] if r["p"] is not None else 2, r["pid"]))
+    return out
+
+
+INSIDER_DAYS = 90
+INSIDER_MAX_BUYS = 50
+
+
+def insider(conn, today=None):
+    today = today or datetime.now(timezone.utc).date()
+    since = (today - timedelta(days=INSIDER_DAYS)).isoformat()
+    out = {"tag": IF.TAG, "days": INSIDER_DAYS, "min_buy_usd": IF.MIN_BUY_USD,
+           "crypto_linked": sorted(IF.CRYPTO_LINKED), "clusters": [], "buys": [], "last_filing": None}
+    if has_table(conn, "insider_clusters"):
+        out["clusters"] = rows(conn, "SELECT ticker, window_start, window_end, insider_count, buyers,"
+                                     " buy_count, total_value FROM insider_clusters WHERE window_end>=?"
+                                     " ORDER BY window_end DESC, total_value DESC", (since,))
+    if has_table(conn, "insider_txns"):
+        out["buys"] = rows(conn, "SELECT ticker, owner_name, owner_title, txn_date, filing_date, shares,"
+                                 " price, value FROM insider_txns WHERE code=? AND value>=?"
+                                 " AND COALESCE(filing_date, txn_date)>=?"
+                                 " ORDER BY COALESCE(filing_date, txn_date) DESC, value DESC LIMIT ?",
+                           (IF.BUY_CODE, IF.MIN_BUY_USD, since, INSIDER_MAX_BUYS))
+        out["last_filing"] = conn.execute("SELECT MAX(filing_date) FROM insider_txns").fetchone()[0]
+    return out
+
+
 def health(conn):
     if not has_table(conn, "health"):
         return []
@@ -351,6 +427,9 @@ ROUTES = [
     (re.compile(r"^/api/health$"), lambda c, m, qs, db: health(c)),
     (re.compile(r"^/api/paper/(\d+)$"), lambda c, m, qs, db: paper(c, int(m.group(1)))),
     (re.compile(r"^/api/jobs$"), lambda c, m, qs, db: jobs(c)),
+    (re.compile(r"^/api/tsp$"), lambda c, m, qs, db: tsp(c)),
+    (re.compile(r"^/api/patterns$"), lambda c, m, qs, db: patterns(c)),
+    (re.compile(r"^/api/insider$"), lambda c, m, qs, db: insider(c)),
     (re.compile(r"^/api/screen$"), lambda c, m, qs, db: screen_json(db)),
 ]
 
