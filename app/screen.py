@@ -3,8 +3,9 @@ Momentum screen (P9.1b). Read-only on forge.db: a ranking, not a validated
 signal. Nothing here has passed the adversary; F16 and F17 found no timing
 skill in this universe, so the output must never be read as a trade list.
 
-For every instrument in the equities universe (`instruments`, session
-'us_equity'), from the latest adjusted daily closes in `candles`:
+For every ETF in the latest top-50 list (etf_universe.py: the most-traded US
+ETFs, re-ranked weekly; before the first list, every us_equity instrument),
+from the latest adjusted daily closes in `candles`:
 
   ret_1m, ret_3m, ret_6m, ret_12m   total return over 21 / 63 / 126 / 252
                                     trading days (adjusted closes, so
@@ -12,12 +13,19 @@ For every instrument in the equities universe (`instruments`, session
   vol_12m                           annualised realised volatility: stdev of
                                     252 daily log returns x sqrt(252)
   vol_adj_12m                       ret_12m / vol_12m; the ranking key,
-                                    highest first
+                                    highest first, except that a fund with
+                                    vol_12m under 2% (T-bills: BIL, SGOV) is
+                                    flagged cash-like and ranked last
 
 An instrument whose 1-month return is in the top or bottom EXTREME_PCT of the
 universe is flagged "short-term extreme (reversal risk)". With n instruments
 that is the round(n x 10%) highest and lowest, at least one each (10 ETFs:
-one each side).
+one each side; 50 ETFs: five each side). An ETF with under 253 bars, i.e. a fund
+less than a year old, is listed as skipped.
+
+The push (--notify) carries the top PUSH_TOP_N, any flagged ETF below them, and
+which ETFs entered or left the top 50 since the previous list. The dashboard
+shows all of them.
 
   python screen.py                  # table to stdout, JSON to <db dir>/screen.json
   python screen.py --out x.json     # JSON elsewhere
@@ -43,6 +51,7 @@ import os
 import sqlite3
 from datetime import datetime, timezone
 
+import etf_universe
 import health
 import main
 
@@ -50,8 +59,11 @@ HORIZONS = {"1m": 21, "3m": 63, "6m": 126, "12m": 252}
 VOL_DAYS = 252
 EXTREME_PCT = 10
 STALE_DAYS = 5          # calendar days behind the freshest instrument
+CASH_VOL = 0.02         # under 2% a year: a T-bill fund, whose return / vol means nothing
+CASH_LABEL = "cash-like (vol under 2%): ranked last"
 NOTE = "ranking, not a validated signal"
 NTFY_TITLE = "StrategyForge momentum screen"
+PUSH_TOP_N = 15
 EXTREME_LABEL = "short-term extreme (reversal risk)"
 
 
@@ -60,8 +72,18 @@ def default_out(db_path=None):
 
 
 def universe(conn):
-    return [r[0] for r in conn.execute(
+    """(symbols, info): the latest top-50 list, or every us_equity instrument
+    before the first list. info says which, and who entered and left."""
+    now, entered, left = etf_universe.latest(conn)
+    if now is not None:
+        done = etf_universe.runs(conn)
+        return now, {"source": f"top {len(now)} US ETFs by dollar volume", "run_date": done[0],
+                     "previous_run": done[1] if len(done) > 1 else None,
+                     "entered": entered, "left": left, "liquidity_rank": {s: i for i, s in enumerate(now, 1)}}
+    syms = [r[0] for r in conn.execute(
         "SELECT symbol FROM instruments WHERE session='us_equity' ORDER BY symbol")]
+    return syms, {"source": "us_equity instruments", "run_date": None, "previous_run": None,
+                  "entered": [], "left": [], "liquidity_rank": {}}
 
 
 def closes(conn, symbol, n):
@@ -99,17 +121,22 @@ def n_extreme(n):
 def compute(conn):
     need = max(max(HORIZONS.values()), VOL_DAYS) + 1
     rows, skipped = [], []
-    for sym in universe(conn):
+    syms, info = universe(conn)
+    for sym in syms:
         series = closes(conn, sym, need)
         m = metrics(series)
         if m is None:
             skipped.append({"symbol": sym, "bars": len(series), "why": f"fewer than {need} daily bars"})
             continue
-        rows.append({"symbol": sym, "as_of": _date(series[-1][0]), **m})
-    rows.sort(key=lambda r: (r["vol_adj_12m"] is None, -(r["vol_adj_12m"] or 0), r["symbol"]))
+        rows.append({"symbol": sym, "as_of": _date(series[-1][0]), **m,
+                     "liquidity_rank": info["liquidity_rank"].get(sym),
+                     "new": sym in info["entered"]})
+    for r in rows:
+        r["cash_like"] = r["vol_12m"] is not None and r["vol_12m"] < CASH_VOL
+    rows.sort(key=lambda r: (r["cash_like"], r["vol_adj_12m"] is None, -(r["vol_adj_12m"] or 0), r["symbol"]))
     for i, r in enumerate(rows, 1):
         r["rank"] = i
-        r["flags"] = []
+        r["flags"] = [CASH_LABEL] if r["cash_like"] else []
     k = n_extreme(len(rows))
     by_1m = sorted(rows, key=lambda r: (r["ret_1m"], r["symbol"]))
     for r in by_1m[:k]:
@@ -129,7 +156,8 @@ def compute(conn):
     return {"generated_at": datetime.now(timezone.utc).isoformat(timespec="seconds"),
             "as_of": latest, "note": NOTE, "rank_by": "vol_adj_12m",
             "horizons_days": HORIZONS, "vol_days": VOL_DAYS, "extreme_pct": EXTREME_PCT,
-            "rows": rows, "skipped": skipped}
+            "rows": rows, "skipped": skipped,
+            "universe": {k: v for k, v in info.items() if k != "liquidity_rank"}}
 
 
 def _date(ts):
@@ -149,14 +177,20 @@ def render(screen):
     if not screen["rows"] and not screen["skipped"]:
         L.append("   no us_equity instruments (equities.py --seed / --backfill)")
     L.append(f"Ranked by 12-month return / 12-month realised volatility. Flag: 1-month return in the "
-             f"top or bottom {screen['extreme_pct']}%. F16/F17: no timing skill found in this universe.")
+             f"top or bottom {screen['extreme_pct']}%. F16/F17: no ETF timing rule tested here has passed.")
     return "\n".join(L)
 
 
 def render_push(screen):
     """The ntfy body: one line per instrument, narrow enough for a phone."""
     L = [f"Data as of {screen['as_of']}. {screen['note'].capitalize()}."]
-    for r in screen["rows"]:
+    uni = screen.get("universe") or {}
+    if uni.get("run_date"):
+        L[0] += f" {len(screen['rows'])} of the {uni['source']}."
+    shown = [r for r in screen["rows"] if r["rank"] <= PUSH_TOP_N or r["extreme"] or r["stale"]]
+    for i, r in enumerate(shown):
+        if i and r["rank"] > shown[i - 1]["rank"] + 1:
+            L.append("...")
         tags = []
         if r["extreme"]:
             tags.append(f"1m {r['extreme']} {screen['extreme_pct']}%, reversal risk")
@@ -164,11 +198,16 @@ def render_push(screen):
             tags.append(f"stale, last bar {r['as_of']}")
         L.append(f"{r['rank']}. {r['symbol']} 12m {100 * r['ret_12m']:+.1f}%, "
                  f"12m/vol {r['vol_adj_12m']:+.2f}" + (f" [{'; '.join(tags)}]" if tags else ""))
-    for s in screen["skipped"]:
-        L.append(f"skipped {s['symbol']}: {s['why']}")
+    if len(shown) < len(screen["rows"]):
+        L.append(f"{len(shown)} of {len(screen['rows'])} shown: all on the dashboard")
+    if uni.get("previous_run"):
+        L.append(f"Top 50 since {uni['previous_run']}: in {', '.join(uni['entered']) or 'none'}; "
+                 f"out {', '.join(uni['left']) or 'none'}")
+    if screen["skipped"]:
+        L.append("Skipped (fewer than 253 daily bars): " + ", ".join(s["symbol"] for s in screen["skipped"]))
     if not screen["rows"] and not screen["skipped"]:
         L.append("no us_equity instruments")
-    L.append("F16/F17: no timing skill found in this universe. Not a trade list.")
+    L.append("F16/F17: no ETF timing rule tested here has passed. Not a trade list.")
     return "\n".join(L)
 
 

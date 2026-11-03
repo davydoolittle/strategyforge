@@ -571,7 +571,8 @@ def main_cli():
         equities.ensure_tables(conn)
         macro_data.ensure_tables(conn)
         macro_data.refresh(conn)
-        equities.backfill(conn, equities.load_tiingo_credentials())
+        # the research ten only: the screen's ETFs are Alpaca series (etf_universe.py)
+        equities.backfill(conn, equities.load_tiingo_credentials(), symbols=list(equities.UNIVERSE))
     if not args.show:
         run(conn)
     show(conn)

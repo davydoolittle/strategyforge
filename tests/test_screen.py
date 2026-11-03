@@ -20,6 +20,7 @@ sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 import fast_tmp  # noqa: E402,F401  (temp files in RAM, see fast_tmp.py)
 
 import equities as EQ  # noqa: E402
+import etf_universe as UNI  # noqa: E402
 import screen as SC  # noqa: E402
 
 DAY = 86400
@@ -147,6 +148,21 @@ class TestCompute(unittest.TestCase):
         self.assertIn("no us_equity instruments", SC.render(sc))
 
 
+class TestCashLike(unittest.TestCase):
+    def test_tbill_fund_is_flagged_and_ranked_last(self):
+        conn = make_db()
+        add(conn, "EQ", zigzag(300, 1.0004, 0.01))               # ~16% vol, positive drift
+        add(conn, "BIL", zigzag(300, 1.00015, 0.0004))           # ~0.6% vol: huge ratio
+        add(conn, "LOSER", zigzag(300, 0.9995, 0.01))
+        sc = SC.compute(conn)
+        self.assertEqual([r["symbol"] for r in sc["rows"]], ["EQ", "LOSER", "BIL"])
+        bil = sc["rows"][-1]
+        self.assertTrue(bil["cash_like"])
+        self.assertGreater(bil["vol_adj_12m"], sc["rows"][0]["vol_adj_12m"])
+        self.assertIn(SC.CASH_LABEL, bil["flags"])
+        self.assertFalse(sc["rows"][0]["cash_like"])
+
+
 class TestCli(unittest.TestCase):
     def setUp(self):
         self.dir = tempfile.mkdtemp()
@@ -198,7 +214,8 @@ class TestNotify(unittest.TestCase):
         self.assertTrue(lines[1].startswith("1. A 12m "))
         self.assertIn("reversal risk", text)
         self.assertIn("stale, last bar", text)
-        self.assertIn("skipped NEW", text)
+        self.assertIn("Skipped (fewer than 253 daily bars): NEW", text)
+        self.assertNotIn(" of the ", lines[0])                # no top-50 list yet
         self.assertIn("Not a trade list.", lines[-1])
         self.assertLess(len(text.encode()), 4096)            # ntfy's message limit
         self.assertTrue(all(len(x) <= 80 for x in lines[1:-1]))
@@ -235,6 +252,60 @@ class TestNotify(unittest.TestCase):
             push.assert_not_called()
             SC.main_cli(["--notify", "--ntfy-topic", "t", "--no-json"])
             push.assert_called_once()
+
+
+def put_list(conn, run_date, syms):
+    UNI.store(conn, [{"rank": i, "symbol": s, "name": s, "exchange": "ARCA", "dollar_vol": 1e9 / i,
+                      "n_sessions": 20} for i, s in enumerate(syms, 1)],
+              {"n_listed": 0, "n_tradable": 0, "n_excluded": 0, "n_ranked": 0, "data_end": run_date}, run_date)
+
+
+class TestTopFiftyUniverse(unittest.TestCase):
+    def setUp(self):
+        self.conn = make_db()
+        UNI.ensure_tables(self.conn)
+        self.syms = [f"E{i:02d}" for i in range(50)]
+        for i, sym in enumerate(self.syms):
+            add(self.conn, sym, zigzag(300, 1.0010 - 0.00001 * i, 0.01))
+        add(self.conn, "DBC", zigzag(300, 1.002, 0.01))           # research ETF, not in the list
+
+    def test_without_a_list_every_instrument(self):
+        sc = SC.compute(self.conn)
+        self.assertEqual(len(sc["rows"]), 51)
+        self.assertEqual(sc["universe"]["source"], "us_equity instruments")
+
+    def test_latest_list_only_with_changes(self):
+        put_list(self.conn, "2026-10-25", self.syms[:49] + ["DBC"])
+        put_list(self.conn, "2026-11-01", ["NEWFUND"] + self.syms[1:49] + ["E00"])
+        add(self.conn, "NEWFUND", zigzag(100, 1.001, 0.01))       # under a year of bars
+        sc = SC.compute(self.conn)
+        self.assertNotIn("DBC", [r["symbol"] for r in sc["rows"]])
+        self.assertEqual(len(sc["rows"]), 49)
+        self.assertEqual([s["symbol"] for s in sc["skipped"]], ["NEWFUND"])
+        u = sc["universe"]
+        self.assertEqual((u["run_date"], u["previous_run"], u["entered"], u["left"]),
+                         ("2026-11-01", "2026-10-25", ["NEWFUND"], ["DBC"]))
+        row = {r["symbol"]: r for r in sc["rows"]}
+        self.assertEqual(row["E00"]["liquidity_rank"], 50)
+        self.assertEqual(sum(1 for r in sc["rows"] if r["extreme"]), 10)   # 5 each side of 49
+
+    def test_push_top_15_flags_and_changes(self):
+        put_list(self.conn, "2026-10-25", self.syms)
+        put_list(self.conn, "2026-11-01", self.syms[1:] + ["NEWFUND"])
+        sc = SC.compute(self.conn)
+        text = SC.render_push(sc)
+        lines = text.splitlines()
+        ranked = [x for x in lines if x[:1].isdigit() and ". " in x[:4]]
+        flagged_below = [r for r in sc["rows"] if r["rank"] > SC.PUSH_TOP_N and r["extreme"]]
+        self.assertEqual(len(ranked), SC.PUSH_TOP_N + len(flagged_below))
+        self.assertTrue(flagged_below)
+        self.assertIn("...", lines)
+        self.assertIn(f"{len(ranked)} of 49 shown: all on the dashboard", text)
+        self.assertIn("49 of the top 50 US ETFs by dollar volume", lines[0])
+        self.assertIn("Top 50 since 2026-10-25: in NEWFUND; out E00", text)
+        self.assertIn("Skipped (fewer than 253 daily bars): NEWFUND", text)
+        self.assertIn("Ranking, not a validated signal.", lines[0])
+        self.assertLess(len(text.encode()), 4096)
 
 
 if __name__ == "__main__":

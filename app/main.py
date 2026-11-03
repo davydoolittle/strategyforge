@@ -88,6 +88,9 @@ JOB_SPECS = [
     ("patterns", "sun@22:00", "patterns.py --refresh", 1800),
     # insider activity from Edgar: pull, then one digest, or a warning if it is down
     ("insider", "1d", "insider_feed.py --notify", 600),
+    # the screen's ETF list: top 50 by dollar volume, re-ranked, members' bars
+    # fetched; after Sunday's patterns refresh, before Monday's screen
+    ("etf_universe", "sun@23:00", "etf_universe.py --refresh", 3600),
     # momentum screen: read-only ranking for the dashboard, pushed via ntfy
     # once per data date, Mondays 06:00 UTC
     ("screen", "mon@06:00", "screen.py --notify", 600),

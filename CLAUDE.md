@@ -48,5 +48,6 @@ export, and the TSP allocation module. Nothing in this repo places live orders.
 - No further 1h family searches.
 - The core 1d ETF budget is spent (`optimizer.DECLARED_BUDGETS`). ETF bars are frozen in snapshot `etf-2026-10-30`.
 - Insider data is UNTESTED context. No message may predict a move until a pre-registered study passes.
+- The momentum screen covers the top 50 US ETFs by dollar volume, re-ranked weekly (`etf_universe.py`). Research stays on the ten fixed ETFs in `equities.UNIVERSE`.
 - No strategy in this repo has beaten buy-and-hold. Changing Phase 10's rule after F17 is a new hypothesis and needs its own registration.
 - Forward tests #3214 and #4027 running. Both are marked `forward_test`; neither has a forward trade yet.

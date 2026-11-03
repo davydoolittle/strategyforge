@@ -22,6 +22,9 @@ from its own base. --compare checks the two against each other on their overlap.
 Credentials, next to forge.db: tiingo.env (TIINGO_API_KEY=... or the bare
 token), alpaca.env (APCA_API_KEY_ID, APCA_API_SECRET_KEY).
 
+The research universe is the ten in UNIVERSE; --backfill, --snapshot and
+--report touch only those. The screen's 50 ETFs come from etf_universe.py.
+
   python equities.py --backfill           # symbols not fetched through yesterday
   python equities.py --backfill --force   # all of them
   python equities.py --backfill --source alpaca
@@ -168,9 +171,13 @@ def fetch_exchange(symbol, headers, get=_get):
 
 def fetch_bars(symbol, end_date, headers, get=_get):
     """Every daily bar through end_date, oldest first, as (ts, o, h, l, c, v)."""
+    # A bare date means the end of that day in New York, which the free plan
+    # refuses as "recent SIP data" until ~05:00 UTC the next day. 21:00 UTC is
+    # after the close, so the day's bar is still in.
+    end = f"{end_date}T21:00:00Z" if len(end_date) == 10 else end_date
     bars, token = [], None
     while True:
-        q = {"symbols": symbol, "timeframe": "1Day", "start": EARLIEST, "end": end_date,
+        q = {"symbols": symbol, "timeframe": "1Day", "start": EARLIEST, "end": end,
              "adjustment": ADJUSTMENT, "feed": FEED, "limit": 10000, "sort": "asc"}
         if token:
             q["page_token"] = token
@@ -223,11 +230,16 @@ def store_bars(conn, symbol, bars):
                          (symbol, SESSION)).fetchone()
     if other:
         raise ValueError(f"{symbol} already exists in candles as session {other[0]}")
-    for i in range(0, len(bars), BATCH_ROWS):
+    # Only rows that differ: a week with no dividend adds a few bars instead
+    # of rewriting the whole history (one commit per BATCH_ROWS either way).
+    have = {r[0]: r[1:] for r in conn.execute(
+        "SELECT ts, open, high, low, close, volume FROM candles WHERE pair=?", (symbol,))}
+    changed = [b for b in bars if have.get(b[0]) != tuple(b[1:])]
+    for i in range(0, len(changed), BATCH_ROWS):
         conn.executemany(
             "INSERT OR REPLACE INTO candles (pair, ts, open, high, low, close, volume, session)"
             " VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
-            [(symbol, *b, SESSION) for b in bars[i:i + BATCH_ROWS]])
+            [(symbol, *b, SESSION) for b in changed[i:i + BATCH_ROWS]])
         conn.commit()
     new = {b[0] for b in bars}
     stale = [(symbol, r[0]) for r in conn.execute("SELECT ts FROM candles WHERE pair=?", (symbol,))
@@ -283,8 +295,9 @@ def backfill(conn, headers, force=False, symbols=None, today=None, fetch=fetch_t
 
 
 def report(conn):
-    rows = conn.execute("SELECT symbol, listed_from, data_start, data_end, n_bars, source"
-                        " FROM instruments WHERE session=? ORDER BY symbol", (SESSION,)).fetchall()
+    rows = [r for r in conn.execute("SELECT symbol, listed_from, data_start, data_end, n_bars, source"
+                                    " FROM instruments WHERE session=? ORDER BY symbol", (SESSION,))
+            if r[0] in UNIVERSE]     # the research ten; the screen's ETFs: etf_universe.py --show
     print(f"{'symbol':7}{'source':8}{'listed':12}{'first bar':12}{'last bar':12}{'bars':>6}{'years':>7}")
     short = []
     for sym, listed, start, end, n, src in rows:
@@ -308,8 +321,10 @@ def snapshot(conn, name):
     """Copy every us_equity bar to bar_snapshots under `name`. Restartable:
     rerun after a kill and only the missing rows go in. A finished snapshot is
     never changed, so reusing its name is refused unless the bars still match."""
+    research = tuple(UNIVERSE)
     rows = conn.execute("SELECT pair, ts, open, high, low, close, volume FROM candles"
-                        " WHERE session=? ORDER BY pair, ts", (SESSION,)).fetchall()
+                        f" WHERE session=? AND pair IN ({','.join('?' * len(research))})"
+                        " ORDER BY pair, ts", (SESSION, *research)).fetchall()
     if not rows:
         raise ValueError("no us_equity bars to snapshot")
     digest = hashlib.sha256(repr(rows).encode()).hexdigest()
@@ -326,7 +341,8 @@ def snapshot(conn, name):
                          todo[i:i + BATCH_ROWS])
         conn.commit()
     sources = ",".join(sorted({r[0] for r in conn.execute(
-        "SELECT source FROM instruments WHERE session=? AND source IS NOT NULL", (SESSION,))}))
+        "SELECT source FROM instruments WHERE session=? AND source IS NOT NULL"
+        f" AND symbol IN ({','.join('?' * len(research))})", (SESSION, *research))}))
     conn.execute("INSERT INTO snapshot_meta VALUES (?, ?, ?, ?, ?, ?)",
                  (name, datetime.now(timezone.utc).isoformat(timespec="seconds"), len(rows), digest,
                   _date(max(r[1] for r in rows)), sources))
@@ -368,10 +384,10 @@ def main_cli():
     if args.compare:
         compare_report(conn)
     if args.backfill and args.source == "alpaca":
-        backfill(conn, load_credentials(), force=args.force, fetch=fetch_bars,
+        backfill(conn, load_credentials(), force=args.force, symbols=list(UNIVERSE), fetch=fetch_bars,
                  exchange=fetch_exchange, source="alpaca")
     elif args.backfill:
-        backfill(conn, load_tiingo_credentials(), force=args.force)
+        backfill(conn, load_tiingo_credentials(), force=args.force, symbols=list(UNIVERSE))
     if args.snapshot:
         print(f"snapshot {args.snapshot}: sha256 {snapshot(conn, args.snapshot)}")
     report(conn)
