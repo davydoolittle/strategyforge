@@ -6,6 +6,34 @@ pinned windows on each candidate (P2.1).
 
 ---
 
+## F19. #5833 registered as the SOL squeeze forward test
+
+*Registered 2026-11-07 as lineage strategy #3 `squeeze-sol-5833` (squeeze
+family, SOL-USD 1h, DNA `a241465fd8809f42`, status `backtest_winner`,
+adversary verdict REJECTED on A2, report 56; see F11).*
+
+- **Why this one.** F11 licensed one hypothesis: squeeze on SOL, the only
+  family/pair where most random trials made money in-sample (185/300). It
+  offered two fixed parameter sets, the median of the 25 survivors or #5833,
+  the one with no soft fails. #5833 was chosen because it is an existing
+  candidate with a fixed DNA and an adversary report; the median would have
+  been a new, never-tested cfg. **Its trades after 2026-10-29 were not looked
+  at before choosing.**
+- **N = 1 forward test.** The pass rule: PSR vs 0 ≥ 0.95 on forward trades
+  only, i.e. SOL trades with signal at or after the end of its pinned
+  validation window, 2026-10-29T02:00 UTC, the start F11 fixed. Re-runs of
+  history do not count.
+- **Expected:** about 110 trades at SR 0.15, at roughly 20 trades a year:
+  **5–6 years.** That is the honest price of this hypothesis at 1h.
+- **No re-tuning of any parameter from here on.** Any change creates a new
+  candidate and restarts the clock.
+
+`health.py` watches it through the `forward_test` marker, which promotes
+nothing, from the next daily run (engine trades; no TradingView script is
+needed for the count).
+
+---
+
 ## F18. Pattern ledger: of 52 traditional market patterns, none is established; 5 are suggestive, about what luck would give
 
 *2026-11-01. `patterns.py`, list and labels committed (e68a728) before the first

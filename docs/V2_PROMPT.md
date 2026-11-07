@@ -230,7 +230,7 @@ Roadmap only: nothing here is built until it gets its own section with checklist
 
 | module | state | evidence |
 |---|---|---|
-| **crypto** | Live research. Forward tests #3214 and #4027 running (`forward_test`), no forward trade yet. No further 1h family searches. | F9-F11, F13 |
+| **crypto** | Live research. Forward tests #3214, #4027 and #5833 (SOL squeeze, F19) running (`forward_test`). No further 1h family searches. | F9-F11, F13 |
 | **equities** | Phase 9 done: Tiingo adjusted daily bars for 10 ETFs, frozen in snapshot `etf-2026-10-30`; core 1d budget spent, all 8 testable candidates REJECTED. Phase 10's pre-registered ETF trend book FAILED against buy-and-hold. | F16, F17 |
 | **tsp** | Analysis and alerts only. `live_strategy` = `trend_filter`. F12/F14: nothing beats 100% C. | F12, F14, F18 |
 
@@ -272,6 +272,67 @@ Rules for P13, written now so they cannot be bent later:
 - **Score against the market**, as abnormal return over a beta-adjusted benchmark, with costs. Overlapping events for the same stock in the same window are flagged, not double-counted.
 - **Registered before the first run**: the type list, the horizons, the benchmark and the pass rule are committed first; the results, including every type that shows nothing, go into FINDINGS.
 - **Notifications only quote measured numbers.** A type that passes may say "historically, N events, mean abnormal return X% over D days, CI ...". A type that has not been tested says UNTESTED. Nothing says "buy" or "sell".
+
+---
+
+## 8h. Phase 14 — Pre-registered cross-sectional momentum, sectors and countries  (added 2026-11-07, AWAITING OWNER APPROVAL)
+
+Goal: the breadth test F9-F17 point to. Every timing test so far had too few
+independent bets per hypothesis. A cross-sectional rule ranks many assets at
+once, so one hypothesis makes about 26 bets a month. Definition of done: F20
+written whatever it shows. **This rule is written before any of its data is
+fetched or any backtest exists. Nothing in P14.1-P14.3 starts until the owner
+approves this section as written.** One hypothesis, N = 1: no search, no
+parameter changes after the first run. A fix to rule semantics is allowed only
+with a written reason, as in F12.
+
+Prior evidence, stated so a fail is not a surprise: industry momentum
+(Moskowitz and Grinblatt 1999) and country momentum (Richards 1997;
+Asness, Moskowitz and Pedersen 2013). The effect was published before or near
+the start of this window and is reported to have weakened since, so most of
+this sample is out-of-sample to the literature. A FAIL is a likely outcome.
+
+The rule, fixed here:
+- **Universe, 26 ETFs, fixed by launch cohort, not by later success:**
+  - the 9 original Select Sector SPDRs, launched 1998-12-22: XLB XLE XLF XLI XLK XLP XLU XLV XLY;
+  - the 17 original iShares MSCI country funds (WEBS), launched 1996: EWA EWO EWK EWC EWQ EWG EWH EWI EWJ EWM EWW EWN EWS EWP EWD EWL EWU.
+
+  All 26 still trade (Tiingo's list, checked 2026-11-07), so no delisted fund
+  is missing and the cohort has no survivorship bias. Later funds (XLRE 2015,
+  XLC 2018, EWZ, EWY, EWT...) are outside the cohort and stay out. The top-50
+  screen list is **not** used: it was chosen from funds that exist today.
+- **Data:** Tiingo adjusted daily bars, one vendor per symbol, frozen in a new
+  snapshot `xsmom-<date>` before the run.
+- **Signal**, on each month's last trading day: momentum = adjusted return from
+  the close 12 month-ends back to the close one month-end back ("12-1": the
+  latest month is skipped, the standard guard against short-term reversal).
+- **Selection:** the top 3 of the 9 sectors and the top 6 of the 17 countries
+  (about a third of each). Ties broken by symbol.
+- **Weights:** the book is 50% sector sleeve, 50% country sleeve, equal weight
+  inside each. Long only, fully invested, no leverage, no cash, no shorts.
+- **Fills:** next trading day's open, rebalanced to target weights each month.
+  Costs: half the quoted spread per side, spread 5 bps for the sector funds and
+  15 bps for the country funds, wide on purpose to cover the early 2000s.
+- **Benchmark:** 50% equal weight of the 9 sectors plus 50% equal weight of the
+  17 countries, rebalanced monthly with the same fills and costs. The benchmark
+  holds the same assets, so market drift cannot pass for selection skill.
+- **Window:** first signal 1999-12-31 (its 12-month-back close is 1998-12-31,
+  the first month-end with all 26 trading), first fill 2000-01-03, through the
+  snapshot's last bar. About 26.8 years, ~322 months.
+- **Pass:** PSR vs 0 >= 0.95 on monthly returns of book minus benchmark, N = 1:
+  an annualised excess Sharpe of about 0.32. Also reported, information only:
+  CAGR, max drawdown, volatility, turnover; each sleeve's excess on its own;
+  2x costs; fills one day later; 2000-2012 and 2013-2026 separately; and the
+  top-third minus bottom-third spread.
+- **What follows:** a pass earns a forward test on data after the snapshot, not
+  a promotion. A fail is written up as F20 and ends this hypothesis: a variant
+  (another lookback, sleeve size or universe) needs its own registration and
+  counts this as trial 1 of its family.
+
+Build, once approved:
+- [ ] **P14.1 Data.** A second research list in `equities.py` (`XSMOM_UNIVERSE`), Tiingo bars from launch, snapshot `xsmom-<date>`. Eight of the sector funds are in the screen's top 50 with Alpaca bars since 2016; research needs Tiingo's from 1998, so those eight switch vendor (one series per symbol) and `etf_universe.py` stops fetching any symbol in a research list. Spreads as above in `instruments`. Tests.
+- [ ] **P14.2 Evaluator.** `app/xsmom.py`, read-only, snapshot only, PSR from `validation.probabilistic_sharpe`. Tests with known answers (a hand-built 3-asset case).
+- [ ] **P14.3 The test.** Run once. Write F20. Stop and report.
 
 ---
 

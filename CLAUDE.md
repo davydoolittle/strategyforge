@@ -41,6 +41,7 @@ export, and the TSP allocation module. Nothing in this repo places live orders.
 - **F16:** Core at 1d on ten ETFs: all 8 testable candidates rejected on A2. The best SR so far (#6377, 0.274) is market drift, not timing. No F15 exists.
 - **F17:** Pre-registered ETF trend book, N = 1: FAIL against buy-and-hold (PSR 0.032). It cut risk more than return, but no forward test is earned.
 - **F18:** Ledger of 52 traditional market patterns: 0 supported, 5 suggestive (about chance), 1 opposite. Context for the TSP report, never a trading rule.
+- **F19:** #5833 registered as the SOL squeeze forward test (from F11): PSR vs 0 ≥ 0.95 on SOL trades with signal ≥ 2026-10-29, ~110 trades, 5-6 years, no re-tuning.
 
 ## State of play
 
@@ -50,4 +51,6 @@ export, and the TSP allocation module. Nothing in this repo places live orders.
 - Insider data is UNTESTED context. No message may predict a move until a pre-registered study passes.
 - The momentum screen covers the top 50 US ETFs by dollar volume, re-ranked weekly (`etf_universe.py`). Research stays on the ten fixed ETFs in `equities.UNIVERSE`.
 - No strategy in this repo has beaten buy-and-hold. Changing Phase 10's rule after F17 is a new hypothesis and needs its own registration.
-- Forward tests #3214 and #4027 running. Both are marked `forward_test`; neither has a forward trade yet.
+- Forward tests #3214, #4027 and #5833 running, all marked `forward_test`. #3214's first paper trade (ETH short) opened 2026-11-06.
+- Phase 14 (cross-sectional momentum on 9 sector + 17 country ETFs, N = 1) is written in V2_PROMPT §8h and awaits owner approval. Nothing is fetched or run before that.
+- Failures are never deleted: every trial counts in A2's N.
