@@ -242,7 +242,7 @@ Roadmap only: nothing here is built until it gets its own section with checklist
 | phase | scope | deferred because |
 |---|---|---|
 | **P11** Portfolio / regime mode across asset classes | One book over crypto, ETFs and TSP funds, sized by volatility or regime. | Needs a fresh rationale. F16 (no timing skill per ETF) and F17 (the ETF trend book failed against buy-and-hold) remove the case it was meant to build on. Needs its own pre-registration and a benchmark that drift cannot beat by itself. |
-| **P12** S&P 100 stocks *(superseded by §8i: S&P 500, plan awaiting approval)* | Daily bars for the S&P 100 with a **point-in-time** constituent list (members as of each date, including names later dropped, merged or bankrupt). | Survivorship bias: today's list only contains the winners. Needs a constituent-history source first; a vendor will be proposed when the phase starts. Follows P11's verdict, not its success. |
+| **P12** S&P 100 stocks *(superseded by §8i: S&P 500 on free data, revised rule awaiting approval)* | Daily bars for the S&P 100 with a **point-in-time** constituent list (members as of each date, including names later dropped, merged or bankrupt). | Survivorship bias: today's list only contains the winners. Needs a constituent-history source first; a vendor will be proposed when the phase starts. Follows P11's verdict, not its success. |
 | **P13** EDGAR event study *(first test planned in §8i, awaiting approval)* | Measure what each SEC filing type does to the filer's price before any notification claims it means anything. Universe P12's. | Needs P12's point-in-time universe and daily bars. |
 | Derivatives (options, futures) | Out of scope. | No engine (no greeks, expiries, margin or roll model) and no evidence of an edge in the underlyings to express. |
 
@@ -337,89 +337,126 @@ Build, once approved:
 
 ---
 
-## 8i. Phases 12 and 13 — Point-in-time S&P 500 universe, then the material-agreement drift test  (added 2026-11-08, PLAN AWAITING OWNER APPROVAL)
+## 8i. Phases 12 and 13 — Point-in-time S&P 500 universe, then the material-agreement drift test  (added 2026-11-08; owner chose free data only and route A + B 2026-11-08; REVISED RULE AWAITING OWNER APPROVAL)
 
 Why: F20 and the literature behind it. Price momentum mixes news-driven moves,
 which tend to continue, with moves on no news, which tend to reverse (Chan 2003).
 The owner's hypothesis: momentum that follows a new contract, partnership or
 expansion continues while the news plays out. That effect lives in single
 stocks, not ETFs, so it needs a stock universe free of survivorship bias (P12)
-and timestamped news (P13). **Nothing below is bought, fetched or run until the
-owner approves this section and picks a P12 vendor.**
+and timestamped news (P13). **No paid data.** Two routes, both free:
 
-### P12. Point-in-time S&P 500 members and their daily bars
+- **A. History, with a worst-case rule for what free data lacks.** Fast to an
+  answer (months), biased in a known direction, and the rule pays for the bias.
+- **B. Forward recording from the day it starts.** Clean (no survivorship, no
+  look-ahead), slow (years). It also serves as A's forward test.
 
-Needed: (a) S&P 500 membership as of each date since 2005, including names later
-dropped, merged or bankrupt; (b) adjusted daily bars for every one of them,
-including delisted ones; (c) each member's SEC CIK, to join the filings.
+**Nothing is fetched or run until the owner approves this revised section.**
 
-Options, checked 2026-11-08 (prices from vendor pages or third parties; confirm
-before paying):
+Vendors considered and set aside by the owner (no paid services): EODHD, Norgate
+(Windows-only updater), Sharadar. Checked 2026-11-08: Tiingo's free data has many
+acquired former members (Celgene, Time Warner, Xilinx) but **none of Lehman, Bear
+Stearns, WaMu, Wachovia or Countrywide**, and its WB is now Weibo. Bankruptcies
+are exactly what a long-only test would most like to forget, so route A cannot
+simply skip them.
 
-| option | members | delisted prices | cost | gap |
-|---|---|---|---|---|
-| **EODHD**: EOD Historical plan + Indices Historical Constituents add-on | entry and exit dates, delisted names flagged (Lehman shown) | claimed, 30+ years | ~$20 + ~$30 a month; one or two months covers a one-off pull | some start dates are null; delisted price coverage must be checked before relying on it |
-| **Norgate**, US stocks Platinum | from 1957, delisted included | from 1950, ~25,000 delisted securities | ~$360 a year (third-party figure) | its updater runs on Windows only: needs a Windows VM on Matrix |
-| **Sharadar** (Nasdaq Data Link) | S&P 500 additions and removals from 1957, delisted included | SEP prices ~$39 a month (third-party figure) | constituents come bundled with the fundamentals product, price not published | cost unclear until the owner checks |
-| **Free**: fja05680/sp500 (GitHub) + Tiingo free tier | per-date lists from 1996, built from Wikipedia's selective change log | Tiingo has many acquired names (Celgene, Time Warner, Xilinx) but **none of Lehman, Bear Stearns, WaMu, Wachovia or Countrywide**; Tiingo's WB is now Weibo | $0, though 500 symbols a month makes ~1,200 names a three-month job | missing exactly the failures that matter: a long-only test would be biased upward |
+### P12. Point-in-time S&P 500 members and their daily bars (free)
 
-**Recommendation: EODHD for a one- or two-month pull, about $50-100 in all.**
-It is the only option that is Linux-friendly, has dated membership and claims
-delisted prices, at a one-off cost. Before paying, check its demo or trial on
-the five 2008 failures above. If they are missing, Norgate is the fallback.
-Whichever vendor: check its licence lets the data be kept for private research
-after the subscription ends.
-
-- [ ] **P12.1 Vendor check.** The five 2008 failures, plus ten random delisted members, must have membership dates and prices to their last trading day. A miss stops the phase and goes back to the owner.
-- [ ] **P12.2 Fetch.** Into a separate `/data/stocks.db`, not forge.db: about 1,200 names x 20 years is ~5 million bars, and the collector should not share a lock with it. Tables `pit_members` (symbol, vendor id, start, end, reason) and `stock_bars`; compute first, batch commits, restartable (§10.9); a scratch copy first. Frozen as snapshot `sp500-<date>`.
-- [ ] **P12.3 CIK map.** Each member's CIK: the vendor's field if it has one, else SEC's ticker files, else EDGAR's company search by name, by hand where needed. Unmatched members are listed; above 2% of events lost, stop and report.
-- [ ] **P12.4 Report.** Members per date (expect ~500 every day), delisted share, events lost to missing prices. Tests.
+- **Members:** `fja05680/sp500` on GitHub (MIT; per-date member lists from 1996,
+  last updated 2026-09-07), built from Wikipedia's change log plus a book's
+  dataset. Not independently verified, so it is checked against Wikipedia's
+  "Selected changes" table, and the per-date member count must stay 490-510
+  from 2005 on.
+- **Identity:** each member is mapped to its SEC CIK (SEC's ticker files, then
+  EDGAR company search by name, by hand where needed). The CIK, not the ticker,
+  is the company: a renamed company keeps its history, and a reused ticker
+  (Wachovia's WB, now Weibo) is not mistaken for it.
+- **Prices:** Tiingo's free tier, adjusted daily bars. A company counts as
+  **priced** only if its series covers every day it was a member from 2005 on;
+  a series that starts late, stops early or belongs to a ticker's later owner
+  makes it **unpriced** for the dates it misses. The free tier's 500 new
+  symbols a month (about 450 after the research sets) means ~1,100 tickers take
+  about three months: a daily collector job fetches ~15 new symbols a day,
+  restartable.
+- [ ] **P12.1 Members + CIK map.** `pit_members` (cik, ticker, start, end) in a separate `/data/stocks.db`, not forge.db (~5 million bars should not share the collector's lock). The Wikipedia cross-check and the 490-510 count. Unmatched members listed. Tests.
+- [ ] **P12.2 Bars.** Daily job `stock_bars`, ~15 new symbols a day within Tiingo's free quota, into stocks.db, batch commits, restartable (§10.9), a scratch copy first. Needs a collector rebuild. Then frozen as snapshot `sp500-<date>`.
+- [ ] **P12.3 Report.** Members per date, the priced share, and **the share of eligible events at unpriced members** (see the stop rule below). Tests.
 
 ### P13. One pre-registered test: drift after a material agreement
 
 The first test from the filing-type list in "P13 in detail" above, and trial 1 of
-that family under its rules. It is one hypothesis, N = 1, written before any
-filing or price is fetched. A fix to rule semantics is allowed only with a
-written reason, as in F12.
+that family under its rules. One hypothesis, N = 1, written before any filing or
+price is fetched. A fix to rule semantics is allowed only with a written reason,
+as in F12.
 
 The rule, fixed here:
-- **Universe:** S&P 500 members on the event day (P12), point in time.
+- **Universe:** S&P 500 members on the event day (P12), point in time, by CIK.
 - **Events:** 8-Ks reporting **item 1.01, entry into a material definitive
-  agreement**: contracts, partnerships, licences, supply deals. Window
-  2005-01-01 (the item codes started 2004-08-23) to the snapshot end. Excluded,
-  so the event is the agreement and not something else:
+  agreement**: contracts, partnerships, licences, supply deals. Window 2005-01-01
+  (the item codes started 2004-08-23) to the snapshot end. Excluded, so the event
+  is the agreement and not something else:
   - filings that also report 2.02 (results), since earnings would drive the move;
-  - filings that also report 2.03 (a new debt obligation): these are routine credit facilities;
-  - 1.01 filings of the same company within the prior 20 trading days (only the first one counts).
-- **Timing:** EDGAR's acceptance time. Accepted before 09:30 ET on a trading
-  day: the reaction day d0 is that day. Otherwise d0 is the next trading day.
+  - filings that also report 2.03 (a new debt obligation): routine credit facilities;
+  - a 1.01 filing by the same company within 20 trading days of its previous one (only the first counts).
+- **Timing:** EDGAR's acceptance time. Accepted before 09:30 ET on a trading day:
+  the reaction day d0 is that day. Otherwise d0 is the next trading day.
 - **Reaction:** the stock's abnormal return on d0, close before acceptance to
-  close of d0, against SPY with beta from the 250 trading days before d0. The
-  "strong reaction" filter is abnormal return at or above **2 sigma**, where
-  sigma is the stock's daily abnormal-return volatility over those 250 days.
-- **Trade:** buy at d0+1's open, hold 60 trading days (about three months, "while
-  the news plays out"), sell at the close. Long only. A delisting ends the trade
-  at the last price the vendor has. Costs: 10 bps a side.
+  close of d0, against SPY with beta from the 250 trading days before d0 (at
+  least 120 needed). The "strong reaction" filter: abnormal return at or above
+  **2 sigma**, where sigma is the stock's daily abnormal-return volatility over
+  those days.
+- **Trade:** buy at d0+1's open, hold 60 trading days ("while the news plays
+  out"), sell at the close. Long only. Costs: 10 bps a side.
+- **Worst case for what free data lacks** (new in this revision):
+  - An eligible event at an **unpriced** company cannot be filtered on its
+    reaction, so every one of them is counted as a trade, with a 60-day abnormal
+    return equal to the **5th percentile** of the observed trades' 60-day
+    abnormal returns, spread evenly over its 60 days.
+  - A trade whose price series **ends during the hold** gets the worse of its
+    return to the last bar and that 5th percentile. Free data cannot tell a
+    takeover from a collapse.
+  - **Stop rule:** if unpriced events exceed **5%** of all eligible events, the
+    test is not run. It is reported as not testable on free data.
 - **Test, in calendar time** (events overlap): each month, an equal-weight
-  portfolio of every open position; in a month with none, the book holds SPY
-  (excess 0). The series is the portfolio's monthly return minus the
-  beta-weighted SPY return.
-- **Pass:** PSR vs 0 >= 0.95 on that monthly series, N = 1.
-- **Information only:** the event count; the same with no reaction filter; holds of 20
-  and 120 days; negative reactions, the short side; 2005-2015 and 2016-on; the
-  2008-09 crisis left out; large versus small members.
-- **What follows:** a pass earns a forward test on filings after the snapshot,
-  and only then may an insider or filing message quote measured numbers ("N
-  events, mean abnormal return X% over 60 days"). It never says buy or sell. A
-  fail is written up and ends this hypothesis. Earnings drift (2.02) and the
+  portfolio of every open position, worst-case ones included; in a month with
+  none, the book holds SPY (excess 0). The series is the portfolio's monthly
+  return minus the beta-weighted SPY return.
+- **Pass:** PSR vs 0 >= 0.95 on that monthly series, N = 1, **with the worst case
+  applied**. The result without the worst case is reported as information only.
+- **Information only:** event counts; no reaction filter; holds of 20 and 120
+  days; negative reactions, the short side; 2005-2015 and 2016-on; 2008-09 left
+  out; large versus small members.
+- **What follows:** a pass makes route B its forward test (below). Only after
+  that passes too may an insider or filing message quote measured numbers ("N
+  events, mean abnormal return X% over 60 days"), and it never says buy or sell.
+  A fail is written up and ends this hypothesis. Earnings drift (2.02) and the
   rest of the list are separate registrations that count against the family.
-
-Needed from the owner as well: the User-Agent contact SEC requires (company or
-name plus an email). Edgar Alert's existing one can be reused if the owner says so.
-
-- [ ] **P13.1 Filings.** SEC submissions JSON (items and acceptance time per 8-K) for every mapped CIK, at most 10 requests a second, into stocks.db; a scratch copy first. Tests.
-- [ ] **P13.2 Evaluator.** `app/event_drift.py`, read-only on the snapshots, with tests on hand-built events whose answers are known (timing at 09:30 and 16:00, the exclusions, beta, overlapping positions).
+- [ ] **P13.1 Filings.** SEC submissions JSON (items and acceptance time for every 8-K) for every mapped CIK, at most 10 requests a second with the declared User-Agent, into stocks.db; a scratch copy first. Tests.
+- [ ] **P13.2 Evaluator.** `app/event_drift.py`, read-only on the snapshots, tests on hand-built events with known answers (09:30 and 16:00 timing, the exclusions, beta, overlapping positions, the worst case, the stop rule).
 - [ ] **P13.3 The test.** Commit the code, run once, write the finding, stop and report.
+
+### P13F. Route B: the same rule, forward only
+
+The identical rule, applied only to filings accepted after B starts, so nothing
+in it was known when the rule was fixed. Started now, whatever A shows; if A
+passes, B is its forward test; if A fails, B is a clean second look.
+
+- **Members:** the current S&P 500 list (Wikipedia, read daily), with every
+  change stored on the day it is seen. Point in time by construction.
+- **Filings:** a daily job reads SEC submissions for the current members' CIKs
+  (~500 requests a day, well under SEC's limit) and stores new 8-Ks with items
+  and acceptance time.
+- **Prices:** Alpaca's free daily bars for members and SPY, and delistings as
+  they happen, so nothing is lost.
+- **Pass:** the same PSR >= 0.95 on the same calendar-time series. No worst case
+  is needed, since no data is missing. At an expected ~100 qualifying events a
+  year, a verdict needs several years.
+- [ ] **P13F.1 Recorder.** Daily job `filings_forward`: members, 8-Ks, bars into stocks.db. Read-only on SEC and Wikipedia. Needs a collector rebuild. Tests.
+- [ ] **P13F.2 Reading.** The evaluator from P13.2 on forward data, run quarterly for the record; the verdict only at the registered size, never as a running peek that stops at the first good number.
+
+Needed from the owner before P13.1 and P13F.1: the User-Agent contact SEC
+requires (a name plus an email); Edgar Alert's existing one can be reused if the
+owner says so.
 
 ---
 

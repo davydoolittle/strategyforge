@@ -56,5 +56,5 @@ export, and the TSP allocation module. Nothing in this repo places live orders.
 - No strategy in this repo has beaten buy-and-hold. Changing Phase 10's rule after F17 is a new hypothesis and needs its own registration.
 - Forward tests #3214, #4027 and #5833 running, all marked `forward_test`. #3214's first paper trade (ETH short) opened 2026-11-06.
 - Phase 14 done: FAIL (F20). Research symbols are the ten (`equities.UNIVERSE`) plus Phase 14's 26 (`XSMOM_UNIVERSE`), frozen in snapshot `xsmom-2026-11-06`.
-- P12/P13 (point-in-time S&P 500 universe, then drift after 8-K item 1.01 material agreements, N = 1) are planned in V2_PROMPT §8i and await owner approval and a vendor choice. Nothing is bought, fetched or run before that.
+- P12/P13 (point-in-time S&P 500 universe, then drift after 8-K item 1.01 material agreements, N = 1) are planned in V2_PROMPT §8i on free data only (owner: no paid services), route A (history with a worst-case rule for missing prices) + B (forward recording). The revised rule awaits owner approval; nothing is fetched or run before that.
 - Failures are never deleted: every trial counts in A2's N.
