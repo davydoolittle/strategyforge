@@ -6,6 +6,66 @@ pinned windows on each candidate (P2.1).
 
 ---
 
+## F20. Pre-registered cross-sectional momentum, sector and country ETFs: FAIL; ranking by 12-1 momentum picked no better than holding all 26
+
+*2026-11-08. Phase 14, `xsmom.py` on snapshot `xsmom-2026-11-06`. One fixed rule,
+N = 1, written in V2_PROMPT 8h and approved by the owner before any of its data
+was fetched; code committed (e304b7e) before the run; run once. 26 ETFs fixed by
+launch cohort (9 original sector SPDRs, 17 original MSCI country funds), first
+fill 2000-01-03, 26.8 years, 323 months. Read-only: nothing was written to
+forge.db.*
+
+| | CAGR | max DD | vol | Sharpe |
+|---|---|---|---|---|
+| book (top 3 sectors + top 6 countries) | 7.37% | -54.1% | 18.5% | 0.54 |
+| equal-weight benchmark, same 26 | 7.63% | -57.9% | 18.6% | 0.55 |
+
+**Verdict: FAIL.** Monthly book minus benchmark: annualised Sharpe **-0.062**, PSR
+vs 0 **0.374** against the 0.95 needed. The book trailed by about a quarter of a
+point a year, at the same risk.
+
+Information only, not part of the verdict:
+
+| | excess Sharpe | PSR |
+|---|---|---|
+| sectors sleeve alone (CAGR 9.20% vs 8.86%) | +0.050 | 0.602 |
+| countries sleeve alone (CAGR 5.20% vs 6.17%) | -0.209 | 0.139 |
+| 2x costs | -0.111 | 0.282 |
+| fills one day later | -0.066 | 0.366 |
+| 2000-2012, 156 months | -0.015 | 0.479 |
+| 2013-2026, 167 months | -0.118 | 0.330 |
+| top third minus bottom third (-0.31% a year) | -0.034 | 0.431 |
+
+**What the numbers show.**
+
+- **No selection skill, in either half.** Unlike F12, F14 and F17, this is not a
+  risk trade: the book's volatility and drawdown match the benchmark's. It simply
+  picked funds that did no better than the rest. The top third did not beat the
+  bottom third (-0.31% a year).
+- **Costs are not the reason.** Turnover was modest (20% of the book changed name
+  a month), and the result was already negative before costs mattered: halving
+  them cannot turn -0.06 into the +0.32 the pass needed.
+- **Sectors: a whisper, not a result.** The sector sleeve alone was slightly
+  ahead (+0.05, PSR 0.60). That is not evidence, and choosing it after seeing
+  this table would be exactly the search the registration rules out.
+- **Consistent with the literature's decay.** Industry and country momentum were
+  published in 1997-99; this sample starts in 2000, and the later half is worse.
+
+**What this licenses.**
+
+- **The hypothesis is closed.** No forward test is earned.
+- **Variants are new hypotheses.** A sector-only book, another lookback (6-1,
+  3-1), another sleeve size or another universe each need their own registration
+  before any run, and count this as trial 1 of their family.
+- **Breadth alone did not help.** Phase 14 tested the lever F9-F17 pointed to,
+  many independent bets per hypothesis, with a textbook signal on a universe free
+  of survivorship bias. It still found nothing. Across crypto timing (F1-F11),
+  ETF timing (F16), the ETF trend book (F17), TSP rules (F12, F14) and now
+  cross-sectional selection, nothing in this repo has beaten simply holding the
+  market it trades.
+
+---
+
 ## F19. #5833 registered as the SOL squeeze forward test
 
 *Registered 2026-11-07 as lineage strategy #3 `squeeze-sol-5833` (squeeze

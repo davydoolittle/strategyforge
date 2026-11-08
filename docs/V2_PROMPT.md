@@ -231,7 +231,7 @@ Roadmap only: nothing here is built until it gets its own section with checklist
 | module | state | evidence |
 |---|---|---|
 | **crypto** | Live research. Forward tests #3214, #4027 and #5833 (SOL squeeze, F19) running (`forward_test`). No further 1h family searches. | F9-F11, F13 |
-| **equities** | Phase 9 done: Tiingo adjusted daily bars for 10 ETFs, frozen in snapshot `etf-2026-10-30`; core 1d budget spent, all 8 testable candidates REJECTED. Phase 10's pre-registered ETF trend book FAILED against buy-and-hold. | F16, F17 |
+| **equities** | Phase 14's cross-sectional momentum on 26 sector and country ETFs FAILED (F20). Phase 9 done: Tiingo adjusted daily bars for 10 ETFs, frozen in snapshot `etf-2026-10-30`; core 1d budget spent, all 8 testable candidates REJECTED. Phase 10's pre-registered ETF trend book FAILED against buy-and-hold. | F16, F17 |
 | **tsp** | Analysis and alerts only. `live_strategy` = `trend_filter`. F12/F14: nothing beats 100% C. | F12, F14, F18 |
 
 **TSP: drawdown control stated as a risk preference.** *(done 2026-11-02: `tsp_report.cost_line` prints the cost from the stored backtests; the framing note is `report.framing` in `tsp_config.json`.)* `trend_filter` already is a monthly drawdown-control rule (at most 1 move a month, inside the 2-a-month limit). What is missing is the report saying what it costs. On official prices (F14): CAGR 9.8% vs 11.2% for 100% C, max drawdown 34% vs 55%. The cost is not even over time: it won 2004-09 (10.9 vs 2.0) and trailed by 4.2 and 5.5 points a year in 2010-19 and 2020-. The daily report should present it as "you give up return to avoid deep drawdowns", with those numbers, never as a way to beat C. A different drawdown rule would be a new hypothesis, registered before it runs, max 2 transfers a month.
@@ -275,7 +275,7 @@ Rules for P13, written now so they cannot be bent later:
 
 ---
 
-## 8h. Phase 14 — Pre-registered cross-sectional momentum, sectors and countries  (added 2026-11-07, approved by the owner as written 2026-11-08)
+## 8h. Phase 14 — Pre-registered cross-sectional momentum, sectors and countries  (added 2026-11-07, approved by the owner as written 2026-11-08, done 2026-11-08: FAIL, FINDINGS F20)
 
 Goal: the breadth test F9-F17 point to. Every timing test so far had too few
 independent bets per hypothesis. A cross-sectional rule ranks many assets at
@@ -332,7 +332,7 @@ The rule, fixed here:
 Build, once approved:
 - [x] **P14.1 Data.** *(done 2026-11-08: `equities.XSMOM_UNIVERSE`, `RESEARCH_SYMBOLS`, `seed_xsmom`, `--set xsmom`; scratch test on XLE (vendor switch), XLB and EWJ, then live: 26 Tiingo series, countries from 1996-04-01, sectors from 1998-12-22, through 2026-11-06. Snapshot `xsmom-2026-11-06`, 194,025 bars, sha256 b6cf91d5...8b0c. The patterns job's Tiingo refresh now covers all research symbols (36 + 8 macro requests a week, under Tiingo's 50 an hour).)* A second research list in `equities.py` (`XSMOM_UNIVERSE`), Tiingo bars from launch, snapshot `xsmom-<date>`. Eight of the sector funds are in the screen's top 50 with Alpaca bars since 2016; research needs Tiingo's from 1998, so those eight switch vendor (one series per symbol) and `etf_universe.py` stops fetching any symbol in a research list. Spreads as above in `instruments`. Tests.
 - [x] **P14.2 Evaluator.** *(done 2026-11-08: `app/xsmom.py`, tests/test_xsmom.py, committed before the run. It reuses Phase 10's simulator, month ends, monthly returns and PSR, so the fills, costs and the last partial month are handled as in F17.)* `app/xsmom.py`, read-only, snapshot only, PSR from `validation.probabilistic_sharpe`. Tests with known answers (a hand-built 3-asset case).
-- [ ] **P14.3 The test.** Run once. Write F20. Stop and report.
+- [x] **P14.3 The test.** *(done 2026-11-08: FAIL. Excess Sharpe -0.062, PSR 0.374. FINDINGS F20.)* Run once. Write F20. Stop and report.
 
 ---
 
