@@ -242,8 +242,8 @@ Roadmap only: nothing here is built until it gets its own section with checklist
 | phase | scope | deferred because |
 |---|---|---|
 | **P11** Portfolio / regime mode across asset classes | One book over crypto, ETFs and TSP funds, sized by volatility or regime. | Needs a fresh rationale. F16 (no timing skill per ETF) and F17 (the ETF trend book failed against buy-and-hold) remove the case it was meant to build on. Needs its own pre-registration and a benchmark that drift cannot beat by itself. |
-| **P12** S&P 100 stocks | Daily bars for the S&P 100 with a **point-in-time** constituent list (members as of each date, including names later dropped, merged or bankrupt). | Survivorship bias: today's list only contains the winners. Needs a constituent-history source first; a vendor will be proposed when the phase starts. Follows P11's verdict, not its success. |
-| **P13** EDGAR event study | Measure what each SEC filing type does to the filer's price before any notification claims it means anything. Universe P12's. | Needs P12's point-in-time universe and daily bars. |
+| **P12** S&P 100 stocks *(superseded by §8i: S&P 500, plan awaiting approval)* | Daily bars for the S&P 100 with a **point-in-time** constituent list (members as of each date, including names later dropped, merged or bankrupt). | Survivorship bias: today's list only contains the winners. Needs a constituent-history source first; a vendor will be proposed when the phase starts. Follows P11's verdict, not its success. |
+| **P13** EDGAR event study *(first test planned in §8i, awaiting approval)* | Measure what each SEC filing type does to the filer's price before any notification claims it means anything. Universe P12's. | Needs P12's point-in-time universe and daily bars. |
 | Derivatives (options, futures) | Out of scope. | No engine (no greeks, expiries, margin or roll model) and no evidence of an edge in the underlyings to express. |
 
 ### P13 in detail: filing types to study
@@ -334,6 +334,92 @@ Build, once approved:
 - [x] **P14.1 Data.** *(done 2026-11-08: `equities.XSMOM_UNIVERSE`, `RESEARCH_SYMBOLS`, `seed_xsmom`, `--set xsmom`; scratch test on XLE (vendor switch), XLB and EWJ, then live: 26 Tiingo series, countries from 1996-04-01, sectors from 1998-12-22, through 2026-11-06. Snapshot `xsmom-2026-11-06`, 194,025 bars, sha256 b6cf91d5...8b0c. The patterns job's Tiingo refresh now covers all research symbols (36 + 8 macro requests a week, under Tiingo's 50 an hour).)* A second research list in `equities.py` (`XSMOM_UNIVERSE`), Tiingo bars from launch, snapshot `xsmom-<date>`. Eight of the sector funds are in the screen's top 50 with Alpaca bars since 2016; research needs Tiingo's from 1998, so those eight switch vendor (one series per symbol) and `etf_universe.py` stops fetching any symbol in a research list. Spreads as above in `instruments`. Tests.
 - [x] **P14.2 Evaluator.** *(done 2026-11-08: `app/xsmom.py`, tests/test_xsmom.py, committed before the run. It reuses Phase 10's simulator, month ends, monthly returns and PSR, so the fills, costs and the last partial month are handled as in F17.)* `app/xsmom.py`, read-only, snapshot only, PSR from `validation.probabilistic_sharpe`. Tests with known answers (a hand-built 3-asset case).
 - [x] **P14.3 The test.** *(done 2026-11-08: FAIL. Excess Sharpe -0.062, PSR 0.374. FINDINGS F20.)* Run once. Write F20. Stop and report.
+
+---
+
+## 8i. Phases 12 and 13 — Point-in-time S&P 500 universe, then the material-agreement drift test  (added 2026-11-08, PLAN AWAITING OWNER APPROVAL)
+
+Why: F20 and the literature behind it. Price momentum mixes news-driven moves,
+which tend to continue, with moves on no news, which tend to reverse (Chan 2003).
+The owner's hypothesis: momentum that follows a new contract, partnership or
+expansion continues while the news plays out. That effect lives in single
+stocks, not ETFs, so it needs a stock universe free of survivorship bias (P12)
+and timestamped news (P13). **Nothing below is bought, fetched or run until the
+owner approves this section and picks a P12 vendor.**
+
+### P12. Point-in-time S&P 500 members and their daily bars
+
+Needed: (a) S&P 500 membership as of each date since 2005, including names later
+dropped, merged or bankrupt; (b) adjusted daily bars for every one of them,
+including delisted ones; (c) each member's SEC CIK, to join the filings.
+
+Options, checked 2026-11-08 (prices from vendor pages or third parties; confirm
+before paying):
+
+| option | members | delisted prices | cost | gap |
+|---|---|---|---|---|
+| **EODHD**: EOD Historical plan + Indices Historical Constituents add-on | entry and exit dates, delisted names flagged (Lehman shown) | claimed, 30+ years | ~$20 + ~$30 a month; one or two months covers a one-off pull | some start dates are null; delisted price coverage must be checked before relying on it |
+| **Norgate**, US stocks Platinum | from 1957, delisted included | from 1950, ~25,000 delisted securities | ~$360 a year (third-party figure) | its updater runs on Windows only: needs a Windows VM on Matrix |
+| **Sharadar** (Nasdaq Data Link) | S&P 500 additions and removals from 1957, delisted included | SEP prices ~$39 a month (third-party figure) | constituents come bundled with the fundamentals product, price not published | cost unclear until the owner checks |
+| **Free**: fja05680/sp500 (GitHub) + Tiingo free tier | per-date lists from 1996, built from Wikipedia's selective change log | Tiingo has many acquired names (Celgene, Time Warner, Xilinx) but **none of Lehman, Bear Stearns, WaMu, Wachovia or Countrywide**; Tiingo's WB is now Weibo | $0, though 500 symbols a month makes ~1,200 names a three-month job | missing exactly the failures that matter: a long-only test would be biased upward |
+
+**Recommendation: EODHD for a one- or two-month pull, about $50-100 in all.**
+It is the only option that is Linux-friendly, has dated membership and claims
+delisted prices, at a one-off cost. Before paying, check its demo or trial on
+the five 2008 failures above. If they are missing, Norgate is the fallback.
+Whichever vendor: check its licence lets the data be kept for private research
+after the subscription ends.
+
+- [ ] **P12.1 Vendor check.** The five 2008 failures, plus ten random delisted members, must have membership dates and prices to their last trading day. A miss stops the phase and goes back to the owner.
+- [ ] **P12.2 Fetch.** Into a separate `/data/stocks.db`, not forge.db: about 1,200 names x 20 years is ~5 million bars, and the collector should not share a lock with it. Tables `pit_members` (symbol, vendor id, start, end, reason) and `stock_bars`; compute first, batch commits, restartable (§10.9); a scratch copy first. Frozen as snapshot `sp500-<date>`.
+- [ ] **P12.3 CIK map.** Each member's CIK: the vendor's field if it has one, else SEC's ticker files, else EDGAR's company search by name, by hand where needed. Unmatched members are listed; above 2% of events lost, stop and report.
+- [ ] **P12.4 Report.** Members per date (expect ~500 every day), delisted share, events lost to missing prices. Tests.
+
+### P13. One pre-registered test: drift after a material agreement
+
+The first test from the filing-type list in "P13 in detail" above, and trial 1 of
+that family under its rules. It is one hypothesis, N = 1, written before any
+filing or price is fetched. A fix to rule semantics is allowed only with a
+written reason, as in F12.
+
+The rule, fixed here:
+- **Universe:** S&P 500 members on the event day (P12), point in time.
+- **Events:** 8-Ks reporting **item 1.01, entry into a material definitive
+  agreement**: contracts, partnerships, licences, supply deals. Window
+  2005-01-01 (the item codes started 2004-08-23) to the snapshot end. Excluded,
+  so the event is the agreement and not something else:
+  - filings that also report 2.02 (results), since earnings would drive the move;
+  - filings that also report 2.03 (a new debt obligation): these are routine credit facilities;
+  - 1.01 filings of the same company within the prior 20 trading days (only the first one counts).
+- **Timing:** EDGAR's acceptance time. Accepted before 09:30 ET on a trading
+  day: the reaction day d0 is that day. Otherwise d0 is the next trading day.
+- **Reaction:** the stock's abnormal return on d0, close before acceptance to
+  close of d0, against SPY with beta from the 250 trading days before d0. The
+  "strong reaction" filter is abnormal return at or above **2 sigma**, where
+  sigma is the stock's daily abnormal-return volatility over those 250 days.
+- **Trade:** buy at d0+1's open, hold 60 trading days (about three months, "while
+  the news plays out"), sell at the close. Long only. A delisting ends the trade
+  at the last price the vendor has. Costs: 10 bps a side.
+- **Test, in calendar time** (events overlap): each month, an equal-weight
+  portfolio of every open position; in a month with none, the book holds SPY
+  (excess 0). The series is the portfolio's monthly return minus the
+  beta-weighted SPY return.
+- **Pass:** PSR vs 0 >= 0.95 on that monthly series, N = 1.
+- **Information only:** the event count; the same with no reaction filter; holds of 20
+  and 120 days; negative reactions, the short side; 2005-2015 and 2016-on; the
+  2008-09 crisis left out; large versus small members.
+- **What follows:** a pass earns a forward test on filings after the snapshot,
+  and only then may an insider or filing message quote measured numbers ("N
+  events, mean abnormal return X% over 60 days"). It never says buy or sell. A
+  fail is written up and ends this hypothesis. Earnings drift (2.02) and the
+  rest of the list are separate registrations that count against the family.
+
+Needed from the owner as well: the User-Agent contact SEC requires (company or
+name plus an email). Edgar Alert's existing one can be reused if the owner says so.
+
+- [ ] **P13.1 Filings.** SEC submissions JSON (items and acceptance time per 8-K) for every mapped CIK, at most 10 requests a second, into stocks.db; a scratch copy first. Tests.
+- [ ] **P13.2 Evaluator.** `app/event_drift.py`, read-only on the snapshots, with tests on hand-built events whose answers are known (timing at 09:30 and 16:00, the exclusions, beta, overlapping positions).
+- [ ] **P13.3 The test.** Commit the code, run once, write the finding, stop and report.
 
 ---
 
