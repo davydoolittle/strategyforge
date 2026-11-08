@@ -19,8 +19,6 @@ nothing here can write):
   /api/jobs                           scheduled collector jobs: last run,
                                       exit, next due, overdue; plus the
                                       newest crypto candle as a heartbeat
-  /api/tsp                            latest TSP report text, recorded IFTs,
-                                      the latest backtest batch (analysis only)
   /api/patterns                       pattern ledger (F18): history, not advice
   /api/insider                        insider clusters and large open-market
                                       buys, last 90 days: UNTESTED, no prediction
@@ -306,6 +304,8 @@ def jobs(conn, now=None):
     if has_table(conn, "jobs"):
         for j in rows(conn, "SELECT name, cron_like_interval AS schedule, command, enabled, last_run,"
                             " last_exit, last_duration_s, last_error FROM jobs ORDER BY name"):
+            if j["name"] in main.RETIRED_JOBS:       # the row stays as the record, not on the panel
+                continue
             j["next_due"] = due = next_due(j["schedule"], j["last_run"])
             j["overdue"] = bool(j["enabled"]) and (due is None or now > due + JOB_GRACE_S)
             j["failed"] = j["last_exit"] not in (None, 0)
@@ -318,38 +318,6 @@ def jobs(conn, now=None):
         if last:
             ts = max(last)
             out["heartbeat"] = {"last_candle_ts": ts, "stale": now - ts > HEARTBEAT_STALE_S}
-    return out
-
-
-TSP_METRICS = ("cagr", "max_dd", "vol", "sharpe", "dsr", "psr_beats_c", "moves_per_month",
-               "wf_oos_sharpe")
-
-
-def tsp(conn):
-    """The report the tsp job last wrote (one per data date), the IFTs you
-    recorded, and the newest backtest batch: official prices if there are any
-    runs on them, else the proxies."""
-    out = {"report": None, "my_ifts": [], "runs": [], "runs_mode": None}
-    if has_table(conn, "tsp_reports"):
-        r = rows(conn, "SELECT data_date, data_mode, created_at, text FROM tsp_reports"
-                       " ORDER BY data_date DESC LIMIT 1")
-        out["report"] = r[0] if r else None
-    if has_table(conn, "tsp_my_ifts"):
-        out["my_ifts"] = rows(conn, "SELECT fill_date, target_json, kind, recorded_at, note"
-                                    " FROM tsp_my_ifts ORDER BY fill_date DESC, id DESC")
-        for i in out["my_ifts"]:
-            i["target"] = json.loads(i.pop("target_json") or "{}")
-    if has_table(conn, "tsp_runs"):
-        modes = {r["data_mode"] for r in rows(conn, "SELECT DISTINCT data_mode FROM tsp_runs")}
-        mode = "tsp" if "tsp" in modes else ("proxy" if "proxy" in modes else None)
-        if mode:
-            out["runs_mode"] = mode
-            for r in rows(conn, "SELECT run_at, strategy, start, end, metrics_json FROM tsp_runs"
-                                " WHERE data_mode=? AND run_at=(SELECT MAX(run_at) FROM tsp_runs"
-                                " WHERE data_mode=?) ORDER BY id", (mode, mode)):
-                m = json.loads(r.pop("metrics_json") or "{}")
-                r.update({k: m.get(k) for k in TSP_METRICS})
-                out["runs"].append(r)
     return out
 
 
@@ -427,7 +395,6 @@ ROUTES = [
     (re.compile(r"^/api/health$"), lambda c, m, qs, db: health(c)),
     (re.compile(r"^/api/paper/(\d+)$"), lambda c, m, qs, db: paper(c, int(m.group(1)))),
     (re.compile(r"^/api/jobs$"), lambda c, m, qs, db: jobs(c)),
-    (re.compile(r"^/api/tsp$"), lambda c, m, qs, db: tsp(c)),
     (re.compile(r"^/api/patterns$"), lambda c, m, qs, db: patterns(c)),
     (re.compile(r"^/api/insider$"), lambda c, m, qs, db: insider(c)),
     (re.compile(r"^/api/screen$"), lambda c, m, qs, db: screen_json(db)),

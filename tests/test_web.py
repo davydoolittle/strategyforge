@@ -113,34 +113,12 @@ class TestWeb(unittest.TestCase):
         self.assertEqual(self.get("/api/jobs", token=None)[0], 401)
 
     def test_new_panels_empty_db(self):
-        t = self.get("/api/tsp")[1]
-        self.assertEqual((t["report"], t["my_ifts"], t["runs"]), (None, [], []))
+        self.assertEqual(self.get("/api/tsp")[0], 404)            # TSP retired 2026-11-08
         self.assertEqual(self.get("/api/patterns")[1], [])
         i = self.get("/api/insider")[1]
         self.assertEqual((i["clusters"], i["buys"], i["tag"]), ([], [], "UNTESTED, no prediction"))
-        for path in ("/api/tsp", "/api/patterns", "/api/insider"):
+        for path in ("/api/patterns", "/api/insider"):
             self.assertEqual(self.get(path, token=None)[0], 401)
-
-    def test_tsp(self):
-        conn = sqlite3.connect(":memory:")
-        self.addCleanup(conn.close)
-        import tsp_report
-        tsp_report.ensure_tables(conn)
-        conn.execute("INSERT INTO tsp_reports VALUES ('2026-10-29', 'proxy', 'x', 'old', 1)")
-        conn.execute("INSERT INTO tsp_reports VALUES ('2026-10-30', 'tsp', 'y', 'new', 1)")
-        conn.execute("INSERT INTO tsp_my_ifts (fill_date, target_json, kind) VALUES ('2026-10-01', '{\"C\": 100}', 'flexible')")
-        cols = "run_at, data_mode, strategy, params_json, start, end, fill_lag, metrics_json"
-        for at, mode, strat in (("2026-10-29", "proxy", "a"), ("2026-10-30", "tsp", "old"),
-                                ("2026-11-01", "tsp", "b"), ("2026-11-01", "tsp", "c")):
-            conn.execute(f"INSERT INTO tsp_runs ({cols}) VALUES (?, ?, ?, '{{}}', 's', 'e', 1, ?)",
-                         (at, mode, strat, json.dumps({"cagr": 9.0, "max_dd": 20.0, "extra": 1})))
-        d = web.tsp(conn)
-        self.assertEqual(d["report"]["text"], "new")
-        self.assertEqual(d["my_ifts"][0]["target"], {"C": 100})
-        self.assertEqual(d["runs_mode"], "tsp")                 # official prices win over proxies
-        self.assertEqual([r["strategy"] for r in d["runs"]], ["b", "c"])   # newest batch only
-        self.assertEqual(d["runs"][0]["cagr"], 9.0)
-        self.assertNotIn("extra", d["runs"][0])
 
     def test_patterns_order(self):
         conn = sqlite3.connect(":memory:")
@@ -188,8 +166,10 @@ class TestWeb(unittest.TestCase):
             ("paused", "1h", 0, mon - 4 * 3600, 0, None),
             ("broke", "1d", 1, mon, 2, "x" * 1000),
             ("weekly", "mon@06:00", 1, mon - 86400, 0, None),  # Sunday: next slot Mon 06:00
-            ("new", "1d", 1, None, None, None)])
+            ("new", "1d", 1, None, None, None),
+            ("tsp", "6h", 1, mon - 7 * 86400, 0, None)])    # retired: kept in the table, not shown
         j = {r["name"]: r for r in web.jobs(conn, now=mon + 60)["jobs"]}
+        self.assertNotIn("tsp", j)
         self.assertEqual(j["hourly"]["next_due"], mon + 3600)
         self.assertFalse(j["hourly"]["overdue"])
         self.assertTrue(j["late"]["overdue"])
@@ -274,11 +254,11 @@ class TestWeb(unittest.TestCase):
         self.assertNotIn("innerHTML", body)
         self.assertIn("/api/jobs", body)
         self.assertIn("<option>1d</option>", body)
-        for path in ("/api/tsp", "/api/patterns", "/api/insider"):
+        for path in ("/api/patterns", "/api/insider"):
             self.assertIn(path, body)
+        self.assertNotIn("/api/tsp", body)
         self.assertIn("UNTESTED, no prediction", body)              # static, not from the API
         self.assertIn("History, not advice", body)
-        self.assertIn("You place every IFT yourself", body)
         self.assertIn("ranking, not a validated signal", body)  # the Screen panel's caveat is static          # DB strings go in as text, never as markup
 
     def test_auth(self):

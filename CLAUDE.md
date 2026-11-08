@@ -51,6 +51,7 @@ export, and the TSP allocation module. Nothing in this repo places live orders.
 - The core 1d ETF budget is spent (`optimizer.DECLARED_BUDGETS`). ETF bars are frozen in snapshot `etf-2026-10-30`.
 - Insider data is UNTESTED context. No message may predict a move until a pre-registered study passes.
 - The momentum screen covers the top 50 US ETFs by dollar volume, re-ranked weekly (`etf_universe.py`). Research stays on fixed lists (`equities.RESEARCH_SETS`), never the screen's list.
+- TSP module retired 2026-11-08: no tactical rule beat 100% C (F12, F14). The `tsp` job and dashboard panel are gone; `app/tsp_*.py`, its tables and F12/F14 stay as the record. Do not re-open it as research.
 - No strategy in this repo has beaten buy-and-hold. Changing Phase 10's rule after F17 is a new hypothesis and needs its own registration.
 - Forward tests #3214, #4027 and #5833 running, all marked `forward_test`. #3214's first paper trade (ETH short) opened 2026-11-06.
 - Phase 14 done: FAIL (F20). Research symbols are the ten (`equities.UNIVERSE`) plus Phase 14's 26 (`XSMOM_UNIVERSE`), frozen in snapshot `xsmom-2026-11-06`.

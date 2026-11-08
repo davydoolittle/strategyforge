@@ -17,7 +17,7 @@ analysis will need:
 
   3) Research jobs (P4.5) on a schedule  -> jobs table, /data/jobs/*.log
      paper (hourly), health + feature_evals --annotate-new (daily),
-     adversary --top 20 (weekly), tsp_report --update --notify (6-hourly),
+     adversary --top 20 (weekly), and the jobs in JOB_SPECS below,
      each as a child process.
 
 All feeds are shadow data: nothing here trades or decides anything.
@@ -81,8 +81,6 @@ JOB_SPECS = [
     ("health", "1d", "health.py", 3600),
     ("feature_evals", "1d", "feature_evals.py --annotate-new", 4 * 3600),
     ("adversary", "7d", "adversary.py --top 20", 12 * 3600),
-    # TSP module: fetch, report, ntfy once per new price date (re-runs are no-ops)
-    ("tsp", "6h", "tsp_report.py --update --notify", 1800),
     # pattern ledger: new macro and ETF data, then every pattern re-tested.
     # Sunday 22:00 UTC so Friday's ETF bars are in before the Monday screen.
     ("patterns", "sun@22:00", "patterns.py --refresh", 1800),
@@ -95,6 +93,10 @@ JOB_SPECS = [
     # once per data date, Mondays 06:00 UTC
     ("screen", "mon@06:00", "screen.py --notify", 600),
 ]
+# Jobs taken out of JOB_SPECS. Their rows stay in the jobs table as the record;
+# the scheduler skips any name not in JOB_SPECS and the dashboard hides these.
+# tsp: retired 2026-11-08 (V2_PROMPT 8g); app/tsp_*.py and F12/F14 remain.
+RETIRED_JOBS = ("tsp",)
 JOB_LOG_DIR = os.path.join(os.path.dirname(DB_PATH), "jobs")
 DB_TIMEOUT_S = 60    # wait this long for a job's write lock before an error
 

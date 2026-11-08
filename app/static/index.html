@@ -117,14 +117,6 @@
     <div id="scr-foot" class="muted"></div>
   </section>
 
-  <section class="wide">
-    <h2>TSP <small id="tsp-meta">weekly report (tsp_report.py)</small></h2>
-    <pre id="tsp-text" class="report"></pre>
-    <div class="scroll"><table id="tsp-runs"><thead></thead><tbody></tbody></table></div>
-    <div id="tsp-ifts" class="muted"></div>
-    <div class="muted">Analysis only. Backtested results are hypothetical; past performance does not guarantee
-      future results. You place every IFT yourself. F12/F14: nothing tactical beat 100% C after 2009.</div>
-  </section>
 
   <section class="wide">
     <h2>Pattern ledger <small id="pat-meta">52 traditional patterns, each tested once (patterns.py, F18)</small></h2>
@@ -414,25 +406,6 @@ function fillTable(t, cols, data, emptyMsg) {
 const pct1 = (v, scale = 1) => v === null || v === undefined ? "–" : (v >= 0 ? "+" : "") + (scale * v).toFixed(1);
 const money = (v) => v === null || v === undefined ? "–" : v >= 1e6 ? `$${(v / 1e6).toFixed(1)}M` : `$${(v / 1e3).toFixed(0)}K`;
 
-/* ---------------- TSP ---------------- */
-async function loadTsp() {
-  let d;
-  try { d = await api("/api/tsp"); } catch (e) { fail($("tsp-text"), e); return; }
-  $("tsp-text").textContent = d.report ? d.report.text : "no TSP report yet: the tsp job writes one per new price date";
-  if (d.report) $("tsp-meta").textContent = `report for ${d.report.data_date} (${d.report.data_mode} data), written ${String(d.report.created_at).slice(0, 16).replace("T", " ")} UTC`;
-  fillTable($("tsp-runs"), [
-    [`backtest (${d.runs_mode || "–"} prices)`, (r) => r.strategy, true],
-    ["period", (r) => `${r.start} – ${r.end}`, true],
-    ["CAGR %", (r) => fmt(r.cagr, 1)], ["max DD %", (r) => fmt(r.max_dd, 1)], ["vol %", (r) => fmt(r.vol, 1)],
-    ["Sharpe", (r) => fmt(r.sharpe, 2)], ["DSR", (r) => fmt(r.dsr, 2)], ["PSR beats C", (r) => fmt(r.psr_beats_c, 2)],
-    ["WF OOS Sharpe", (r) => fmt(r.wf_oos_sharpe, 2)], ["moves / month", (r) => fmt(r.moves_per_month, 2)],
-  ], d.runs, "no TSP backtests stored (tsp_backtest.py)");
-  $("tsp-ifts").textContent = d.my_ifts.length
-    ? "Your recorded IFTs: " + d.my_ifts.map((i) => `${i.fill_date} ${i.kind}: ` +
-        Object.entries(i.target).map(([f, w]) => `${f} ${w}%`).join(" ")).join(" · ")
-    : "No IFT recorded: the report assumes the base allocation (tsp_report.py --record-ift).";
-}
-
 /* ---------------- pattern ledger ---------------- */
 async function loadPatterns() {
   let rows;
@@ -506,7 +479,7 @@ async function boot() {
   try { STRATS = await api("/api/strategies"); renderTree(); }
   catch (e) { fail($("tree"), e); }
   await Promise.all([loadJobs(), loadCands(), loadHealth(), loadPaper(), loadScreen(),
-                     loadTsp(), loadPatterns(), loadInsider()]);
+                     loadPatterns(), loadInsider()]);
   $("status").textContent = "updated " + new Date().toLocaleTimeString();
 }
 for (const k of ["tf", "family", "passed", "reported", "limit"]) $("f-" + k).addEventListener("change", loadCands);

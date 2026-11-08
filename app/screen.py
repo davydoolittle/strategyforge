@@ -36,7 +36,7 @@ The JSON is what the dashboard's Screen panel shows (web.py /api/screen). It
 is written to a temp file and renamed, so the dashboard never reads half of
 it. The collector runs this weekly, Monday 06:00 UTC (main.JOB_SPECS). It
 also pushes a short version via ntfy (`--notify`, topic NTFY_TOPIC, the
-channel health.py and tsp_report.py use), once per data date: the date last
+channel health.py uses), once per data date: the date last
 pushed is kept in screen_notified.json next to forge.db, so the DB stays
 read-only and a re-run or a missed slot caught up does not push twice. It
 does not fetch bars: ETF bars are refreshed by the `patterns` job, Sunday

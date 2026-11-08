@@ -89,7 +89,7 @@ tables exist to show exactly that. See FINDINGS F12.
 
 ```
 python tsp_report.py                                  # print
-python tsp_report.py --update --notify                # what the collector runs every 6 h
+python tsp_report.py --update --notify                # retired 2026-11-08: no longer scheduled
 python tsp_report.py --record-ift "C=60,S=20,G=20" --date 2026-11-02
 ```
 
