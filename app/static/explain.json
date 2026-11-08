@@ -1,0 +1,104 @@
+{
+  "vix": {
+    "what_it_is": "The VIX estimates how much traders expect the S&P 500 to swing over the next 30 days, worked out from option prices. A higher number means more expected turbulence.",
+    "traditional_reading": "Below 20 is read as calm and above 30 as fear. Many investors treat a reading above 30 as a sign that selling is overdone and a low is near.",
+    "what_the_record_shows": "It closed at a record 82.69 on 16 March 2020, a week before that year's low, so fear was a good contrarian sign then. In late 2008 it stayed above 30 for months while stocks kept falling until March 2009. This project's ledger found the over-30 rule not supported (F18).",
+    "source": "https://www.cboe.com/tradable_products/vix/"
+  },
+  "t10y2y": {
+    "what_it_is": "The 10-year US Treasury yield minus the 2-year yield. Long-term rates are normally higher, so the gap is usually positive.",
+    "traditional_reading": "When the gap turns negative, called an inverted curve, a recession is traditionally expected within one to two years.",
+    "what_the_record_shows": "It inverted before the 2001 and 2008 recessions. It then stayed inverted for most of the time from mid-2022 to September 2024, more than two years, and no recession had followed by the time it ended. This project's ledger had too few inversions to judge (F18).",
+    "source": "https://fred.stlouisfed.org/series/T10Y2Y"
+  },
+  "hy_oas": {
+    "what_it_is": "The extra yield investors demand to hold risky company bonds instead of Treasuries. It rises when lenders worry more about defaults.",
+    "traditional_reading": "Roughly 3 to 4 percentage points is calm, above 5 signals stress, and above 8 signals a crisis.",
+    "what_the_record_shows": "It passed 20 points in December 2008 and reached about 11 in March 2020, both near market lows, but it can stay low right up to a downturn. FRED provides only the last three years of this series, so the panel's history is short.",
+    "source": "https://fred.stlouisfed.org/series/BAMLH0A0HYM2"
+  },
+  "sahm": {
+    "what_it_is": "A recession warning built from the unemployment rate. It compares the latest three-month average with the lowest three-month average of the past year.",
+    "traditional_reading": "A rise of 0.50 percentage points or more is the classic sign that a recession has already begun.",
+    "what_the_record_shows": "It flagged each US recession since 1970 close to its start. It crossed 0.50 with the July 2024 jobs report, published in August 2024, without a recession following soon after; Claudia Sahm, who devised it, warned it could misfire. The data are monthly and get revised.",
+    "source": "https://fred.stlouisfed.org/series/SAHMREALTIME"
+  },
+  "fedfunds": {
+    "what_it_is": "The interest rate banks charge each other overnight, which the Federal Reserve steers. It sets the base cost of borrowing across the economy.",
+    "traditional_reading": "'Don't fight the Fed': rising rates are read as bad for stocks and rate cuts as good for them.",
+    "what_the_record_shows": "The Fed began cutting in January 2001 and in September 2007, and stocks fell hard after both. In this project's ledger, first cuts and first hikes were too few to judge, and 'stocks rise while the Fed eases' was not supported (F18).",
+    "source": "https://fred.stlouisfed.org/series/FEDFUNDS"
+  },
+  "putcall_equity": {
+    "what_it_is": "Each day, the number of put options traded on individual stocks divided by the number of call options. Puts pay off when prices fall, so a higher number means more traders are paying for protection.",
+    "traditional_reading": "Contrarians read above about 1.0 as excessive fear and below about 0.5 as complacency.",
+    "what_the_record_shows": "It reached 1.10 on 16 March 2020, the day the VIX peaked, close to that year's low. Daily readings are noisy, and many fear spikes pass without a turning point, so analysts usually smooth it. This project has not tested it.",
+    "source": "https://www.cboe.com/us/options/market_statistics/daily/"
+  },
+  "cape": {
+    "what_it_is": "The S&P 500's price divided by its average inflation-adjusted earnings over the past ten years. It shows how expensive stocks are compared with their longer-run earnings.",
+    "traditional_reading": "The long-run average is about 17. Above 30 is read as expensive, implying low returns over the following decade.",
+    "what_the_record_shows": "It peaked at 44.2 in December 1999, and the next decade's returns were poor. But it has been above 30 for much of the time since 2017 while stocks kept rising, so it has said little about timing. Updated monthly.",
+    "source": "http://www.econ.yale.edu/~shiller/data.htm"
+  },
+  "spy_sma200": {
+    "what_it_is": "The average closing price of SPY, a fund that tracks the S&P 500, over the last 200 trading days, about ten months. The panel shows whether the price is above or below that average.",
+    "traditional_reading": "A price above its 200-day average is read as an uptrend, and below it as a downtrend.",
+    "what_the_record_shows": "Waiting below it would have sidestepped most of the 2008 crash, but it also gave false alarms, such as in 2015-16 and late 2018. This project's ledger found 'below the 200-day, stocks are weak' not supported (F18), and a monthly version trailed simply holding (F12).",
+    "source": "https://www.investopedia.com/terms/m/movingaverage.asp"
+  },
+  "spy_cross": {
+    "what_it_is": "A cross is the day SPY's 50-day average moves above its 200-day average (a golden cross) or below it (a death cross). It marks a change in the medium-term trend.",
+    "traditional_reading": "A golden cross is read as bullish and a death cross as bearish.",
+    "what_the_record_shows": "Crosses lag the market: the death cross of 31 March 2020 came about a week after that year's low. In this project's ledger, stocks did better than normal after death crosses, and the golden-cross claim was not supported (F18).",
+    "source": "https://www.investopedia.com/terms/g/goldencross.asp"
+  },
+  "spy_rsi_weekly": {
+    "what_it_is": "RSI compares the size of recent gains with recent losses on a scale of 0 to 100. Here it uses SPY's weekly closes over the last 14 weeks.",
+    "traditional_reading": "Above 70 is read as overbought and below 30 as oversold.",
+    "what_the_record_shows": "Weekly readings below 30 are rare: 2001-02, October 2008, March 2020 and April 2025. Prices recovered quickly in 2020 and 2025, but kept falling for months in 2002 and until March 2009. A strong market can also stay above 70 for months.",
+    "source": "https://www.investopedia.com/terms/r/rsi.asp"
+  },
+  "trend_up_calm": {
+    "what_it_is": "SPY is above a rising 200-day average, and the VIX is below its median of the past year. Prices are climbing and swings are small.",
+    "traditional_reading": "The classic 'steady bull market': trend followers stay invested and volatility is treated as no concern.",
+    "what_the_record_shows": "2017 and 2021 sat here on more than 80% of trading days. Calm can end fast: the VIX went from 11 on 26 January 2018 to 37 on 5 February.",
+    "source": "https://www.investopedia.com/terms/m/movingaverage.asp"
+  },
+  "trend_up_vol": {
+    "what_it_is": "SPY is above a rising 200-day average, but the VIX is at or above its median of the past year. The trend is up while swings are larger than usual.",
+    "traditional_reading": "Read as an uptrend under strain: still rising, with more risk of a sharp pullback.",
+    "what_the_record_shows": "Most of 2018 sat here, ending in the late-2018 sell-off, and so did much of the 2020 recovery. Because the band is relative, late January 2018 already counted as 'vol' at a VIX near 12. The state alone has not settled which way it resolves.",
+    "source": "https://www.cboe.com/tradable_products/vix/"
+  },
+  "trend_down_calm": {
+    "what_it_is": "SPY is below a falling 200-day average, while the VIX is below its median of the past year. Prices are sliding without much turbulence.",
+    "traditional_reading": "Read as a quiet downtrend, which some see as a slow loss of confidence.",
+    "what_the_record_shows": "Rarer than its volatile twin: 394 days since 1993 against 963. Nearly half of 2001 sat here, as prices slid between sharper sell-offs. Because the band is relative to a turbulent year, 'calm' here can still mean a high VIX.",
+    "source": "https://www.investopedia.com/terms/m/movingaverage.asp"
+  },
+  "trend_down_vol": {
+    "what_it_is": "SPY is below a falling 200-day average, and the VIX is at or above its median of the past year. Prices are falling and swings are large.",
+    "traditional_reading": "The classic bear market. Trend followers stay out; contrarians watch for panic as a sign of a low.",
+    "what_the_record_shows": "Late 2008 sat here almost every trading day, for months before the low. March 2020 moved through it only briefly: the 200-day average turned down so late that most of that crash shows as range_vol.",
+    "source": "https://www.cboe.com/tradable_products/vix/"
+  },
+  "range_calm": {
+    "what_it_is": "Neither a clear uptrend nor a clear downtrend: SPY and the slope of its 200-day average disagree. The VIX is below its median of the past year.",
+    "traditional_reading": "Read as a sideways or turning market; trend signals are expected to be unreliable here.",
+    "what_the_record_shows": "Turning points pass through this state, such as the recovery from the early-2016 low in March and April 2016, so it often comes just before a new trend. That makes it a poor state for acting on any trend rule.",
+    "source": "https://www.investopedia.com/terms/m/movingaverage.asp"
+  },
+  "range_vol": {
+    "what_it_is": "No clear trend, and the VIX is at or above its median of the past year. The market is swinging without direction.",
+    "traditional_reading": "Read as a choppy market, where trend signals give many false starts.",
+    "what_the_record_shows": "December 2015, December 2018 and most of March 2020 sat here, with false starts in both directions before a trend returned.",
+    "source": "https://www.cboe.com/tradable_products/vix/"
+  },
+  "sizing_context": {
+    "what_it_is": "Volatility targeting means taking smaller positions when markets swing more, so each position risks about the same amount. This line applies fixed VIX bands to show what such a rule would say today.",
+    "traditional_reading": "Cut size as volatility rises and restore it as volatility falls. Many funds aim for a fixed yearly volatility, such as 10%.",
+    "what_the_record_shows": "Moreira and Muir (2017) found it improved risk-adjusted returns; later studies found the gain smaller after costs and uneven across markets. In this project, F17's volatility-scaled book cut drawdowns but trailed simply holding.",
+    "source": "https://www.nber.org/papers/w22208"
+  }
+}

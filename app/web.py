@@ -20,6 +20,9 @@ nothing here can write):
                                       exit, next due, overdue; plus the
                                       newest crypto candle as a heartbeat
   /api/patterns                       pattern ledger (F18): history, not advice
+  /api/context                        market context (P7.6): indicators, regime tag,
+                                      sizing line; context only, never an entry signal
+  /explain.json                       plain-language notes for the context panel (static)
   /api/insider                        insider clusters and large open-market
                                       buys, last 90 days: UNTESTED, no prediction
   /api/screen                         momentum screen (screen.json next to
@@ -52,6 +55,7 @@ from urllib.parse import parse_qs, urlparse
 import engine
 import insider_feed as IF
 import main
+import market_context as MC
 import windows as W
 
 PORT = int(os.environ.get("WEB_PORT", "8091"))
@@ -397,6 +401,7 @@ ROUTES = [
     (re.compile(r"^/api/jobs$"), lambda c, m, qs, db: jobs(c)),
     (re.compile(r"^/api/patterns$"), lambda c, m, qs, db: patterns(c)),
     (re.compile(r"^/api/insider$"), lambda c, m, qs, db: insider(c)),
+    (re.compile(r"^/api/context$"), lambda c, m, qs, db: MC.panel(c)),
     (re.compile(r"^/api/screen$"), lambda c, m, qs, db: screen_json(db)),
 ]
 
@@ -449,9 +454,23 @@ class Handler(BaseHTTPRequestHandler):
                     conn.close()
         raise HttpError(404, f"no route {url.path}")
 
+    def send_explain(self):
+        """Static text, no data, so it is served without a token like the page."""
+        with open(os.path.join(STATIC_DIR, "explain.json"), "rb") as f:
+            body = f.read()
+        self.send_response(200)
+        self.send_header("Content-Type", "application/json")
+        self.send_header("Content-Length", str(len(body)))
+        self.send_header("X-Content-Type-Options", "nosniff")
+        self.end_headers()
+        if self.command != "HEAD":
+            self.wfile.write(body)
+
     def do_GET(self):
         if urlparse(self.path).path in ("/", "/index.html"):
             return self.send_page()
+        if urlparse(self.path).path == "/explain.json":
+            return self.send_explain()
         if not self.authorized():
             self.send_response(401)
             self.send_header("WWW-Authenticate", 'Bearer realm="strategyforge"')

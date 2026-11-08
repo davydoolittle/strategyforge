@@ -153,6 +153,18 @@ class TestWeb(unittest.TestCase):
         self.assertIn("COIN", d["crypto_linked"])
         self.assertEqual(d["last_filing"], "2026-11-01")
 
+    def test_context_panel(self):
+        st, body = self.get("/api/context")
+        self.assertEqual(st, 200)
+        self.assertEqual(body["footer"], web.MC.FOOTER)
+        self.assertIsNone(body["regime"])                    # no regime table in the test DB
+        self.assertEqual(self.get("/api/context", token=None)[0], 401)
+
+    def test_explain_is_static_and_needs_no_token(self):
+        st, body = self.get("/explain.json", token=None)
+        self.assertEqual(st, 200)
+        self.assertIn("sizing_context", body)
+
     def test_jobs_due_and_overdue(self):
         conn = sqlite3.connect(":memory:")
         self.addCleanup(conn.close)

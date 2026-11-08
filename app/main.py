@@ -92,6 +92,9 @@ JOB_SPECS = [
     # momentum screen: read-only ranking for the dashboard, pushed via ntfy
     # once per data date, Mondays 06:00 UTC
     ("screen", "mon@06:00", "screen.py --notify", 600),
+    # market context for the dashboard (P7.6): VIX, FRED, put/call, CAPE, SPY-derived
+    # series, then the equity regime tag. Context only; nothing trades on it
+    ("market_context", "1d", "market_context.py --refresh", 3600),
 ]
 # Jobs taken out of JOB_SPECS. Their rows stay in the jobs table as the record;
 # the scheduler skips any name not in JOB_SPECS and the dashboard hides these.

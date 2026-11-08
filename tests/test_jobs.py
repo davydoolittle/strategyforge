@@ -91,6 +91,7 @@ class TestInterval(unittest.TestCase):
         self.assertEqual(names["feature_evals"], ("1d", "feature_evals.py --annotate-new"))
         self.assertEqual(names["adversary"], ("7d", "adversary.py --top 20"))
         self.assertNotIn("tsp", names)          # retired 2026-11-08; tsp_*.py stay as the record
+        self.assertEqual(names["market_context"], ("1d", "market_context.py --refresh"))
         self.assertEqual(set(main.RETIRED_JOBS) & set(names), set())
         self.assertEqual(names["screen"], ("mon@06:00", "screen.py --notify"))
         self.assertEqual(names["patterns"], ("sun@22:00", "patterns.py --refresh"))

@@ -39,6 +39,12 @@
   tbody tr.click { cursor: pointer; }
   tbody tr.click:hover { background: #1d232b; }
   tbody tr.sel { background: #20303f; }
+  .info { padding: 0 6px; margin-left: 4px; border-radius: 10px; font-size: 11px; cursor: pointer; }
+  .explain { border: 1px solid var(--line); border-radius: 6px; padding: 10px; margin-top: 10px; max-width: 760px; }
+  .explain h3 { margin: 0 0 6px; font-size: 13px; }
+  .explain dt { color: var(--muted); font-size: 12px; margin-top: 6px; }
+  .explain dd { margin: 2px 0 0; }
+  .ctxline { margin-top: 8px; }
   .badge { display: inline-block; padding: 0 7px; border-radius: 10px; font-size: 12px; font-weight: 600; }
   .b-REJECTED, .b-fail { background: #3a1f1e; color: var(--bad); }
   .b-PASSED, .b-ACCEPTED, .b-pass { background: #183326; color: var(--good); }
@@ -123,6 +129,16 @@
     <div class="scroll"><table id="patterns"><thead></thead><tbody></tbody></table></div>
     <div class="muted">History, not advice: none of these is a trading rule. SUGGESTIVE means it did not survive
       the multiple-testing correction and could be luck. "on now" = the pattern's condition holds today.</div>
+  </section>
+
+  <section class="wide">
+    <h2>Market context <small id="ctx-meta">context only (market_context.py, regime_equity.py)</small></h2>
+    <div class="scroll"><table id="ctx"><thead></thead><tbody></tbody></table></div>
+    <div id="ctx-regime" class="ctxline"></div>
+    <div id="ctx-sizing" class="ctxline"></div>
+    <div id="ctx-explain" class="explain" hidden></div>
+    <div class="muted" style="margin-top:8px">Traditional readings are historical observations, not recommendations
+      from this tool. None of these series is used as an entry signal (V2_PROMPT §9).</div>
   </section>
 
   <section class="wide">
@@ -442,6 +458,67 @@ async function loadInsider() {
   $("ins-meta").textContent = `last ${d.days} days, buys of ${money(d.min_buy_usd)}+ (newest ${d.buys.length} shown) · newest filing ${d.last_filing ?? "–"}`;
 }
 
+/* ---------------- market context ---------------- */
+let EXPLAIN = null;
+async function explainEntry(key) {
+  if (!EXPLAIN) {
+    const r = await fetch("/explain.json");
+    EXPLAIN = r.ok ? await r.json() : {};
+  }
+  return EXPLAIN[key];
+}
+async function showExplain(key, title) {
+  const box = $("ctx-explain");
+  const e = await explainEntry(key);
+  if (!e) { box.replaceChildren(el("div", { class: "err" }, "no explanation for " + key)); box.hidden = false; return; }
+  const items = [["What it is", e.what_it_is], ["Traditional reading", e.traditional_reading],
+                 ["What the record shows", e.what_the_record_shows]];
+  box.replaceChildren(el("h3", {}, title),
+    el("dl", {}, ...items.flatMap(([t, v]) => [el("dt", {}, t), el("dd", {}, v)]),
+      el("dt", {}, "Source"), el("dd", {}, el("a", { href: e.source, target: "_blank", rel: "noopener" }, e.source))),
+    el("button", { on: ["click", () => { box.hidden = true; }] }, "close"));
+  box.hidden = false;
+}
+const infoBtn = (key, title) => el("button", { class: "info", title: "what is this?",
+  on: ["click", () => showExplain(key, title)] }, "i");
+function spark(values) {
+  const NS = "http://www.w3.org/2000/svg", w = 120, h = 24;
+  const svg = document.createElementNS(NS, "svg");
+  svg.setAttribute("width", w); svg.setAttribute("height", h);
+  if (values.length > 1) {
+    const lo = Math.min(...values), hi = Math.max(...values), span = hi - lo || 1;
+    const pts = values.map((v, i) => `${(i / (values.length - 1) * w).toFixed(1)},${(h - 2 - (v - lo) / span * (h - 4)).toFixed(1)}`);
+    const line = document.createElementNS(NS, "polyline");
+    line.setAttribute("points", pts.join(" ")); line.setAttribute("fill", "none");
+    line.setAttribute("stroke", css("--accent")); line.setAttribute("stroke-width", "1.2");
+    svg.append(line);
+  }
+  return svg;
+}
+async function loadContext() {
+  let d;
+  try { d = await api("/api/context"); } catch (e) { fail($("ctx").tBodies[0], e); return; }
+  fillTable($("ctx"), [
+    ["indicator", (r) => el("span", {}, r.label, infoBtn(r.key, r.label)), true],
+    ["value", (r) => r.value === null ? "–" : fmt(r.value, 2) + r.unit],
+    ["as of", (r) => r.date ?? "–"],
+    ["1-year pct", (r) => r.pct_1y === null ? "–" : r.pct_1y.toFixed(0)],
+    ["past", (r) => spark(r.spark), true],
+    ["status", (r) => r.status, true], ["rule", (r) => r.rule, true],
+  ], d.indicators, "no context data yet: the market_context job runs daily");
+  const reg = d.regime;
+  $("ctx-regime").replaceChildren(reg
+    ? el("span", {}, "Regime: ", el("b", {}, reg.state), infoBtn(reg.state, reg.state),
+        ` on ${reg.date}: SPY ${fmt(reg.close, 2)} vs 200-day ${fmt(reg.sma200, 2)}, 20-day slope ${fmt(reg.sma_slope20, 2)};` +
+        ` VIX ${fmt(reg.vix, 2)} at the ${reg.vix_pct.toFixed(0)}th percentile of the past year`)
+    : el("span", { class: "muted" }, "Regime: not computed yet"));
+  const s = d.sizing;
+  $("ctx-sizing").replaceChildren(s
+    ? el("span", {}, "Sizing context: ", el("b", {}, s.text), infoBtn("sizing_context", "Sizing context"),
+        ` (${s.trigger})`)
+    : el("span", { class: "muted" }, "Sizing context: needs the regime tag"));
+}
+
 /* ---------------- momentum screen ---------------- */
 async function loadScreen() {
   const t = $("screen");
@@ -479,7 +556,7 @@ async function boot() {
   try { STRATS = await api("/api/strategies"); renderTree(); }
   catch (e) { fail($("tree"), e); }
   await Promise.all([loadJobs(), loadCands(), loadHealth(), loadPaper(), loadScreen(),
-                     loadPatterns(), loadInsider()]);
+                     loadPatterns(), loadInsider(), loadContext()]);
   $("status").textContent = "updated " + new Date().toLocaleTimeString();
 }
 for (const k of ["tf", "family", "passed", "reported", "limit"]) $("f-" + k).addEventListener("change", loadCands);
