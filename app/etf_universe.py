@@ -14,13 +14,14 @@ every week, so funds rise into the list and fall out of it.
 Most liquid, not largest: this is not an AUM ranking. Every run is kept
 (etf_universe_runs, etf_universe), so who entered and who left is on record.
 
-This list drives the momentum screen only. Research stays on the ten fixed ETFs
-in equities.UNIVERSE (F16, F17, the pattern ledger): a list chosen today from
-funds that survived until today would bias any backtest run on it.
+This list drives the momentum screen only. Research stays on fixed lists in
+equities.RESEARCH_SETS (the ten for F16, F17 and the pattern ledger; Phase 14's
+26 sector and country funds): a list chosen today from funds that survived until
+today would bias any backtest run on it.
 
-Bars for members outside equities.UNIVERSE come from Alpaca (2016 on, adjusted),
-cut at the last gap of over 30 days (a reused ticker), one vendor per symbol as
-equities.py requires; the ten keep their Tiingo bars,
+Bars for members outside equities.RESEARCH_SYMBOLS come from Alpaca (2016 on,
+adjusted), cut at the last gap of over 30 days (a reused ticker), one vendor per
+symbol as equities.py requires; research symbols keep their Tiingo bars,
 refreshed by the patterns job. A fund that drops out keeps its row and bars,
 which are simply no longer refreshed.
 
@@ -251,7 +252,7 @@ def fetch_listing_bars(symbol, end_date, headers, get=E._get):
 def fetch_member_bars(conn, symbols, headers, today=None):
     """Alpaca bars for members outside the research ten (equities.backfill:
     fetch first, write in batches, resumes where it stopped)."""
-    todo = [s for s in symbols if s not in E.UNIVERSE]
+    todo = [s for s in symbols if s not in E.RESEARCH_SYMBOLS]
     return E.backfill(conn, headers, symbols=todo, today=today, fetch=fetch_listing_bars,
                       exchange=E.fetch_exchange, source="alpaca")
 

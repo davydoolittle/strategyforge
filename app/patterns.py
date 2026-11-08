@@ -571,8 +571,10 @@ def main_cli():
         equities.ensure_tables(conn)
         macro_data.ensure_tables(conn)
         macro_data.refresh(conn)
-        # the research ten only: the screen's ETFs are Alpaca series (etf_universe.py)
-        equities.backfill(conn, equities.load_tiingo_credentials(), symbols=list(equities.UNIVERSE))
+        # research symbols only (the ten and Phase 14's 26, some of which are also
+        # screen funds); the screen's other ETFs are Alpaca series (etf_universe.py)
+        equities.seed_xsmom(conn)
+        equities.backfill(conn, equities.load_tiingo_credentials(), symbols=list(equities.RESEARCH_SYMBOLS))
     if not args.show:
         run(conn)
     show(conn)

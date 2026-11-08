@@ -275,7 +275,7 @@ Rules for P13, written now so they cannot be bent later:
 
 ---
 
-## 8h. Phase 14 — Pre-registered cross-sectional momentum, sectors and countries  (added 2026-11-07, AWAITING OWNER APPROVAL)
+## 8h. Phase 14 — Pre-registered cross-sectional momentum, sectors and countries  (added 2026-11-07, approved by the owner as written 2026-11-08)
 
 Goal: the breadth test F9-F17 point to. Every timing test so far had too few
 independent bets per hypothesis. A cross-sectional rule ranks many assets at
@@ -330,8 +330,8 @@ The rule, fixed here:
   counts this as trial 1 of its family.
 
 Build, once approved:
-- [ ] **P14.1 Data.** A second research list in `equities.py` (`XSMOM_UNIVERSE`), Tiingo bars from launch, snapshot `xsmom-<date>`. Eight of the sector funds are in the screen's top 50 with Alpaca bars since 2016; research needs Tiingo's from 1998, so those eight switch vendor (one series per symbol) and `etf_universe.py` stops fetching any symbol in a research list. Spreads as above in `instruments`. Tests.
-- [ ] **P14.2 Evaluator.** `app/xsmom.py`, read-only, snapshot only, PSR from `validation.probabilistic_sharpe`. Tests with known answers (a hand-built 3-asset case).
+- [x] **P14.1 Data.** *(done 2026-11-08: `equities.XSMOM_UNIVERSE`, `RESEARCH_SYMBOLS`, `seed_xsmom`, `--set xsmom`; scratch test on XLE (vendor switch), XLB and EWJ, then live: 26 Tiingo series, countries from 1996-04-01, sectors from 1998-12-22, through 2026-11-06. Snapshot `xsmom-2026-11-06`, 194,025 bars, sha256 b6cf91d5...8b0c. The patterns job's Tiingo refresh now covers all research symbols (36 + 8 macro requests a week, under Tiingo's 50 an hour).)* A second research list in `equities.py` (`XSMOM_UNIVERSE`), Tiingo bars from launch, snapshot `xsmom-<date>`. Eight of the sector funds are in the screen's top 50 with Alpaca bars since 2016; research needs Tiingo's from 1998, so those eight switch vendor (one series per symbol) and `etf_universe.py` stops fetching any symbol in a research list. Spreads as above in `instruments`. Tests.
+- [x] **P14.2 Evaluator.** *(done 2026-11-08: `app/xsmom.py`, tests/test_xsmom.py, committed before the run. It reuses Phase 10's simulator, month ends, monthly returns and PSR, so the fills, costs and the last partial month are handled as in F17.)* `app/xsmom.py`, read-only, snapshot only, PSR from `validation.probabilistic_sharpe`. Tests with known answers (a hand-built 3-asset case).
 - [ ] **P14.3 The test.** Run once. Write F20. Stop and report.
 
 ---

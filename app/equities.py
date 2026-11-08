@@ -22,8 +22,10 @@ from its own base. --compare checks the two against each other on their overlap.
 Credentials, next to forge.db: tiingo.env (TIINGO_API_KEY=... or the bare
 token), alpaca.env (APCA_API_KEY_ID, APCA_API_SECRET_KEY).
 
-The research universe is the ten in UNIVERSE; --backfill, --snapshot and
---report touch only those. The screen's 50 ETFs come from etf_universe.py.
+The research sets are the ten in UNIVERSE and Phase 14's 26 in XSMOM_UNIVERSE
+(--set xsmom); --backfill, --snapshot and --report touch only the chosen set.
+Research symbols keep Tiingo bars: the screen (etf_universe.py) never re-sources
+them. The screen's other ETFs are Alpaca series.
 
   python equities.py --backfill           # symbols not fetched through yesterday
   python equities.py --backfill --force   # all of them
@@ -77,6 +79,18 @@ UNIVERSE = {
     "UUP": "2007-02-20",
 }
 
+# Phase 14 (V2_PROMPT 8h), fixed by launch cohort before any data was fetched:
+# the 9 original Select Sector SPDRs and the 17 original iShares MSCI country
+# funds (WEBS). symbol -> fund inception.
+XSMOM_SECTORS = {s: "1998-12-22" for s in ("XLB", "XLE", "XLF", "XLI", "XLK", "XLP", "XLU", "XLV", "XLY")}
+XSMOM_COUNTRIES = {s: "1996-03-12" for s in ("EWA", "EWO", "EWK", "EWC", "EWQ", "EWG", "EWH", "EWI", "EWJ",
+                                              "EWM", "EWW", "EWN", "EWS", "EWP", "EWD", "EWL", "EWU")}
+XSMOM_UNIVERSE = {**XSMOM_SECTORS, **XSMOM_COUNTRIES}
+XSMOM_SPREAD_BPS = {**{s: 5.0 for s in XSMOM_SECTORS}, **{s: 15.0 for s in XSMOM_COUNTRIES}}
+# Every symbol research reads: Tiingo bars, never re-sourced by the screen.
+RESEARCH_SETS = {"ten": UNIVERSE, "xsmom": XSMOM_UNIVERSE}
+RESEARCH_SYMBOLS = tuple(dict.fromkeys(s for u in RESEARCH_SETS.values() for s in u))
+
 
 def ensure_tables(conn):
     conn.execute("""CREATE TABLE IF NOT EXISTS instruments (
@@ -123,6 +137,19 @@ def seed_universe(conn):
                      " listed_from) VALUES (?, 'etf', ?, ?, ?)", (sym, TICK_SIZE, SESSION, listed))
         conn.execute("UPDATE instruments SET spread_bps=? WHERE symbol=? AND spread_bps IS NULL",
                      (SPREAD_BPS[sym], sym))
+    conn.commit()
+
+
+def seed_xsmom(conn):
+    """Instruments rows for the Phase 14 set. Eight sector funds may already
+    exist as screen funds (no spread, Alpaca bars): they get their spread and
+    inception here, and their bars switch to Tiingo on the next backfill."""
+    for sym, listed in XSMOM_UNIVERSE.items():
+        conn.execute("INSERT OR IGNORE INTO instruments (symbol, asset_class, tick_size, session,"
+                     " listed_from) VALUES (?, 'etf', ?, ?, ?)", (sym, TICK_SIZE, SESSION, listed))
+        conn.execute("UPDATE instruments SET spread_bps=COALESCE(spread_bps, ?),"
+                     " listed_from=COALESCE(listed_from, ?) WHERE symbol=?",
+                     (XSMOM_SPREAD_BPS[sym], listed, sym))
     conn.commit()
 
 
@@ -294,10 +321,11 @@ def backfill(conn, headers, force=False, symbols=None, today=None, fetch=fetch_t
     return done
 
 
-def report(conn):
+def report(conn, symbols=None):
+    symbols = UNIVERSE if symbols is None else symbols
     rows = [r for r in conn.execute("SELECT symbol, listed_from, data_start, data_end, n_bars, source"
                                     " FROM instruments WHERE session=? ORDER BY symbol", (SESSION,))
-            if r[0] in UNIVERSE]     # the research ten; the screen's ETFs: etf_universe.py --show
+            if r[0] in symbols]      # a research set; the screen's ETFs: etf_universe.py --show
     print(f"{'symbol':7}{'source':8}{'listed':12}{'first bar':12}{'last bar':12}{'bars':>6}{'years':>7}")
     short = []
     for sym, listed, start, end, n, src in rows:
@@ -314,14 +342,14 @@ def report(conn):
               " Tiingo's free tier (a key from the owner).")
     else:
         first = max(r[2] for r in rows)
-        print(f"Read: every symbol has at least {MIN_YEARS:.0f} years. All ten overlap from {first}.")
+        print(f"Read: every symbol has at least {MIN_YEARS:.0f} years. All {len(rows)} overlap from {first}.")
 
 
-def snapshot(conn, name):
+def snapshot(conn, name, symbols=None):
     """Copy every us_equity bar to bar_snapshots under `name`. Restartable:
     rerun after a kill and only the missing rows go in. A finished snapshot is
     never changed, so reusing its name is refused unless the bars still match."""
-    research = tuple(UNIVERSE)
+    research = tuple(UNIVERSE if symbols is None else symbols)
     rows = conn.execute("SELECT pair, ts, open, high, low, close, volume FROM candles"
                         f" WHERE session=? AND pair IN ({','.join('?' * len(research))})"
                         " ORDER BY pair, ts", (SESSION, *research)).fetchall()
@@ -377,20 +405,24 @@ def main_cli():
     ap.add_argument("--compare", action="store_true", help="Tiingo vs Alpaca, read-only")
     ap.add_argument("--snapshot", metavar="NAME")
     ap.add_argument("--report", action="store_true")
+    ap.add_argument("--set", choices=tuple(RESEARCH_SETS), default="ten",
+                    help="research set for --backfill/--snapshot/--report (xsmom: Phase 14)")
     args = ap.parse_args()
+    syms = list(RESEARCH_SETS[args.set])
     conn = sqlite3.connect(main.DB_PATH, timeout=main.DB_TIMEOUT_S)
     ensure_tables(conn)
     seed_universe(conn)
+    seed_xsmom(conn)
     if args.compare:
         compare_report(conn)
     if args.backfill and args.source == "alpaca":
-        backfill(conn, load_credentials(), force=args.force, symbols=list(UNIVERSE), fetch=fetch_bars,
+        backfill(conn, load_credentials(), force=args.force, symbols=syms, fetch=fetch_bars,
                  exchange=fetch_exchange, source="alpaca")
     elif args.backfill:
-        backfill(conn, load_tiingo_credentials(), force=args.force, symbols=list(UNIVERSE))
+        backfill(conn, load_tiingo_credentials(), force=args.force, symbols=syms)
     if args.snapshot:
-        print(f"snapshot {args.snapshot}: sha256 {snapshot(conn, args.snapshot)}")
-    report(conn)
+        print(f"snapshot {args.snapshot}: sha256 {snapshot(conn, args.snapshot, syms)}")
+    report(conn, syms)
 
 
 if __name__ == "__main__":
