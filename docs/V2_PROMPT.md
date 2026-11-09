@@ -337,7 +337,7 @@ Build, once approved:
 
 ---
 
-## 8i. Phases 12 and 13 — Point-in-time S&P 500 universe, then the material-agreement drift test  (added 2026-11-08; owner chose free data only and route A + B 2026-11-08; REVISED RULE AWAITING OWNER APPROVAL)
+## 8i. Phases 12 and 13 — Point-in-time S&P 500 universe, then the material-agreement drift test  (added 2026-11-08; owner chose free data only and route A + B 2026-11-08; revised rule approved by the owner as written 2026-11-09)
 
 Why: F20 and the literature behind it. Price momentum mixes news-driven moves,
 which tend to continue, with moves on no news, which tend to reverse (Chan 2003).
@@ -351,7 +351,7 @@ and timestamped news (P13). **No paid data.** Two routes, both free:
 - **B. Forward recording from the day it starts.** Clean (no survivorship, no
   look-ahead), slow (years). It also serves as A's forward test.
 
-**Nothing is fetched or run until the owner approves this revised section.**
+**Approved 2026-11-09.** SEC's User-Agent contact is the owner's, kept in `/data/sec.env` (not in the repo) and sent to SEC only.
 
 Vendors considered and set aside by the owner (no paid services): EODHD, Norgate
 (Windows-only updater), Sharadar. Checked 2026-11-08: Tiingo's free data has many
