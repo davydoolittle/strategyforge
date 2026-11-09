@@ -95,6 +95,12 @@ JOB_SPECS = [
     # market context for the dashboard (P7.6): VIX, FRED, put/call, CAPE, SPY-derived
     # series, then the equity regime tag. Context only; nothing trades on it
     ("market_context", "1d", "market_context.py --refresh", 3600),
+    # P12.2: S&P 500 member bars from Tiingo's free tier, ~15 new tickers a run,
+    # inside a monthly symbol budget (stock_bars.py); into stocks.db
+    ("stock_bars", "1d", "stock_bars.py", 1800),
+    # P13F (route B): current members, their new 8-Ks, Alpaca bars, recorded
+    # forward from the first run (filings_forward.py); into stocks.db
+    ("filings_forward", "1d", "filings_forward.py", 3600),
 ]
 # Jobs taken out of JOB_SPECS. Their rows stay in the jobs table as the record;
 # the scheduler skips any name not in JOB_SPECS and the dashboard hides these.

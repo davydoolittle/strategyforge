@@ -378,8 +378,8 @@ simply skip them.
   symbols a month (about 450 after the research sets) means ~1,100 tickers take
   about three months: a daily collector job fetches ~15 new symbols a day,
   restartable.
-- [ ] **P12.1 Members + CIK map.** `pit_members` (cik, ticker, start, end) in a separate `/data/stocks.db`, not forge.db (~5 million bars should not share the collector's lock). The Wikipedia cross-check and the 490-510 count. Unmatched members listed. Tests.
-- [ ] **P12.2 Bars.** Daily job `stock_bars`, ~15 new symbols a day within Tiingo's free quota, into stocks.db, batch commits, restartable (§10.9), a scratch copy first. Needs a collector rebuild. Then frozen as snapshot `sp500-<date>`.
+- [ ] **P12.1 Members + CIK map.** *(in progress 2026-11-09: `app/stocks.py`, tests/test_stocks.py. Members: 1,036 intervals from 2004, 998 tickers, fja05680 through 2026-08-18 plus 12 later Wikipedia changes; 495-507 members on every date from 2005; 684/747 Wikipedia changes matched within 7 days, the misses explained by fja05680 using a company's latest ticker (MDLZ for Kraft, BKNG for Priceline). CIKs: 847/1,036 mapped (Wikipedia current table 502, change-log name for that ticker 216, SEC current ticker with name agreement 127, date-paired name the ticker fits 2), every one checked against the company's SEC 10-K/10-Q history. 189 unmatched: next, SEC full-text search for the company's own '(NYSE: TICKER)' in its filings during the interval. A spot-check rejected two looser methods (date pairing without a ticker fit, and inferred renames: Bear Stearns had mapped to Intuitive Surgical); see `link_renames`, kept but unused.)* `pit_members` (cik, ticker, start, end) in a separate `/data/stocks.db`, not forge.db (~5 million bars should not share the collector's lock). The Wikipedia cross-check and the 490-510 count. Unmatched members listed. Tests.
+- [ ] **P12.2 Bars.** *(started 2026-11-09: `app/stock_bars.py`, job `stock_bars` daily, ≤ 15 new tickers a run, ≤ 400 a month; 1,281 tickers wanted (interval tickers, SEC current tickers of mapped CIKs, SPY), ~3.5 months; first 15 fetched by hand. Tiingo's ABI, ADCT and ACV belong to later companies: the coverage check, not the fetch, decides what is priced.)* Daily job `stock_bars`, ~15 new symbols a day within Tiingo's free quota, into stocks.db, batch commits, restartable (§10.9), a scratch copy first. Needs a collector rebuild. Then frozen as snapshot `sp500-<date>`.
 - [ ] **P12.3 Report.** Members per date, the priced share, and **the share of eligible events at unpriced members** (see the stop rule below). Tests.
 
 ### P13. One pre-registered test: drift after a material agreement
@@ -431,7 +431,7 @@ The rule, fixed here:
   events, mean abnormal return X% over 60 days"), and it never says buy or sell.
   A fail is written up and ends this hypothesis. Earnings drift (2.02) and the
   rest of the list are separate registrations that count against the family.
-- [ ] **P13.1 Filings.** SEC submissions JSON (items and acceptance time for every 8-K) for every mapped CIK, at most 10 requests a second with the declared User-Agent, into stocks.db; a scratch copy first. Tests.
+- [ ] **P13.1 Filings.** *(fetcher done 2026-11-09: `app/filings.py`; full submissions history with items and acceptance time for 1,100+ CIKs so far. Acceptance times verified as true UTC: nothing is accepted 03-09 Z, and next-day filing dates start at EDGAR's 17:30 ET cutoff.)* SEC submissions JSON (items and acceptance time for every 8-K) for every mapped CIK, at most 10 requests a second with the declared User-Agent, into stocks.db; a scratch copy first. Tests.
 - [ ] **P13.2 Evaluator.** `app/event_drift.py`, read-only on the snapshots, tests on hand-built events with known answers (09:30 and 16:00 timing, the exclusions, beta, overlapping positions, the worst case, the stop rule).
 - [ ] **P13.3 The test.** Commit the code, run once, write the finding, stop and report.
 
@@ -451,7 +451,7 @@ passes, B is its forward test; if A fails, B is a clean second look.
 - **Pass:** the same PSR >= 0.95 on the same calendar-time series. No worst case
   is needed, since no data is missing. At an expected ~100 qualifying events a
   year, a verdict needs several years.
-- [ ] **P13F.1 Recorder.** Daily job `filings_forward`: members, 8-Ks, bars into stocks.db. Read-only on SEC and Wikipedia. Needs a collector rebuild. Tests.
+- [ ] **P13F.1 Recorder.** *(started 2026-11-09: `app/filings_forward.py`, job `filings_forward` daily. **Route B's start is fixed at 2026-11-09**: 503 members, bars for all of them from 400 days before. Needs a collector rebuild to run daily.)* Daily job `filings_forward`: members, 8-Ks, bars into stocks.db. Read-only on SEC and Wikipedia. Needs a collector rebuild. Tests.
 - [ ] **P13F.2 Reading.** The evaluator from P13.2 on forward data, run quarterly for the record; the verdict only at the registered size, never as a running peek that stops at the first good number.
 
 Needed from the owner before P13.1 and P13F.1: the User-Agent contact SEC
