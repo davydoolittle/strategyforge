@@ -362,13 +362,18 @@ def name_agrees(a, b):
 
 def ticker_fits(ticker, name):
     """The ticker's letters appear in order in the name, starting with its
-    first letter: BSC fits Bear Stearns, not Ambac."""
-    t = re.sub(r"[^a-z]", "", ticker.lower())
+    first letter: BSC fits Bear Stearns, not Ambac. A trailing Q on a 4+ letter
+    ticker is the over-the-counter bankruptcy suffix (LEHMQ), so the ticker
+    without it may fit instead."""
     n = re.sub(r"[^a-z]", "", norm_name(name))
-    if not t or not n or t[0] != n[0]:
-        return False
-    it = iter(n)
-    return all(ch in it for ch in t)
+    t0 = re.sub(r"[^a-z]", "", ticker.lower())
+    variants = [t0] + ([t0[:-1]] if len(t0) >= 4 and t0.endswith("q") else [])
+    for t in variants:
+        if t and n and t[0] == n[0]:
+            it = iter(n)
+            if all(ch in it for ch in t):
+                return True
+    return False
 
 
 def _coverage(periodic, s, e):
@@ -457,7 +462,63 @@ def link_renames(ivs, out, periodic_of, changes):
                     break
 
 
+FTS_URL = "https://efts.sec.gov/LATEST/search-index"
+FTS_EXCHANGES = ("NYSE", "NASDAQ")
+FTS_FROM = "2001-01-01"         # SEC's full-text search starts in 2001
+FTS_MIN_DOCS = 3
+FTS_MARGIN = 1.5                # the winner needs this many times the runner-up's documents
+
+
+def fts_entities(sec, ticker, s, e, today=None):
+    """{cik: (name, documents)} for filers whose documents quote "(EXCHANGE:
+    TICKER)" during the interval, from SEC full-text search aggregations."""
+    end = e or (today or date.today()).isoformat()
+    start = max(s, FTS_FROM)
+    if start >= end:
+        return {}
+    out = {}
+    for ex in FTS_EXCHANGES:
+        q = {"q": f'"{ex}: {ticker}"', "dateRange": "custom", "startdt": start, "enddt": end}
+        d = None
+        for attempt in range(2):                     # SEC's search sometimes answers 500
+            try:
+                d = json.loads(sec(f"{FTS_URL}?{urllib.parse.urlencode(q)}"))
+                break
+            except Exception:  # noqa: BLE001  one retry, then this exchange is skipped
+                if attempt:
+                    d = None
+        if d is None:
+            continue
+        for b in d.get("aggregations", {}).get("entity_filter", {}).get("buckets", []):
+            m = re.search(r"\(CIK (\d{10})\)", b["key"])
+            if not m:
+                continue
+            name = re.sub(r"\s*\(.*$", "", b["key"]).strip()
+            prev = out.get(m.group(1), (name, 0))
+            out[m.group(1)] = (name, prev[1] + b["doc_count"])
+    return out
+
+
+def fts_choose(ticker, s, e, entities, periodic_of):
+    """(cik, name) or None: among filers with >= FTS_MIN_DOCS documents whose
+    name the ticker fits and that filed their own 10-K/10-Q during the
+    interval, the one with the most, if it has FTS_MARGIN times the runner-up's.
+    (The fit was added after a spot-check: 2 of 40 picks were other filers that
+    quote the ticker, SunGard's SDS matched to a Behringer Harvard fund.)"""
+    ok = sorted(((docs, cik, name) for cik, (name, docs) in entities.items()
+                 if docs >= FTS_MIN_DOCS and ticker_fits(ticker, name) and verified(periodic_of(cik), s, e)),
+                reverse=True)
+    if not ok:
+        return None
+    if len(ok) > 1 and ok[0][0] < FTS_MARGIN * ok[1][0]:
+        return None
+    return ok[0][1], ok[0][2]
+
+
 def store_ciks(conn, mapped):
+    """Write the whole map at the end (compute first): intervals not in it lose
+    a computed CIK; a 'manual' one is never touched."""
+    conn.execute("UPDATE pit_members SET cik=NULL, cik_source=NULL WHERE cik_source IS NULL OR cik_source<>'manual'")
     rows = [(cik, src, name, t, s) for (t, s), (cik, src, name) in mapped.items()]
     for i in range(0, len(rows), BATCH_ROWS):
         conn.executemany("UPDATE pit_members SET cik=?, cik_source=?, name=COALESCE(?, name)"
@@ -504,9 +565,20 @@ def run_cik(conn, sec=None, get=http_get):
     done, failed = filings.fetch_all(conn, need, sec)
     sec_names = {cik: [n] + json.loads(f or "[]") for cik, n, f in
                  conn.execute("SELECT cik, name, former_names FROM sec_companies")}
-    conn.execute("UPDATE pit_members SET cik=NULL, cik_source=NULL WHERE cik_source<>'manual' OR cik_source IS NULL")
-    conn.commit()
-    mapped, ambiguous = choose(ivs, cands, lambda cik: filings.periodic_dates(conn, cik), changes, sec_names)
+    periodic = lambda cik: filings.periodic_dates(conn, cik)   # noqa: E731
+    mapped, ambiguous = choose(ivs, cands, periodic, changes, sec_names)
+    # unmatched: the company's own "(NYSE: TICKER)" in SEC full-text search
+    rest = [r for r in ivs if (r[0], r[1]) not in mapped]
+    found = {}
+    for t, s_, e in rest:
+        ents = fts_entities(sec, t, s_, e)
+        new = [c for c, (_, docs) in ents.items() if docs >= FTS_MIN_DOCS]
+        filings.fetch_all(conn, new, sec, log=lambda *a: None)
+        pick = fts_choose(t, s_, e, ents, periodic)
+        if pick:
+            found[(t, s_)] = (pick[0], "fulltext", pick[1])
+    mapped.update(found)
+    print(f"full-text search: {len(found)}/{len(rest)} unmatched intervals found")
     store_ciks(conn, mapped)
     for a in ambiguous[:20]:
         print("  ambiguous", *a)

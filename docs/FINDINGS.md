@@ -6,6 +6,53 @@ pinned windows on each candidate (P2.1).
 
 ---
 
+## F21. P13 route A, drift after material agreements on 2005-2026 history: not testable on free data (the registered stop rule fired)
+
+*2026-11-10. V2_PROMPT 8i, route A. No price was fetched for the test and no
+return was looked at: this is the registered coverage check, run on SEC filings,
+the point-in-time member list and Tiingo's free ticker list alone.*
+
+- **Members:** 1,036 S&P 500 member intervals from 2004 (fja05680 plus 12 later
+  Wikipedia changes), 495-507 members on every date from 2005.
+- **Identity:** 969 intervals (93.5%) mapped to an SEC CIK, each checked against
+  the company's own 10-K/10-Q history. Spot-checks rejected three looser methods
+  before they were used (date pairing without a ticker fit, inferred renames, and
+  full-text picks the ticker does not fit: Bear Stearns had mapped to Intuitive
+  Surgical, SunGard to a Behringer Harvard fund). The last spot-checks, 29 of
+  29, were right.
+- **Events:** 7,919 eligible item 1.01 8-Ks (after the registered exclusions:
+  22,257 at non-members, 7,117 with item 2.02 or 2.03, 2,376 within 20 trading
+  days of an earlier 1.01, 609 amendments, 1,181 before 2005).
+
+| | events | share | registered limit |
+|---|---|---|---|
+| at companies Tiingo's free data cannot price | 1,043 | **13.2%** | 5% |
+| presumably lost at the 67 unmapped members | ~227 | 2.8% | 2% |
+
+**Verdict: not testable on free data.** The test was not run, as the rule says.
+The unpriced events are mostly 2005-2010 members later acquired or bankrupt
+(Bear Stearns, Wyeth, BellSouth, Novell, Biomet): Tiingo's free list does not
+carry them.
+
+| years | events | unpriced |
+|---|---|---|
+| 2005-2010 | 3,795 | 22.5% |
+| 2011-2015 | 1,531 | 8.0% |
+| 2016-2026 | 2,593 | 2.6% |
+
+**What this licenses.**
+
+- **Route A as registered is closed.** It produced no evidence either way.
+- **A 2016-on version would clear the coverage bar,** but choosing that window
+  after seeing these counts is a change of rule. It may only be run as a new
+  registration, approved before any price is fetched. No return has been seen,
+  so such a registration would not be fitted to outcomes.
+- **Route B is unaffected** (forward from 2026-11-09, no missing data).
+- **The members, CIK map and filings stay** in stocks.db for route B and any
+  later registration.
+
+---
+
 ## F20. Pre-registered cross-sectional momentum, sector and country ETFs: FAIL; ranking by 12-1 momentum picked no better than holding all 26
 
 *2026-11-08. Phase 14, `xsmom.py` on snapshot `xsmom-2026-11-06`. One fixed rule,

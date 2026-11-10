@@ -42,6 +42,7 @@ export, and the TSP allocation module. Nothing in this repo places live orders.
 - **F17:** Pre-registered ETF trend book, N = 1: FAIL against buy-and-hold (PSR 0.032). It cut risk more than return, but no forward test is earned.
 - **F18:** Ledger of 52 traditional market patterns: 0 supported, 5 suggestive (about chance), 1 opposite. Context for the TSP report, never a trading rule.
 - **F19:** #5833 registered as the SOL squeeze forward test (from F11): PSR vs 0 ≥ 0.95 on SOL trades with signal ≥ 2026-10-29, ~110 trades, 5-6 years, no re-tuning.
+- **F21:** P13 route A (1.01 drift, 2005-2026): not testable on free data. 13.2% of 7,919 events at unpriced companies (limit 5%); not run. 2016-on is 2.6%, but using it is a new registration.
 - **F20:** Pre-registered cross-sectional 12-1 momentum, 9 sector + 17 country ETFs, N = 1: FAIL (excess Sharpe -0.06, PSR 0.37). Same risk as equal weight, no selection skill. Closed; variants need their own registration.
 
 ## State of play
@@ -56,5 +57,5 @@ export, and the TSP allocation module. Nothing in this repo places live orders.
 - No strategy in this repo has beaten buy-and-hold. Changing Phase 10's rule after F17 is a new hypothesis and needs its own registration.
 - Forward tests #3214, #4027 and #5833 running, all marked `forward_test`. #3214's first paper trade (ETH short) opened 2026-11-06.
 - Phase 14 done: FAIL (F20). Research symbols are the ten (`equities.UNIVERSE`) plus Phase 14's 26 (`XSMOM_UNIVERSE`), frozen in snapshot `xsmom-2026-11-06`.
-- P12/P13 (point-in-time S&P 500 universe, then drift after 8-K item 1.01 material agreements, N = 1) are planned in V2_PROMPT §8i on free data only (owner: no paid services), route A (history with a worst-case rule for missing prices) + B (forward recording). Rule approved 2026-11-09; SEC User-Agent in `/data/sec.env`, sent to SEC only. Data in `/data/stocks.db` (never forge.db). Route B started 2026-11-09 (fixed). P12.1: 847/1,036 member intervals have a verified CIK; 189 to map via SEC full-text search. Bars: ~3.5 months of Tiingo's free quota.
+- P12/P13 (point-in-time S&P 500 universe, then drift after 8-K item 1.01 material agreements, N = 1) are planned in V2_PROMPT §8i on free data only (owner: no paid services), route A (history with a worst-case rule for missing prices) + B (forward recording). Rule approved 2026-11-09; SEC User-Agent in `/data/sec.env`, sent to SEC only. Data in `/data/stocks.db` (never forge.db). Route B started 2026-11-09 (fixed). Route A closed: not testable on free data (F21). CIK map 969/1,036.
 - Failures are never deleted: every trial counts in A2's N.

@@ -113,6 +113,8 @@ class TestCik(unittest.TestCase):
         self.assertTrue(S.ticker_fits("BSC", "Bear Stearns Companies"))
         self.assertFalse(S.ticker_fits("BSC", "Ambac Financial"))
         self.assertTrue(S.ticker_fits("AET", "Aetna"))
+        self.assertTrue(S.ticker_fits("LEHMQ", "Lehman Brothers"))        # bankruptcy suffix
+        self.assertFalse(S.ticker_fits("SDS", "Behringer Harvard Mid Term Value Enhancement Fund I LP"))
         self.assertFalse(S.ticker_fits("AET", "Stericycle"))
         self.assertTrue(S.name_agrees("Paramount Global", "PARAMOUNT GLOBAL"))
         self.assertFalse(S.name_agrees("Paramount Global", "Parabolic Technologies, Inc."))
@@ -160,6 +162,43 @@ class TestCik(unittest.TestCase):
         got, amb = S.choose(ivs, cands, lambda c: ["2006-01-01"])
         self.assertEqual(got, {})
         self.assertEqual(len(amb), 1)
+
+
+class TestFullText(unittest.TestCase):
+    def test_entities_and_choice(self):
+        resp = {"aggregations": {"entity_filter": {"buckets": [
+            {"key": "BEAR STEARNS COMPANIES INC  (CIK 0000777001)", "doc_count": 36},
+            {"key": "BEAR STEARNS COMMERCIAL MORTGAGE SECURITIES INC  (CIK 0000908987)", "doc_count": 19},
+            {"key": "MC SHIPPING INC  (CIK 0000847831)", "doc_count": 2}]}}}
+        seen = []
+        ents = S.fts_entities(lambda url: seen.append(url) or json.dumps(resp).encode(), "BSC", "2004-01-01", "2008-06-02")
+        self.assertEqual(len(seen), 2)                                    # NYSE and NASDAQ
+        self.assertIn("startdt=2004-01-01", seen[0])
+        self.assertEqual(ents["0000777001"], ("BEAR STEARNS COMPANIES INC", 72))
+        periodic = {"0000777001": ["2005-01-10"], "0000908987": ["2006-03-01"]}
+        self.assertEqual(S.fts_choose("BSC", "2004-01-01", "2008-06-02", ents, lambda c: periodic.get(c, [])),
+                         ("0000777001", "BEAR STEARNS COMPANIES INC"))       # 72 vs 38: a clear lead
+        close = {"0000777001": ("BSC A", 40), "0000908987": ("BSC B", 30)}
+        self.assertIsNone(S.fts_choose("BSC", "2004-01-01", "2008-06-02", close, lambda c: periodic.get(c, [])))
+        periodic["0000908987"] = []                                        # B files no 10-K/10-Q: out
+        self.assertEqual(S.fts_choose("BSC", "2004-01-01", "2008-06-02", close, lambda c: periodic.get(c, [])),
+                         ("0000777001", "BSC A"))
+        other = {"0000777001": ("SUNGARD DATA SYSTEMS", 5), "0000908987": ("BEHRINGER HARVARD FUND", 50)}
+        periodic["0000908987"] = ["2005-01-10"]
+        self.assertEqual(S.fts_choose("SDS", "2004-01-01", "2005-08-12", other, lambda c: periodic.get(c, [])),
+                         ("0000777001", "SUNGARD DATA SYSTEMS"))                # the fund does not fit SDS
+
+    def test_a_server_error_skips_that_query(self):
+        calls = []
+
+        def flaky(url):
+            calls.append(url)
+            raise OSError("HTTP 500")
+        self.assertEqual(S.fts_entities(flaky, "BSC", "2004-01-01", "2008-06-02"), {})
+        self.assertEqual(len(calls), 4)                     # two exchanges, one retry each
+
+    def test_nothing_before_2001(self):
+        self.assertEqual(S.fts_entities(lambda url: 1 / 0, "OLD", "1996-01-01", "2000-06-01"), {})
 
 
 class TestSecClient(unittest.TestCase):
