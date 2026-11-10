@@ -178,7 +178,18 @@ When `app/main.py` changes, or any module the scheduled jobs run: the image bake
 cd /mnt/user/appdata/strategyforge && docker build -t strategyforge:latest .
 ```
 
-then recreate the container from the new image. It was started with `docker run`, so Unraid has no Edit option for it. Save `BACKFILL_DAYS`, `NTFY_TOPIC` and the network mode from `docker inspect strategyforge` first, then `docker rm` it and `docker run -d` it again with those, restart policy `unless-stopped`, and the mounts `/mnt/user/appdata/strategyforge/data:/data` and `/mnt/user/appdata/davesbridge/data:/bridge:ro`. `docker restart` alone does **not** pick up a rebuilt image.
+then recreate the container from the new image. Its settings live in `/mnt/user/appdata/strategyforge/data/collector.env` (`BACKFILL_DAYS`, `NTFY_TOPIC`; gitignored, created 2026-11-10 after the container was removed once and its settings could not be read back). `docker restart` alone does **not** pick up a rebuilt image. The whole sequence, in the Matrix terminal:
+
+```
+cd /mnt/user/appdata/strategyforge && docker build -t strategyforge:latest . && \
+docker rm -f strategyforge; \
+docker run -d --name strategyforge --restart unless-stopped --network bridge \
+  --env-file /mnt/user/appdata/strategyforge/data/collector.env \
+  -v /mnt/user/appdata/strategyforge/data:/data \
+  -v /mnt/user/appdata/davesbridge/data:/bridge:ro \
+  strategyforge:latest
+docker ps --filter name=strategyforge
+```
 
 ## Undo
 
