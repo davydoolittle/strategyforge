@@ -292,7 +292,7 @@ def main():
     ap.add_argument("--dry-run", action="store_true", help="evaluate without storing rows")
     args = ap.parse_args()
 
-    conn = sqlite3.connect(DB_PATH)
+    conn = sqlite3.connect(DB_PATH, timeout=60)  # main.DB_TIMEOUT_S: wait out the collector's lock
     ensure_tables(conn)
     W.ensure_columns(conn)
     if args.annotate_new:

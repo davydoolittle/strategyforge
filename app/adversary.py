@@ -407,7 +407,7 @@ def main():
     ap.add_argument("--json", action="store_true")
     args = ap.parse_args()
 
-    conn = sqlite3.connect(DB_PATH)
+    conn = sqlite3.connect(DB_PATH, timeout=collector.DB_TIMEOUT_S)
     ensure_tables(conn)
     W.ensure_columns(conn)
     lineage.ensure_family_column(conn, "candidates")

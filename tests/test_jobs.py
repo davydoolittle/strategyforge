@@ -226,5 +226,22 @@ class TestRunner(Base):
         self.assertEqual(r.running, {})
 
 
+class TestJobsWaitForTheLock(unittest.TestCase):
+    """Every scheduled job runs alongside the collector and the other jobs, so
+    each sqlite3.connect in its script must wait out the write lock (section
+    10.9; 2026-11-10 health, paper and feature_evals failed with 'database is
+    locked' when eleven catch-up jobs started at once on the default 5 s)."""
+
+    def test_every_job_script_sets_a_timeout(self):
+        import re
+        app = os.path.join(os.path.dirname(__file__), "..", "app")
+        for name, _, command, _ in main.JOB_SPECS:
+            script = command.split()[0]
+            with open(os.path.join(app, script)) as f:
+                src = f.read()
+            for call in re.findall(r"sqlite3\.connect\((.*)", src):
+                self.assertIn("timeout", call, f"{script}: sqlite3.connect({call}")
+
+
 if __name__ == "__main__":
     unittest.main()

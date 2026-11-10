@@ -112,7 +112,7 @@ def open_signals(path):
                          f"data dir read-only at /bridge; the collector container needs the same "
                          f"mount (-v /mnt/user/appdata/davesbridge/data:/bridge:ro) for its "
                          f"hourly paper job; elsewhere pass --signals-db.")
-    return sqlite3.connect(f"file:{path}?mode=ro", uri=True)
+    return sqlite3.connect(f"file:{path}?mode=ro", uri=True, timeout=60)  # main.DB_TIMEOUT_S: wait out the collector's lock
 
 
 def _ts(received_at):
@@ -516,7 +516,7 @@ def main():
                     help="print the P4.3 promotion checks for one strategy and exit")
     args = ap.parse_args()
     if args.evidence is not None:
-        conn = sqlite3.connect(DB_PATH)
+        conn = sqlite3.connect(DB_PATH, timeout=60)
         ev = evidence(conn, args.evidence)
         conn.close()
         for k, v in ev.items():
@@ -527,7 +527,7 @@ def main():
         print("-> promotable to paper_validated" if ev["passed"] else "-> NOT promotable")
         return
     sconn = open_signals(args.signals_db)
-    conn = sqlite3.connect(DB_PATH)
+    conn = sqlite3.connect(DB_PATH, timeout=60)
     ensure_tables(conn)
     summary = reconcile(conn, sconn)
     print_report(conn, summary)

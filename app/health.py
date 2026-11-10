@@ -238,7 +238,7 @@ def main():
     ap.add_argument("--ntfy-topic", default=os.environ.get("NTFY_TOPIC", ""))
     ap.add_argument("--no-ntfy", action="store_true")
     args = ap.parse_args()
-    conn = sqlite3.connect(DB_PATH)
+    conn = sqlite3.connect(DB_PATH, timeout=60)  # main.DB_TIMEOUT_S: wait out the collector's lock
     rows = run(conn, args.strategy, topic=args.ntfy_topic, push=not args.no_ntfy)
     print_report(rows)
     conn.close()
