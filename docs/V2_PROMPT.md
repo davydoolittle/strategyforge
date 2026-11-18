@@ -460,6 +460,87 @@ owner says so.
 
 ---
 
+## 8j. Phase 15 — Pre-registered stock factor battery, S&P 500, 2016-2026  (added 2026-11-18; batch of six and SEC contact approved by the owner 2026-11-18; **this rule awaits the owner's approval as written**)
+
+Goal: the breadth every earlier test lacked. One cross-sectional rule ranks about
+500 stocks a month, about 60,000 stock-months over the window, against a few
+dozen trades per hypothesis in F9-F17. Definition of done: one finding (F22)
+covering all six, whatever they show. **Written before any stock price or
+financial statement is fetched for it. Nothing in P15.1-P15.3 starts until the
+owner approves this section as written.** Six hypotheses, run once each: no
+search, no parameter changes after the first run. A fix to rule semantics is
+allowed only with a written reason, as in F12.
+
+Why 2016: Alpaca's free bars start 2016-01-04 and, unlike Tiingo's free tier,
+keep companies that later vanished (checked 2026-11-18: SIVB to 2023-03-09, FRC
+to 2023-04-28, TWTR to 2022-10-27, CELG to 2019-11-20). F21 found pre-2016 free
+data too incomplete to test.
+
+Prior evidence, stated so fails are not a surprise: momentum (Jegadeesh and
+Titman 1993), 52-week high (George and Hwang 2004), low volatility (Ang et al.
+2006; Frazzini and Pedersen 2014), short-term reversal (Jegadeesh 1990), gross
+profitability (Novy-Marx 2013), value (Fama and French 1992). All were published
+long before this window, and most are reported weaker in US large caps since; value
+did especially badly from 2017 to 2020. **Several FAILs are the likely outcome.**
+
+### The rule, fixed here
+
+- **Universe:** S&P 500 members on each formation date, point in time from P12's
+  `pit_members`, identified by CIK. A member counts only on dates its price series
+  covers.
+- **Prices:** Alpaca's free daily bars (SIP feed), adjusted for splits and
+  dividends, for ranking and returns; raw (unadjusted) closes only to compute
+  market value for value. Window 2016-01-04 to **2026-10-30**. Frozen in one
+  snapshot before the run. A ticker's series is matched to the member's CIK by
+  P12's identity rule; a reused or renamed ticker that does not cover the
+  member's dates leaves those dates unpriced.
+- **Financial statements (5 and 6):** SEC's free XBRL company facts, using each
+  value only from its **filing date**, never its period end, so nothing is known
+  early. Latest annual figure (10-K, 12-month duration) filed on or before the
+  formation date.
+- **Formation:** the last trading day of each month, from 2017-01-31 (the first
+  month-end with 12 months of history for every signal) to 2026-09-30.
+- **The six signals,** each using data up to the formation close only:
+  1. **Momentum:** return from 12 months before to 1 month before. Highest ranked first.
+  2. **52-week high:** close divided by the highest close of the last 252 trading days. Highest first.
+  3. **Low volatility:** standard deviation of the last 252 daily returns. Lowest first.
+  4. **Short-term reversal:** return over the last 21 trading days. Lowest first.
+  5. **Profitability:** (revenue − cost of revenue) / total assets. Highest first. Members without both revenue and cost of revenue in their filings (most banks and insurers) are left out of this ranking.
+  6. **Value:** the average of two percentile ranks, earnings / market value and book equity / market value, market value = raw close × latest reported shares outstanding. Highest first. Negative earnings or book rank lowest on that half.
+- **Portfolio:** the top fifth of ranked members, equal weight. Bought at the
+  next trading day's open, held to the next rebalance's open. 117 monthly returns,
+  February 2017 to October 2026.
+- **Benchmark:** every priced member on the same formation date, equal weight,
+  rebalanced on the same days. So a strategy must pick better than holding all of
+  them, not just ride the market.
+- **Costs:** 10 bps a side on the weight traded, for strategy and benchmark alike.
+- **Missing data, worst case:** a series that ends during a holding month (takeover
+  or failure; free data cannot tell which) returns its last bar, then **−30%**
+  (Shumway's delisting return for failures). It applies to strategy and benchmark
+  alike, so it cannot help one over the other.
+- **Stop rules, checked before any return is computed:**
+  - if more than **2%** of member-months have no usable price at formation, the whole battery is not run and is reported as not testable;
+  - if fewer than **80%** of ranked-universe member-months have the statement data a signal needs, that strategy is reported not testable. It still counts as one of the six trials.
+- **Pass, per strategy:** PSR vs 0 of the monthly excess return (strategy minus
+  benchmark) at or above **0.9917**, which is 0.95 with a Bonferroni correction
+  for six trials. That needs an annualised excess Sharpe of about 0.77 over the
+  window: a high bar, set by testing six at once.
+- **Information only, not the verdict:** each strategy's top-minus-bottom
+  quintile; deciles; 2017-2021 and 2022-2026 separately; 2020 left out; the
+  result without the worst case; turnover and cost drag.
+- **What follows:** a pass earns a forward test on data after 2026-10-30, not a
+  promotion; any message about it may only quote measured numbers and never says
+  buy or sell. A fail is written up and closes that strategy. This is a new family,
+  "stock factors", with six trials; any later variant adds to its count.
+
+### Checklist
+
+- [ ] **P15.1 Data.** Alpaca bars (adjusted and raw) for every member ticker 2016-2026 and SPY; SEC XBRL company facts for every mapped CIK (owner's SEC contact, `/data/sec.env`, approved 2026-11-18); both into `stocks.db`, frozen in one snapshot. Report coverage against both stop rules before computing any return.
+- [ ] **P15.2 Evaluator.** `app/stock_factors.py`, read-only on the snapshot, tested on hand-built data with known answers (formation timing, filing-date lag, the worst case, costs, the benchmark, the stop rules).
+- [ ] **P15.3 The test.** Commit the code, run once, write F22 for all six, stop and report.
+
+---
+
 ## 9. Not in scope (and why)
 
 | APEX section | status | reason |
