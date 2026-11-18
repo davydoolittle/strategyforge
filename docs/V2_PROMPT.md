@@ -460,14 +460,14 @@ owner says so.
 
 ---
 
-## 8j. Phase 15 — Pre-registered stock factor battery, S&P 500, 2016-2026  (added 2026-11-18; batch of six and SEC contact approved by the owner 2026-11-18; **this rule awaits the owner's approval as written**)
+## 8j. Phase 15 — Pre-registered stock factor battery, S&P 500, 2016-2026  (added 2026-11-18; approved by the owner as written, with strategy 7, 2026-11-18)
 
 Goal: the breadth every earlier test lacked. One cross-sectional rule ranks about
 500 stocks a month, about 60,000 stock-months over the window, against a few
 dozen trades per hypothesis in F9-F17. Definition of done: one finding (F22)
-covering all six, whatever they show. **Written before any stock price or
+covering all seven, whatever they show. **Written before any stock price or
 financial statement is fetched for it. Nothing in P15.1-P15.3 starts until the
-owner approves this section as written.** Six hypotheses, run once each: no
+owner approves this section as written.** Seven hypotheses, run once each: no
 search, no parameter changes after the first run. A fix to rule semantics is
 allowed only with a written reason, as in F12.
 
@@ -479,7 +479,10 @@ data too incomplete to test.
 Prior evidence, stated so fails are not a surprise: momentum (Jegadeesh and
 Titman 1993), 52-week high (George and Hwang 2004), low volatility (Ang et al.
 2006; Frazzini and Pedersen 2014), short-term reversal (Jegadeesh 1990), gross
-profitability (Novy-Marx 2013), value (Fama and French 1992). All were published
+profitability (Novy-Marx 2013), value (Fama and French 1992), unchanged annual
+reports (Cohen, Malloy and Nguyen 2020, "Lazy Prices", Journal of Finance; data
+1995-2014, strongest in small companies, so the S&P 500 is where it should be
+weakest). All were published
 long before this window, and most are reported weaker in US large caps since; value
 did especially badly from 2017 to 2020. **Several FAILs are the likely outcome.**
 
@@ -500,13 +503,14 @@ did especially badly from 2017 to 2020. **Several FAILs are the likely outcome.*
   formation date.
 - **Formation:** the last trading day of each month, from 2017-01-31 (the first
   month-end with 12 months of history for every signal) to 2026-09-30.
-- **The six signals,** each using data up to the formation close only:
+- **The seven signals,** each using data up to the formation close only:
   1. **Momentum:** return from 12 months before to 1 month before. Highest ranked first.
   2. **52-week high:** close divided by the highest close of the last 252 trading days. Highest first.
   3. **Low volatility:** standard deviation of the last 252 daily returns. Lowest first.
   4. **Short-term reversal:** return over the last 21 trading days. Lowest first.
   5. **Profitability:** (revenue − cost of revenue) / total assets. Highest first. Members without both revenue and cost of revenue in their filings (most banks and insurers) are left out of this ranking.
   6. **Value:** the average of two percentile ranks, earnings / market value and book equity / market value, market value = raw close × latest reported shares outstanding. Highest first. Negative earnings or book rank lowest on that half.
+  7. **Unchanged annual report:** the cosine similarity of word counts between the member's latest 10-K, filed within the 12 months before formation, and its previous 10-K. Text of the main document only: markup and inline-XBRL data removed, lower-cased, words of letters only. Most similar first. Members without both 10-Ks are left out of this ranking. Only word counts are kept, never the text.
 - **Portfolio:** the top fifth of ranked members, equal weight. Bought at the
   next trading day's open, held to the next rebalance's open. 117 monthly returns,
   February 2017 to October 2026.
@@ -520,24 +524,24 @@ did especially badly from 2017 to 2020. **Several FAILs are the likely outcome.*
   alike, so it cannot help one over the other.
 - **Stop rules, checked before any return is computed:**
   - if more than **2%** of member-months have no usable price at formation, the whole battery is not run and is reported as not testable;
-  - if fewer than **80%** of ranked-universe member-months have the statement data a signal needs, that strategy is reported not testable. It still counts as one of the six trials.
+  - if fewer than **80%** of member-months have the data a signal needs (statements for 5 and 6, two 10-Ks for 7), that strategy is reported not testable. It still counts as one of the seven trials.
 - **Pass, per strategy:** PSR vs 0 of the monthly excess return (strategy minus
-  benchmark) at or above **0.9917**, which is 0.95 with a Bonferroni correction
-  for six trials. That needs an annualised excess Sharpe of about 0.77 over the
-  window: a high bar, set by testing six at once.
+  benchmark) at or above **0.99286**, which is 0.95 with a Bonferroni correction
+  for seven trials. That needs an annualised excess Sharpe of about 0.79 over the
+  window: a high bar, set by testing seven at once.
 - **Information only, not the verdict:** each strategy's top-minus-bottom
   quintile; deciles; 2017-2021 and 2022-2026 separately; 2020 left out; the
   result without the worst case; turnover and cost drag.
 - **What follows:** a pass earns a forward test on data after 2026-10-30, not a
   promotion; any message about it may only quote measured numbers and never says
   buy or sell. A fail is written up and closes that strategy. This is a new family,
-  "stock factors", with six trials; any later variant adds to its count.
+  "stock factors", with seven trials; any later variant adds to its count.
 
 ### Checklist
 
-- [ ] **P15.1 Data.** Alpaca bars (adjusted and raw) for every member ticker 2016-2026 and SPY; SEC XBRL company facts for every mapped CIK (owner's SEC contact, `/data/sec.env`, approved 2026-11-18); both into `stocks.db`, frozen in one snapshot. Report coverage against both stop rules before computing any return.
+- [ ] **P15.1 Data.** Alpaca bars (adjusted and raw) for every member ticker 2016-2026 and SPY; SEC XBRL company facts and 10-K word counts (10-Ks filed 2015 on) for every mapped CIK (owner's SEC contact, `/data/sec.env`, approved 2026-11-18); both into `stocks.db`, frozen in one snapshot. Report coverage against both stop rules before computing any return.
 - [ ] **P15.2 Evaluator.** `app/stock_factors.py`, read-only on the snapshot, tested on hand-built data with known answers (formation timing, filing-date lag, the worst case, costs, the benchmark, the stop rules).
-- [ ] **P15.3 The test.** Commit the code, run once, write F22 for all six, stop and report.
+- [ ] **P15.3 The test.** Commit the code, run once, write F22 for all seven, stop and report.
 
 ---
 
