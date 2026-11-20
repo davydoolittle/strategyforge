@@ -6,6 +6,69 @@ pinned windows on each candidate (P2.1).
 
 ---
 
+## F23. Stock factor battery, point-in-time S&P 500, 2017-2026: FAIL, 0 of 6 testable; profitability not testable
+
+*2026-11-20. Phase 15, V2_PROMPT 8j, approved as written 2026-11-18; code
+committed (17400f9, run at 630f4d0) before the run; run once, read-only on
+snapshot `f15-2026-10-30` in the P15.1 scratch copy
+(`STOCKS_DB=data/scratch/p15/stocks.db`). Full result:
+`data/scratch/p15/p15_3_result.json`, log `p15_3_run.log`.*
+
+**Stop rules, checked before any return.** Price: 0.33% of 58,996
+member-months unpriced (limit 2%), so the battery ran. Data: value 90.6%,
+unchanged 10-K 95.7% (limit 80%). **Profitability 58.6%: not testable, and
+it still counts as one of the seven trials.** Revenue without a cost-of-revenue
+line is the main gap: utilities, banks, insurers, REITs, railroads and
+airlines, not just the banks and insurers the rule expected. About 40 more
+members (ORCL, T, VZ, TMO, GE among them) have both figures from different
+fiscal years. That looks like a fault in picking the latest figure across
+tags, but fixing it would add at most about 8 points, which is still under
+80%. Nothing was changed after seeing the coverage: adding tags then would be
+tuning the data until the rule passes.
+
+Monthly excess = top fifth, equal weight, minus every priced member, equal
+weight, after 10 bps a side; 117 months, 2017-02 to 2026-10. The benchmark
+made +12.27%/yr.
+
+| signal | excess %/yr | excess Sharpe | PSR (needs 0.99286) | verdict | 2017-21 / 2022-26 Sharpe | top − bottom %/yr | without 2020 Sharpe |
+|---|---|---|---|---|---|---|---|
+| momentum | +0.37 | 0.04 | 0.552 | FAIL | −0.30 / +0.31 | +2.2 | 0.08 |
+| 52-week high | −2.63 | −0.32 | 0.162 | FAIL | −0.24 / −0.40 | −2.4 | −0.32 |
+| low volatility | −2.19 | −0.22 | 0.245 | FAIL | −0.19 / −0.25 | −5.0 | −0.09 |
+| short-term reversal | −2.43 | −0.28 | 0.197 | FAIL | +0.10 / −0.74 | +0.3 | −0.41 |
+| profitability | — | — | — | NOT TESTABLE | — | — | — |
+| value | +1.44 | 0.17 | 0.698 | FAIL | −0.15 / +0.72 | +0.8 | 0.26 |
+| unchanged 10-K | +0.83 | 0.26 | 0.790 | FAIL | +0.27 / +0.26 | +2.1 | 0.44 |
+
+- **No signal is close to the bar.** A pass needed an annualised excess
+  Sharpe of about 0.79. The best is 0.26.
+- **Three of the published effects pointed the wrong way here.** 52-week
+  high, low volatility and reversal all trailed simply holding every member.
+  The registration predicted several FAILs. This is consistent with these
+  effects being weak or gone in US large caps after publication, and
+  2017-2026 favoured the biggest, most volatile winners.
+- **Unchanged 10-K is the most consistent and still far from evidence.**
+  +0.27 and +0.26 Sharpe in the two halves, 0.44 without 2020, PSR 0.79.
+  The original study found it strongest in small companies, so the S&P 500
+  is where it should be weakest. A steady small number like this is what a
+  real but tiny effect looks like, and also what luck looks like at 117
+  months.
+- **Value's second half (+0.72, PSR 0.95) is not a pass.** It is one half of
+  one of seven trials, and the first half was negative. Choosing it now would
+  be choosing the window after seeing it.
+- **The worst-case delisting rule did not decide anything.** Without it
+  every signal's Sharpe moves by less than 0.07.
+- Deciles, turnover and cost drag were listed as information but the
+  evaluator does not compute them. I did not add them after the run.
+
+**What this licenses.** The stock factors family is closed at seven trials
+with no pass, so no forward test is earned. Any variant (a fixed
+profitability definition, small caps, other weights or windows) is a new
+registration and adds to the family's trial count. After F9-F23, the record
+is unchanged: nothing tested here has beaten simply holding the market.
+
+---
+
 ## F22. Trend switching on the dashboard's 200-day rule: FAIL on every count; it cuts drawdowns and trades, not risk-adjusted return
 
 *2026-11-20. Phase 16, V2_PROMPT 8k, approved as written before any run; code

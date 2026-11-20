@@ -461,7 +461,7 @@ owner says so.
 
 ---
 
-## 8j. Phase 15 — Pre-registered stock factor battery, S&P 500, 2016-2026  (added 2026-11-18; approved by the owner as written, with strategy 7, 2026-11-18)
+## 8j. Phase 15 — Pre-registered stock factor battery, S&P 500, 2016-2026  (added 2026-11-18; approved by the owner as written, with strategy 7, 2026-11-18, done 2026-11-20: FAIL, FINDINGS F23)
 
 Goal: the breadth every earlier test lacked. One cross-sectional rule ranks about
 500 stocks a month, about 60,000 stock-months over the window, against a few
@@ -540,9 +540,9 @@ did especially badly from 2017 to 2020. **Several FAILs are the likely outcome.*
 
 ### Checklist
 
-- [ ] **P15.1 Data.** *(in progress 2026-11-18: `app/factor_data.py`. Bars: 759 member intervals, 720 symbols, 1.74 M bars; **price stop rule passes, 194 of 58,996 member-months unpriced (0.33%, limit 2%)**. A live company is priced by its current SEC ticker (Alpaca files its whole history there), a vanished one by its own; of 24 fallback tickers starting in the window, two had a previous owner (EVHC jumped 210% on 2016-12-02, CTRA 71% on 2021-10-04), so their earlier bars are dropped by a fixed rule (`JUMP`), decided before any return was computed. Renamed companies whose history Alpaca keeps under the old symbol (CBS to VIAC, CDAY to DAY) lack 12 months of price history for a year after the rename and drop out of the price rankings then. SEC facts and 10-K text: fetching.)* Alpaca bars (adjusted and raw) for every member ticker 2016-2026 and SPY; SEC XBRL company facts and 10-K word counts (10-Ks filed 2015 on) for every mapped CIK (owner's SEC contact, `/data/sec.env`, approved 2026-11-18); both into `stocks.db`, frozen in one snapshot. Report coverage against both stop rules before computing any return.
-- [ ] **P15.2 Evaluator.** `app/stock_factors.py`, read-only on the snapshot, tested on hand-built data with known answers (formation timing, filing-date lag, the worst case, costs, the benchmark, the stop rules).
-- [ ] **P15.3 The test.** Commit the code, run once, write F23 for all seven, stop and report.
+- [x] **P15.1 Data.** *(done 2026-11-20: 10-K text finished, 7,304 10-Ks from 696 of 705 companies; facts for 703 of 705 (2 are 404s); stop rules: price 0.33%, value 90.6%, unchanged 10-K 95.7%, profitability 58.6% NOT TESTABLE. Data is in the scratch copy `data/scratch/p15/stocks.db`, read via `STOCKS_DB`. Earlier notes, 2026-11-18: `app/factor_data.py`. Bars: 759 member intervals, 720 symbols, 1.74 M bars; **price stop rule passes, 194 of 58,996 member-months unpriced (0.33%, limit 2%)**. A live company is priced by its current SEC ticker (Alpaca files its whole history there), a vanished one by its own; of 24 fallback tickers starting in the window, two had a previous owner (EVHC jumped 210% on 2016-12-02, CTRA 71% on 2021-10-04), so their earlier bars are dropped by a fixed rule (`JUMP`), decided before any return was computed. Renamed companies whose history Alpaca keeps under the old symbol (CBS to VIAC, CDAY to DAY) lack 12 months of price history for a year after the rename and drop out of the price rankings then. SEC facts and 10-K text: fetching.)* Alpaca bars (adjusted and raw) for every member ticker 2016-2026 and SPY; SEC XBRL company facts and 10-K word counts (10-Ks filed 2015 on) for every mapped CIK (owner's SEC contact, `/data/sec.env`, approved 2026-11-18); both into `stocks.db`, frozen in one snapshot. Report coverage against both stop rules before computing any return.
+- [x] **P15.2 Evaluator.** *(done 2026-11-18, 17400f9, before the run; tests in `tests/test_stock_factors.py`)* `app/stock_factors.py`, read-only on the snapshot, tested on hand-built data with known answers (formation timing, filing-date lag, the worst case, costs, the benchmark, the stop rules).
+- [x] **P15.3 The test.** *(done 2026-11-20, run once: FAIL, 0 of 6 testable, profitability not testable. FINDINGS F23.)* Commit the code, run once, write F23 for all seven, stop and report.
 
 ---
 
