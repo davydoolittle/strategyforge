@@ -25,6 +25,8 @@ nothing here can write):
   /explain.json                       plain-language notes for the context panel (static)
   /api/insider                        insider clusters and large open-market
                                       buys, last 90 days: UNTESTED, no prediction
+  /api/trend                          Bull / Flat / Bear per market (market_trend.py),
+                                      one fixed 200-day rule; context only
   /api/screen                         momentum screen (screen.json next to
                                       forge.db, written by screen.py weekly)
   /                                   the dashboard (static/index.html, P7.2)
@@ -56,6 +58,7 @@ import engine
 import insider_feed as IF
 import main
 import market_context as MC
+import market_trend as MT
 import windows as W
 
 PORT = int(os.environ.get("WEB_PORT", "8091"))
@@ -402,6 +405,7 @@ ROUTES = [
     (re.compile(r"^/api/patterns$"), lambda c, m, qs, db: patterns(c)),
     (re.compile(r"^/api/insider$"), lambda c, m, qs, db: insider(c)),
     (re.compile(r"^/api/context$"), lambda c, m, qs, db: MC.panel(c)),
+    (re.compile(r"^/api/trend$"), lambda c, m, qs, db: MT.panel(c)),
     (re.compile(r"^/api/screen$"), lambda c, m, qs, db: screen_json(db)),
 ]
 

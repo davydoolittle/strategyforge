@@ -64,6 +64,17 @@
   .b-fwd { background: #1d2a3a; color: var(--accent); }
   pre.report { white-space: pre-wrap; margin: 0 0 10px; font: 12.5px/1.5 ui-monospace, Menlo, Consolas, monospace;
                background: var(--bg); border: 1px solid var(--line); border-radius: 6px; padding: 10px; }
+  .trend-cards { display: grid; grid-template-columns: repeat(auto-fit, minmax(170px, 1fr)); gap: 10px; }
+  .trend-card { border: 1px solid var(--line); border-radius: 8px; padding: 10px 12px; }
+  .trend-card .state { font-size: 20px; font-weight: 700; margin: 2px 0; }
+  .trend-card.Bull .state { color: var(--good); }
+  .trend-card.Bear .state { color: var(--bad); }
+  .trend-card.Flat .state { color: var(--muted); }
+  .trend-card .ticks { display: flex; gap: 1px; height: 6px; margin-top: 6px; }
+  .trend-card .ticks i { flex: 1; }
+  .trend-card .ticks i.Bull { background: var(--good); }
+  .trend-card .ticks i.Bear { background: var(--bad); }
+  .trend-card .ticks i.Flat { background: var(--line); }
   .spark { display: flex; align-items: center; gap: 10px; padding: 4px 0; }
   .spark .lbl { width: 200px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
   .spark canvas { height: 36px !important; width: 260px !important; }
@@ -83,6 +94,11 @@
   </form>
 </header>
 <main>
+  <section class="wide trend-strip">
+    <h2>Market trend <small id="trend-meta">200-day rule, context only (market_trend.py)</small></h2>
+    <div id="trend" class="trend-cards"></div>
+    <div id="trend-foot" class="muted"></div>
+  </section>
   <section>
     <h2>Lineage <small>strategies, parent → child, latest verdict</small></h2>
     <div id="tree" class="tree"></div>
@@ -495,6 +511,25 @@ function spark(values) {
   }
   return svg;
 }
+async function loadTrend() {
+  let d;
+  try { d = await api("/api/trend"); } catch (e) { fail($("trend"), e); return; }
+  $("trend").replaceChildren(...d.markets.map((m) => {
+    if (!m.state) return el("div", { class: "trend-card" }, el("b", {}, m.label), el("div", { class: "muted" }, "no data"));
+    const ticks = el("div", { class: "ticks", title: "the last 12 months, oldest on the left" },
+      ...m.history.filter((_, i, a) => i % Math.max(1, Math.floor(a.length / 52)) === 0)
+        .map(([day, st]) => el("i", { class: st, title: `${day}: ${st}` })));
+    return el("div", { class: "trend-card " + m.state, title: m.what },
+      el("b", {}, m.label), " ", el("span", { class: "muted" }, m.symbol),
+      el("div", { class: "state" }, m.state),
+      el("div", { class: "muted" }, `since ${m.since} · ${m.pct_vs_sma >= 0 ? "+" : ""}${m.pct_vs_sma.toFixed(1)}% vs 200-day`),
+      el("div", { class: m.stale ? "err" : "muted" }, `as of ${m.as_of}` + (m.stale ? " (stale)" : "") +
+        ` · ${m.changes_last_year} changes in 12 months`),
+      ticks);
+  }));
+  $("trend-foot").textContent = d.rule + " " + d.note;
+}
+
 async function loadContext() {
   let d;
   try { d = await api("/api/context"); } catch (e) { fail($("ctx").tBodies[0], e); return; }
@@ -555,7 +590,7 @@ async function boot() {
   $("status").textContent = "loading…";
   try { STRATS = await api("/api/strategies"); renderTree(); }
   catch (e) { fail($("tree"), e); }
-  await Promise.all([loadJobs(), loadCands(), loadHealth(), loadPaper(), loadScreen(),
+  await Promise.all([loadTrend(), loadJobs(), loadCands(), loadHealth(), loadPaper(), loadScreen(),
                      loadPatterns(), loadInsider(), loadContext()]);
   $("status").textContent = "updated " + new Date().toLocaleTimeString();
 }

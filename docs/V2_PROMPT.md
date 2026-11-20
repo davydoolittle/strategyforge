@@ -179,6 +179,7 @@ Goal: two questions FINDINGS F9 leaves open. (1) Does a candidate that fails on 
 - [x] **P7.4 Jobs, forward tests, 1d.** *(done 2026-11-02: `/api/jobs` and a Jobs panel: each collector job's schedule, last start, duration, exit, next due (interval after last start, or the next weekly slot) and state (ok / failed / overdue more than 2 h past due / paused / never run), plus the newest crypto candle as a collector heartbeat, flagged after 3 h. Lineage shows a "forward test" badge with the forward-trade count from health.py's latest row. Candidates tf filter gained 1d. Read-only like the rest; needs only `docker restart strategyforge-web`.)*
 - [x] **P7.5 TSP, patterns, insider panels.** *(done 2026-11-03: `/api/tsp` (latest report text, recorded IFTs, newest backtest batch on official prices if any, else proxies), `/api/patterns` (the F18 ledger, SUPPORTED > SUGGESTIVE > OPPOSITE > NOT SUPPORTED > TOO FEW, then p), `/api/insider` (clusters and open-market buys >= insider_feed.MIN_BUY_USD, last 90 days, newest 50; sales not shown). Each panel carries its caveat as static text in the page: TSP "analysis only, you place every IFT", patterns "history, not advice", insider "UNTESTED, no prediction". Read-only; `docker restart strategyforge-web`.)*
 
+- [x] **P7.7 Market trend strip.** *(done 2026-11-20: `app/market_trend.py`, `/api/trend`, a strip at the top of the dashboard: Bull / Flat / Bear for US stocks (SPY), crypto (BTC-USD), Treasuries (IEF), gold (GLD) and the dollar (UUP), from regime_equity's fixed 200-day rule on each market's own daily closes, with the date the state began, distance from the 200-day average, changes in the last 12 months and a 12-month state bar. Read-only, computed on request. Context only: whether strategies should switch on it is Phase 16.)*
 - [x] **P7.6 Market context panel with explanations.** *(done 2026-11-08: `app/market_context.py` (daily job `market_context`) stores VIX (CBOE), T10Y2Y, BAMLH0A0HYM2, SAHMREALTIME, FEDFUNDS (FRED API, key in `data/fred.env`), the CBOE equity put/call ratio (CBOE's archive to 2019-10, then CBOE's daily files) and Shiller's CAPE (`ie_data.xls` from shillerdata.com, which his Yale data page links to; the Yale copy stops at 2023-09), plus SPY's 200-day average, 50/200 crosses and weekly RSI(14), in `context` as `ctx:<name>`. `app/xls.py` reads the .xls with the standard library; it matched xlrd on all 36,236 cells. `app/regime_equity.py` tags each day trend_up/down/range x calm/vol into `equity_regime`. The dashboard's Market context panel shows each series with a fixed-rule status word, the regime tag and a sizing line from fixed VIX-percentile bands, each with an explanation from `app/static/explain.json`. FRED serves only 3 years of the high-yield spread. Context only: none of it is an entry signal (section 9).)* Context only, no strategy logic changes.
 ---
 
@@ -542,6 +543,76 @@ did especially badly from 2017 to 2020. **Several FAILs are the likely outcome.*
 - [ ] **P15.1 Data.** *(in progress 2026-11-18: `app/factor_data.py`. Bars: 759 member intervals, 720 symbols, 1.74 M bars; **price stop rule passes, 194 of 58,996 member-months unpriced (0.33%, limit 2%)**. A live company is priced by its current SEC ticker (Alpaca files its whole history there), a vanished one by its own; of 24 fallback tickers starting in the window, two had a previous owner (EVHC jumped 210% on 2016-12-02, CTRA 71% on 2021-10-04), so their earlier bars are dropped by a fixed rule (`JUMP`), decided before any return was computed. Renamed companies whose history Alpaca keeps under the old symbol (CBS to VIAC, CDAY to DAY) lack 12 months of price history for a year after the rename and drop out of the price rankings then. SEC facts and 10-K text: fetching.)* Alpaca bars (adjusted and raw) for every member ticker 2016-2026 and SPY; SEC XBRL company facts and 10-K word counts (10-Ks filed 2015 on) for every mapped CIK (owner's SEC contact, `/data/sec.env`, approved 2026-11-18); both into `stocks.db`, frozen in one snapshot. Report coverage against both stop rules before computing any return.
 - [ ] **P15.2 Evaluator.** `app/stock_factors.py`, read-only on the snapshot, tested on hand-built data with known answers (formation timing, filing-date lag, the worst case, costs, the benchmark, the stop rules).
 - [ ] **P15.3 The test.** Commit the code, run once, write F22 for all seven, stop and report.
+
+---
+
+## 8k. Phase 16 — Pre-registered trend switching: does matching the market trend help?  (added 2026-11-20, AWAITING OWNER APPROVAL)
+
+Why: the owner wants strategies to change with the market trend shown on the
+dashboard (P7.7, `market_trend.py`). Earlier evidence, stated so a fail is not
+a surprise: F8 (V4.1 only on chop days: SR per trade doubled, trades fell 3-5x,
+the evidence did not improve), F12 and F14 (TSP trend rules cut drawdowns, not
+return), F17 (an ETF trend book trailed buy-and-hold). Those tested different
+rules; this phase tests the dashboard's own rule, as the owner asked. **Nothing
+here runs until the owner approves this section as written.** Both tests are
+fixed here before any of them is run; a fix to rule semantics needs a written
+reason, as in F12.
+
+**The trend rule** is the dashboard's, unchanged: Bull = close above its 200-day
+average and the average higher than 20 days earlier; Bear = below it and the
+average lower; Flat = anything else. It is read from the last **completed** day
+before a decision, never the day being traded.
+
+**The forward tests are not touched.** #3214, #4027 and #5833 were registered
+with no re-tuning; switching them would void their tests. Test 16.1 uses new
+child candidates; the parents keep running as registered.
+
+### 16.1 Trend-gated strategies (crypto)
+
+- **Children**, one per forward-test parent: #3214 (V4.1, ETH), #4027 (core,
+  BTC, long only), #5833 (squeeze, SOL). Each child is its parent's cfg plus one
+  gate, on the dashboard's crypto trend (BTC-USD, calendar days):
+  - a long entry only when the trend is **Bull**;
+  - a short entry only when it is **Bear**;
+  - **no new entry when Flat**. Exits, stops and targets are unchanged.
+- **Window:** each parent's own pinned out-of-sample window (2025-03 to 2026-10).
+  The gate was not part of selecting the parents, so it is not fitted to them.
+- **Pass, per child:** the full adversary verdict PASS, thresholds unchanged,
+  with the trial count of its family raised by one for the child. Reported
+  beside the parent: trades, net, PF, SR per trade, PSR, and the share of the
+  window in each trend state.
+- A pass registers that child as a new forward test. It does not change the
+  parent.
+
+### 16.2 Trend switching per market
+
+- **Markets:** the four strip markets with more than ten years of history in
+  snapshot `etf-2026-10-30`: SPY, IEF, GLD, UUP. Bitcoin's history here starts
+  2021-05, too short: reported as information only.
+- **Rule:** hold the market while its trend is **Bull**; otherwise hold cash.
+  Decided on each day's close, traded at the next open, with the instrument's
+  costs from `instruments`. Cash earns the 3-month Treasury yield (`macro_series`
+  y3m), so being out is not penalised by a zero rate (F17's caveat).
+- **Benchmark:** buy-and-hold of the same market, same costs.
+- **Window:** from the first day with 220 bars to the snapshot's end.
+- **Pass, per market:** PSR vs 0 >= **0.9875** on monthly returns of the switched
+  book minus buy-and-hold, which is 0.95 corrected for four markets
+  (Bonferroni). Also reported: CAGR, max drawdown, volatility, time in the
+  market, number of switches, 2x costs, fills one day later, and each half of
+  the window.
+- A pass earns a forward test on data after the snapshot.
+
+### What follows
+
+- **Strategies switch only after a pass and a forward test.** Until then the
+  strip stays context only, and no live or paper strategy reads it.
+- **A fail is written up and ends this rule.** Another rule (a 50-day average, a
+  momentum score, a different gate) is a new hypothesis needing its own
+  registration, and counts this phase as trial 1 of its family.
+
+- [ ] **P16.1 Gated children.** Register the three children on a scratch copy; adversary on each; tests for the gate (a long blocked in Flat and Bear, a short blocked in Flat and Bull, the trend read from the completed day).
+- [ ] **P16.2 Switching evaluator.** `app/trend_switch.py`, read-only on the snapshot, tests with known answers (a hand-built path through Bull, Flat and Bear; cash yield; costs; next-open fills).
+- [ ] **P16.3 The tests.** Commit the code, run each once, write the finding, stop and report.
 
 ---
 

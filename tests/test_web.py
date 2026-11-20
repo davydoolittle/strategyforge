@@ -160,6 +160,13 @@ class TestWeb(unittest.TestCase):
         self.assertIsNone(body["regime"])                    # no regime table in the test DB
         self.assertEqual(self.get("/api/context", token=None)[0], 401)
 
+    def test_trend_strip(self):
+        st, body = self.get("/api/trend")
+        self.assertEqual(st, 200)
+        self.assertEqual([m["key"] for m in body["markets"]], ["stocks", "crypto", "bonds", "gold", "dollar"])
+        self.assertIn("200-day", body["rule"])
+        self.assertEqual(self.get("/api/trend", token=None)[0], 401)
+
     def test_explain_is_static_and_needs_no_token(self):
         st, body = self.get("/explain.json", token=None)
         self.assertEqual(st, 200)
