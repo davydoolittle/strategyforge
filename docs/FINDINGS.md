@@ -6,6 +6,65 @@ pinned windows on each candidate (P2.1).
 
 ---
 
+## F22. Trend switching on the dashboard's 200-day rule: FAIL on every count; it cuts drawdowns and trades, not risk-adjusted return
+
+*2026-11-20. Phase 16, V2_PROMPT 8k, approved as written before any run; code
+committed (dbd74cd) before the runs; each run once. 16.1 on a scratch copy,
+as registered; 16.2 read-only on snapshot `etf-2026-10-30`.*
+
+**The rule** (the dashboard strip's, P7.7): Bull = close above its 200-day
+average and the average higher than 20 days earlier; Bear = below and falling;
+Flat = anything else.
+
+### 16.2 Hold the market only while it is Bull, cash (3-month yield) otherwise
+
+| market | window | switched CAGR | max DD | in market | hold CAGR | max DD | excess Sharpe | PSR (needs 0.9875) |
+|---|---|---|---|---|---|---|---|---|
+| SPY | 1993-12..2026-10 | 8.92% | -24.1% | 74% | 10.81% | -55.2% | -0.208 | 0.120 |
+| IEF | 2003-06..2026-10 | 2.59% | -11.4% | 57% | 2.89% | -23.9% | -0.087 | 0.339 |
+| GLD | 2005-10..2026-10 | 8.05% | -31.7% | 59% | 10.13% | -45.6% | -0.221 | 0.155 |
+| UUP | 2008-01..2026-10 | 1.53% | -17.2% | 48% | 2.15% | -22.2% | -0.142 | 0.268 |
+
+**Verdict: FAIL, 0 of 4.** Neither 2x costs nor fills a day later changes a
+verdict. SPY's first half (1993-2010) is about even (+0.03); its second half
+is clearly negative (-0.52, PSR 0.013). Bitcoin, information only (2021-12 to
+2026-11, five years): 12.66% a year switched against 4.71% held, max drawdown
+-34% against -69%, yet the monthly excess Sharpe is -0.025 (PSR 0.48): one
+short window, two bear phases, not evidence.
+
+### 16.1 Crypto strategies gated by the BTC trend (longs in Bull, shorts in Bear, none in Flat)
+
+| child (parent) | trades, parent -> child | SR/trade | DSR | verdict |
+|---|---|---|---|---|
+| #7301 (#3214, V4.1 ETH) | 162 -> 73 | 0.113 -> 0.259 | 0.000 -> 0.000 | REJECTED: A2 |
+| #7302 (#4027, core BTC) | 151 -> 74 | 0.184 -> 0.209 | 0.264 -> 0.406 | REJECTED: A1, A2 |
+| #7303 (#5833, squeeze SOL) | 110 -> 45 | 0.145 -> 0.047 | 0.005 -> 0.012 | REJECTED: A1, A2, A6 |
+
+In the OOS windows (2025-03 to 2026-10) the BTC trend was Bull 43%, Flat 13%,
+Bear 44% of days, so the gate removed about half of every parent's trades.
+
+**What the numbers show.**
+
+- **The same trade-off as F8, F12, F14 and F17.** Switching on trend roughly
+  halves the worst drawdown and gives up return; gating a strategy can lift its
+  profit per trade but halves its trades, and the evidence does not grow. The
+  best child (#7302) moved its DSR from 0.26 to 0.41, against 0.95 needed, and
+  now fails A1 for too few trades.
+- **It is not the rule's details.** Costs, a day's delay and either half of the
+  window do not rescue any market.
+
+**What this licenses.**
+
+- **No strategy switches on the trend.** The strip stays dashboard context; the
+  forward tests run unchanged.
+- **Drawdown control is a risk preference, not an edge.** If smaller drawdowns
+  matter more than return, the switched books deliver that, at the cost shown.
+  That is a choice for the owner, not a finding of skill.
+- **Another rule is a new hypothesis** (a different average, a momentum score,
+  per-pair trends), with its own registration, counting this phase as trial 1.
+
+---
+
 ## F21. P13 route A, drift after material agreements on 2005-2026 history: not testable on free data (the registered stop rule fired)
 
 *2026-11-10. V2_PROMPT 8i, route A. No price was fetched for the test and no

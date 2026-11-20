@@ -91,7 +91,8 @@ def summary(series, session, today=None):
 def panel(conn, today=None):
     out = {"rule": "Bull: above the 200-day average and the average rising over 20 days. "
                    "Bear: below it and the average falling. Flat: anything else.",
-           "note": "Trend context only. No strategy changes on it unless a registered test shows it helps.",
+           "note": "Trend context only. Switching on it was tested (FINDINGS F22): it cut drawdowns but not "
+                   "risk-adjusted return, so no strategy changes on it.",
            "markets": []}
     for key, label, symbol, session, what in MARKETS:
         card = summary(states(daily_closes(conn, symbol, session)), session, today)

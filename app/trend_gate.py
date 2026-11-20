@@ -70,6 +70,8 @@ def compare(conn, cid):
 
 
 def register(conn, report, raw):
+    import filters
+    filters.ensure_tables(conn)          # adds candidates.filter_of on a DB that never ran filters.py
     cid = report["candidate_id"]
     new_id, _ = ablation.insert_child(conn, cid, report["pair"], report["tf"], report["params"],
                                       report["windows"], raw, "filter_of")

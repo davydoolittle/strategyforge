@@ -179,7 +179,7 @@ Goal: two questions FINDINGS F9 leaves open. (1) Does a candidate that fails on 
 - [x] **P7.4 Jobs, forward tests, 1d.** *(done 2026-11-02: `/api/jobs` and a Jobs panel: each collector job's schedule, last start, duration, exit, next due (interval after last start, or the next weekly slot) and state (ok / failed / overdue more than 2 h past due / paused / never run), plus the newest crypto candle as a collector heartbeat, flagged after 3 h. Lineage shows a "forward test" badge with the forward-trade count from health.py's latest row. Candidates tf filter gained 1d. Read-only like the rest; needs only `docker restart strategyforge-web`.)*
 - [x] **P7.5 TSP, patterns, insider panels.** *(done 2026-11-03: `/api/tsp` (latest report text, recorded IFTs, newest backtest batch on official prices if any, else proxies), `/api/patterns` (the F18 ledger, SUPPORTED > SUGGESTIVE > OPPOSITE > NOT SUPPORTED > TOO FEW, then p), `/api/insider` (clusters and open-market buys >= insider_feed.MIN_BUY_USD, last 90 days, newest 50; sales not shown). Each panel carries its caveat as static text in the page: TSP "analysis only, you place every IFT", patterns "history, not advice", insider "UNTESTED, no prediction". Read-only; `docker restart strategyforge-web`.)*
 
-- [x] **P7.7 Market trend strip.** *(done 2026-11-20: `app/market_trend.py`, `/api/trend`, a strip at the top of the dashboard: Bull / Flat / Bear for US stocks (SPY), crypto (BTC-USD), Treasuries (IEF), gold (GLD) and the dollar (UUP), from regime_equity's fixed 200-day rule on each market's own daily closes, with the date the state began, distance from the 200-day average, changes in the last 12 months and a 12-month state bar. Read-only, computed on request. Context only: whether strategies should switch on it is Phase 16.)*
+- [x] **P7.7 Market trend strip.** *(done 2026-11-20: `app/market_trend.py`, `/api/trend`, a strip at the top of the dashboard: Bull / Flat / Bear for US stocks (SPY), crypto (BTC-USD), Treasuries (IEF), gold (GLD) and the dollar (UUP), from regime_equity's fixed 200-day rule on each market's own daily closes, with the date the state began, distance from the 200-day average, changes in the last 12 months and a 12-month state bar. Read-only, computed on request. Context only: Phase 16 tested switching on it and found no edge (F22).)*
 - [x] **P7.6 Market context panel with explanations.** *(done 2026-11-08: `app/market_context.py` (daily job `market_context`) stores VIX (CBOE), T10Y2Y, BAMLH0A0HYM2, SAHMREALTIME, FEDFUNDS (FRED API, key in `data/fred.env`), the CBOE equity put/call ratio (CBOE's archive to 2019-10, then CBOE's daily files) and Shiller's CAPE (`ie_data.xls` from shillerdata.com, which his Yale data page links to; the Yale copy stops at 2023-09), plus SPY's 200-day average, 50/200 crosses and weekly RSI(14), in `context` as `ctx:<name>`. `app/xls.py` reads the .xls with the standard library; it matched xlrd on all 36,236 cells. `app/regime_equity.py` tags each day trend_up/down/range x calm/vol into `equity_regime`. The dashboard's Market context panel shows each series with a fixed-rule status word, the regime tag and a sizing line from fixed VIX-percentile bands, each with an explanation from `app/static/explain.json`. FRED serves only 3 years of the high-yield spread. Context only: none of it is an entry signal (section 9).)* Context only, no strategy logic changes.
 ---
 
@@ -546,7 +546,7 @@ did especially badly from 2017 to 2020. **Several FAILs are the likely outcome.*
 
 ---
 
-## 8k. Phase 16 — Pre-registered trend switching: does matching the market trend help?  (added 2026-11-20, approved by the owner as written 2026-11-20)
+## 8k. Phase 16 — Pre-registered trend switching: does matching the market trend help?  (added 2026-11-20, approved by the owner as written 2026-11-20, done 2026-11-20: FAIL, FINDINGS F22)
 
 Why: the owner wants strategies to change with the market trend shown on the
 dashboard (P7.7, `market_trend.py`). Earlier evidence, stated so a fail is not
@@ -611,7 +611,7 @@ child candidates; the parents keep running as registered.
 
 - [x] **P16.1 Gated children.** *(code done 2026-11-20, before any run: `engine.gated` / `engine.trend_before` and cfg["trend_gate"] in engine.backtest (off unless set; the paper path, which feeds TradingView's signals, is never gated), `app/trend_gate.py`, tests/test_trend_gate.py.)* Register the three children on a scratch copy; adversary on each; tests for the gate (a long blocked in Flat and Bear, a short blocked in Flat and Bull, the trend read from the completed day).
 - [x] **P16.2 Switching evaluator.** *(code done 2026-11-20, before any run: `app/trend_switch.py`, tests/test_trend_switch.py.)* `app/trend_switch.py`, read-only on the snapshot, tests with known answers (a hand-built path through Bull, Flat and Bear; cash yield; costs; next-open fills).
-- [ ] **P16.3 The tests.** Commit the code, run each once, write the finding, stop and report.
+- [x] **P16.3 The tests.** *(done 2026-11-20: 16.2 FAIL in all four markets; 16.1 all three children REJECTED (#7301-#7303 on a scratch copy, discarded). FINDINGS F22.)* Commit the code, run each once, write the finding, stop and report.
 
 ---
 

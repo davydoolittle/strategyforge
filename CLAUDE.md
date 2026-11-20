@@ -43,6 +43,7 @@ export, and the TSP allocation module. Nothing in this repo places live orders.
 - **F18:** Ledger of 52 traditional market patterns: 0 supported, 5 suggestive (about chance), 1 opposite. Context for the TSP report, never a trading rule.
 - **F19:** #5833 registered as the SOL squeeze forward test (from F11): PSR vs 0 ≥ 0.95 on SOL trades with signal ≥ 2026-10-29, ~110 trades, 5-6 years, no re-tuning.
 - **F21:** P13 route A (1.01 drift, 2005-2026): not testable on free data. 13.2% of 7,919 events at unpriced companies (limit 5%); not run. 2016-on is 2.6%, but using it is a new registration.
+- **F22:** Trend switching on the dashboard's 200-day rule: FAIL. Bull-only holding of SPY/IEF/GLD/UUP halves drawdowns but loses return (0 of 4 pass); BTC-gated children of the three forward tests all REJECTED (fewer trades, no stronger evidence).
 - **F20:** Pre-registered cross-sectional 12-1 momentum, 9 sector + 17 country ETFs, N = 1: FAIL (excess Sharpe -0.06, PSR 0.37). Same risk as equal weight, no selection skill. Closed; variants need their own registration.
 
 ## State of play
@@ -59,5 +60,5 @@ export, and the TSP allocation module. Nothing in this repo places live orders.
 - Phase 14 done: FAIL (F20). Research symbols are the ten (`equities.UNIVERSE`) plus Phase 14's 26 (`XSMOM_UNIVERSE`), frozen in snapshot `xsmom-2026-11-06`.
 - P12/P13 (point-in-time S&P 500 universe, then drift after 8-K item 1.01 material agreements, N = 1) are planned in V2_PROMPT §8i on free data only (owner: no paid services), route A (history with a worst-case rule for missing prices) + B (forward recording). Rule approved 2026-11-09; SEC User-Agent in `/data/sec.env`, sent to SEC only. Data in `/data/stocks.db` (never forge.db). Route B started 2026-11-09 (fixed). Route A closed: not testable on free data (F21). CIK map 969/1,036.
 - Phase 15 (V2_PROMPT §8j): seven stock factors on point-in-time S&P 500, 2016-2026 (momentum, 52-week high, low vol, reversal, profitability, value, unchanged 10-K), Alpaca bars + SEC XBRL + 10-K word counts. Approved as written 2026-11-18; pass PSR >= 0.99286 (Bonferroni over 7). Run once each.
-- Market trend strip (P7.7, `market_trend.py`): Bull/Flat/Bear for SPY, BTC, IEF, GLD, UUP from the fixed 200-day rule. Context only. Phase 16 (V2_PROMPT §8k: trend-gated children of the three forward tests, and trend switching per market vs buy-and-hold) approved as written 2026-11-20; the forward tests themselves are never switched.
+- Market trend strip (P7.7, `market_trend.py`): Bull/Flat/Bear for SPY, BTC, IEF, GLD, UUP from the fixed 200-day rule. Context only. Phase 16 done: FAIL (F22). No strategy switches on the trend; the forward tests run unchanged.
 - Failures are never deleted: every trial counts in A2's N.
