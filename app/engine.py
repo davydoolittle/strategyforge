@@ -36,6 +36,7 @@ import argparse
 import json
 import os
 import sqlite3
+from bisect import bisect_left
 from datetime import datetime, timezone
 
 import strategies
@@ -131,6 +132,20 @@ def load_candles(conn, pair, end_ts, tf_seconds=3600, start_ts=None, snapshot=No
 
 # ------------------------------ backtest -----------------------------------
 
+def trend_before(days, states, bar_ts):
+    """Phase 16: the trend state of the latest day strictly before bar_ts's UTC
+    day (days sorted ISO dates), or None if there is none yet."""
+    day = datetime.fromtimestamp(bar_ts, tz=timezone.utc).date().isoformat()
+    k = bisect_left(days, day) - 1
+    return states[k] if k >= 0 else None
+
+
+def gated(long_sig, short_sig, state):
+    """Phase 16's gate: longs only in Bull, shorts only in Bear, nothing in Flat
+    or before the trend exists. Exits are never gated."""
+    return long_sig and state == "Bull", short_sig and state == "Bear"
+
+
 def backtest(conn, pair, cfg, start_iso, end_iso, tf_seconds=3600, signals=None):
     """Run cfg's strategy family with the given cfg. Returns stats + trades.
 
@@ -192,10 +207,32 @@ def backtest(conn, pair, cfg, start_iso, end_iso, tf_seconds=3600, signals=None)
                                           cfg.get("history_start_ts"), end_ts)
         return features.check_filters(fc, filters, ts[i])
 
+    # cfg["trend_gate"] (Phase 16, default none): {"market": "BTC-USD"}. A long
+    # entry only while that market's dashboard trend (market_trend.py) is Bull,
+    # a short only while it is Bear, none while Flat or still warming up. The
+    # trend is the one of the last COMPLETED UTC day before the signal bar's.
+    gate = cfg.get("trend_gate")
+    gate_days = gate_states = None
+
+    def gate_state(i):
+        """The latest trend state dated strictly before bar i's UTC day."""
+        nonlocal gate_days, gate_states
+        if gate_days is None:
+            import market_trend  # here, not at top: keeps engine's imports light
+            if set(gate) != {"market"}:
+                raise ValueError(f"trend_gate needs exactly 'market': {gate!r}")
+            m = gate["market"]
+            session = "crypto" if instrument(conn, m) is None else "us_equity"
+            rows = market_trend.states(market_trend.daily_closes(conn, m, session))
+            gate_days, gate_states = [r[0] for r in rows], [r[4] for r in rows]
+        return trend_before(gate_days, gate_states, ts[i])
+
     def bar_signals(i):
         long_sig, short_sig = sig[i]
         if filters and (long_sig or short_sig) and not filters_pass(i):
             return False, False
+        if gate and (long_sig or short_sig):
+            long_sig, short_sig = gated(long_sig, short_sig, gate_state(i))
         return long_sig, short_sig
 
     def slip_at(px):

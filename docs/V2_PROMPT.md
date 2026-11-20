@@ -609,8 +609,8 @@ child candidates; the parents keep running as registered.
   momentum score, a different gate) is a new hypothesis needing its own
   registration, and counts this phase as trial 1 of its family.
 
-- [ ] **P16.1 Gated children.** Register the three children on a scratch copy; adversary on each; tests for the gate (a long blocked in Flat and Bear, a short blocked in Flat and Bull, the trend read from the completed day).
-- [ ] **P16.2 Switching evaluator.** `app/trend_switch.py`, read-only on the snapshot, tests with known answers (a hand-built path through Bull, Flat and Bear; cash yield; costs; next-open fills).
+- [x] **P16.1 Gated children.** *(code done 2026-11-20, before any run: `engine.gated` / `engine.trend_before` and cfg["trend_gate"] in engine.backtest (off unless set; the paper path, which feeds TradingView's signals, is never gated), `app/trend_gate.py`, tests/test_trend_gate.py.)* Register the three children on a scratch copy; adversary on each; tests for the gate (a long blocked in Flat and Bear, a short blocked in Flat and Bull, the trend read from the completed day).
+- [x] **P16.2 Switching evaluator.** *(code done 2026-11-20, before any run: `app/trend_switch.py`, tests/test_trend_switch.py.)* `app/trend_switch.py`, read-only on the snapshot, tests with known answers (a hand-built path through Bull, Flat and Bear; cash yield; costs; next-open fills).
 - [ ] **P16.3 The tests.** Commit the code, run each once, write the finding, stop and report.
 
 ---
