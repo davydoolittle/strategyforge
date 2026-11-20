@@ -546,15 +546,14 @@ did especially badly from 2017 to 2020. **Several FAILs are the likely outcome.*
 
 ---
 
-## 8k. Phase 16 — Pre-registered trend switching: does matching the market trend help?  (added 2026-11-20, AWAITING OWNER APPROVAL)
+## 8k. Phase 16 — Pre-registered trend switching: does matching the market trend help?  (added 2026-11-20, approved by the owner as written 2026-11-20)
 
 Why: the owner wants strategies to change with the market trend shown on the
 dashboard (P7.7, `market_trend.py`). Earlier evidence, stated so a fail is not
 a surprise: F8 (V4.1 only on chop days: SR per trade doubled, trades fell 3-5x,
 the evidence did not improve), F12 and F14 (TSP trend rules cut drawdowns, not
 return), F17 (an ETF trend book trailed buy-and-hold). Those tested different
-rules; this phase tests the dashboard's own rule, as the owner asked. **Nothing
-here runs until the owner approves this section as written.** Both tests are
+rules; this phase tests the dashboard's own rule, as the owner asked. **Approved as written 2026-11-20.** Both tests are
 fixed here before any of them is run; a fix to rule semantics needs a written
 reason, as in F12.
 
