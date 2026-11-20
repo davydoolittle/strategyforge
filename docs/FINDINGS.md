@@ -13,7 +13,8 @@ committed (17400f9, run at 630f4d0) before the run; run once, read-only on
 snapshot `f15-2026-10-30` in the P15.1 scratch copy
 (`STOCKS_DB=data/scratch/p15/stocks.db`). Full result:
 `data/scratch/p15/p15_3_result.json`, log `p15_3_run.log`. The `f15_*` tables were
-copied into the live stocks.db afterwards, with identical counts and coverage.*
+copied into the live stocks.db afterwards, with identical counts and coverage, and
+the scratch DB was deleted; the result JSON and logs stay.*
 
 **Stop rules, checked before any return.** Price: 0.33% of 58,996
 member-months unpriced (limit 2%), so the battery ran. Data: value 90.6%,
