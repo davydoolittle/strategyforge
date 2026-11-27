@@ -167,6 +167,11 @@ class TestWeb(unittest.TestCase):
         self.assertIn("200-day", body["rule"])
         self.assertEqual(self.get("/api/trend", token=None)[0], 401)
 
+    def test_glossary_is_static_and_needs_no_token(self):
+        with urllib.request.urlopen(self.base + "/glossary.json", timeout=10) as r:
+            self.assertEqual(r.status, 200)
+            self.assertIn("panel_trend", json.loads(r.read()))
+
     def test_explain_is_static_and_needs_no_token(self):
         st, body = self.get("/explain.json", token=None)
         self.assertEqual(st, 200)

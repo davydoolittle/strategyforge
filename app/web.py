@@ -568,9 +568,10 @@ class Handler(BaseHTTPRequestHandler):
                     conn.close()
         raise HttpError(404, f"no route {url.path}")
 
-    def send_explain(self):
-        """Static text, no data, so it is served without a token like the page."""
-        with open(os.path.join(STATIC_DIR, "explain.json"), "rb") as f:
+    def send_explain(self, name="explain.json"):
+        """Static text, no data (explain.json, glossary.json), so it is served
+        without a token like the page."""
+        with open(os.path.join(STATIC_DIR, name), "rb") as f:
             body = f.read()
         self.send_response(200)
         self.send_header("Content-Type", "application/json")
@@ -585,6 +586,8 @@ class Handler(BaseHTTPRequestHandler):
             return self.send_page()
         if urlparse(self.path).path == "/explain.json":
             return self.send_explain()
+        if urlparse(self.path).path == "/glossary.json":
+            return self.send_explain("glossary.json")
         if not self.authorized():
             self.send_response(401)
             self.send_header("WWW-Authenticate", 'Bearer realm="strategyforge"')

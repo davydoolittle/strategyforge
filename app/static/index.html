@@ -40,6 +40,12 @@
   tbody tr.click:hover { background: #1d232b; }
   tbody tr.sel { background: #20303f; }
   .info { padding: 0 6px; margin-left: 4px; border-radius: 10px; font-size: 11px; cursor: pointer; }
+  .pop { position: fixed; right: 16px; bottom: 16px; z-index: 10; max-width: min(560px, calc(100vw - 32px));
+         max-height: 75vh; overflow: auto; background: var(--panel); box-shadow: 0 6px 24px rgba(0,0,0,.5); }
+  .explain .remember { font-size: 15px; font-weight: 600; margin: 4px 0 8px; }
+  .glossary { columns: 2 320px; font-size: 13px; }
+  .glossary div { break-inside: avoid; margin: 0 0 6px; }
+  .glossary a { cursor: pointer; color: var(--accent); }
   .explain { border: 1px solid var(--line); border-radius: 6px; padding: 10px; margin-top: 10px; max-width: 760px; }
   .explain h3 { margin: 0 0 6px; font-size: 13px; }
   .explain dt { color: var(--muted); font-size: 12px; margin-top: 6px; }
@@ -97,27 +103,27 @@
 </header>
 <main>
   <section class="wide trend-strip">
-    <h2>Market trend <small id="trend-meta">200-day rule, context only (market_trend.py)</small></h2>
+    <h2 data-g="panel_trend">Market trend <small id="trend-meta">200-day rule, context only (market_trend.py)</small></h2>
     <div id="trend" class="trend-cards"></div>
     <div id="trend-foot" class="muted"></div>
   </section>
   <section>
-    <h2>Lineage <small>strategies, parent → child, latest verdict</small></h2>
+    <h2 data-g="panel_lineage">Lineage <small>strategies, parent → child, latest verdict</small></h2>
     <div id="tree" class="tree"></div>
   </section>
 
   <section>
-    <h2>Decay monitor <small>CUSUM per strategy (health.py)</small></h2>
+    <h2 data-g="panel_decay">Decay monitor <small>CUSUM per strategy (health.py)</small></h2>
     <div id="health"></div>
   </section>
 
   <section class="wide">
-    <h2>Jobs <small id="jobs-meta">collector schedule (main.JOB_SPECS)</small></h2>
+    <h2 data-g="panel_jobs">Jobs <small id="jobs-meta">collector schedule (main.JOB_SPECS)</small></h2>
     <div class="scroll"><table id="jobs"><thead></thead><tbody></tbody></table></div>
   </section>
 
   <section class="wide">
-    <h2>Candidates <small id="cand-count"></small></h2>
+    <h2 data-g="panel_candidates">Candidates <small id="cand-count"></small></h2>
     <div class="controls">
       <label>tf <select id="f-tf"><option value="">all</option><option>1h</option><option>4h</option><option>1d</option></select></label>
       <label>family <select id="f-family"><option value="">all</option><option>smrt_v41</option><option>core</option><option>squeeze</option></select></label>
@@ -129,13 +135,13 @@
   </section>
 
   <section class="wide">
-    <h2>Report <small id="rep-title">select a reported candidate</small></h2>
+    <h2 data-g="panel_report">Report <small id="rep-title">select a reported candidate</small></h2>
     <div class="charts"><div><canvas id="eq"></canvas></div><div><canvas id="dd"></canvas></div></div>
     <div id="attacks" class="attacks"></div>
   </section>
 
   <section class="wide">
-    <h2>Screen <small id="scr-meta">ETF momentum (screen.py, weekly)</small></h2>
+    <h2 data-g="panel_screen">Screen <small id="scr-meta">ETF momentum (screen.py, weekly)</small></h2>
     <div class="caveat">ranking, not a validated signal</div>
     <div class="scroll"><table id="screen"><thead></thead><tbody></tbody></table></div>
     <div id="scr-foot" class="muted"></div>
@@ -143,24 +149,23 @@
 
 
   <section class="wide">
-    <h2>Pattern ledger <small id="pat-meta">52 traditional patterns, each tested once (patterns.py, F18)</small></h2>
+    <h2 data-g="panel_patterns">Pattern ledger <small id="pat-meta">52 traditional patterns, each tested once (patterns.py, F18)</small></h2>
     <div class="scroll"><table id="patterns"><thead></thead><tbody></tbody></table></div>
     <div class="muted">History, not advice: none of these is a trading rule. SUGGESTIVE means it did not survive
       the multiple-testing correction and could be luck. "on now" = the pattern's condition holds today.</div>
   </section>
 
   <section class="wide">
-    <h2>Market context <small id="ctx-meta">context only (market_context.py, regime_equity.py)</small></h2>
+    <h2 data-g="panel_context">Market context <small id="ctx-meta">context only (market_context.py, regime_equity.py)</small></h2>
     <div class="scroll"><table id="ctx"><thead></thead><tbody></tbody></table></div>
     <div id="ctx-regime" class="ctxline"></div>
     <div id="ctx-sizing" class="ctxline"></div>
-    <div id="ctx-explain" class="explain" hidden></div>
     <div class="muted" style="margin-top:8px">Traditional readings are historical observations, not recommendations
       from this tool. None of these series is used as an entry signal (V2_PROMPT §9).</div>
   </section>
 
   <section class="wide">
-    <h2>Insider activity <span class="badge b-soft">UNTESTED, no prediction</span>
+    <h2 data-g="panel_insider">Insider activity <span class="badge b-soft">UNTESTED, no prediction</span>
       <small id="ins-meta">from Edgar Alert (insider_feed.py)</small></h2>
     <div class="scroll"><table id="ins-clusters"><thead></thead><tbody></tbody></table></div>
     <div class="scroll" style="margin-top:10px"><table id="ins-buys"><thead></thead><tbody></tbody></table></div>
@@ -169,7 +174,7 @@
   </section>
 
   <section class="wide">
-    <h2>Tracker <small id="trk-meta">S&amp;P 100 names on the watchlist (tracker.py, fundamentals.py, screens.py)</small></h2>
+    <h2 data-g="panel_tracker">Tracker <small id="trk-meta">S&amp;P 100 names on the watchlist (tracker.py, fundamentals.py, screens.py)</small></h2>
     <form id="trk-add" class="controls">
       <label>ticker <input id="trk-ticker" size="7" maxlength="10" placeholder="AAPL"></label>
       <label>notes <input id="trk-notes" size="30" maxlength="500"></label>
@@ -181,18 +186,23 @@
   </section>
 
   <section class="wide">
-    <h2>Forward-trade autopsy <small>#3214 and #4027, descriptive only (autopsy.py)</small></h2>
+    <h2 data-g="panel_autopsy">Forward-trade autopsy <small>#3214 and #4027, descriptive only (autopsy.py)</small></h2>
     <div id="autopsy"></div>
     <div id="autopsy-foot" class="muted"></div>
   </section>
 
   <section class="wide">
-    <h2>Paper vs engine <small>reconciliation per TradingView alert (paper.py)</small></h2>
+    <h2 data-g="panel_paper">Paper vs engine <small>reconciliation per TradingView alert (paper.py)</small></h2>
     <div class="controls"><label>strategy <select id="p-strat"></select></label></div>
     <div class="scroll"><table id="paper"><thead></thead><tbody></tbody></table></div>
     <div id="paper-sum" class="muted"></div>
   </section>
+  <section class="wide">
+    <h2 data-g="panel_glossary">Glossary <small>every term on this page in one line; click a term for the full entry</small></h2>
+    <div id="glossary" class="glossary"></div>
+  </section>
 </main>
+<div id="explain-pop" class="explain pop" hidden></div>
 
 <script>
 "use strict";
@@ -249,7 +259,8 @@ function renderTree() {
     ...(s.forward_test ? [" ", el("span", { class: "badge b-fwd",
       title: "pre-registered forward test: judged on forward trades only, no re-tuning (FINDINGS F13)" },
       `forward test · ${s.n_forward ?? "?"} forward trades` + (s.forward_day ? ` (${s.forward_day})` : ""))] : []),
-    el("span", { class: "meta" }, `#${s.id} · ${s.status} · ${s.family || "smrt_v41"} · ${s.pair} ${s.tf} · cand #${s.candidate_id}`),
+    el("span", { class: "meta" }, `#${s.id} · ${s.status}`, infoBtn("st_" + s.status, s.status),
+       ` · ${s.family || "smrt_v41"} · ${s.pair} ${s.tf} · cand #${s.candidate_id}`),
     s.note ? el("span", { class: "note" }, s.note) : "",
     ...(s.promotions.length ? [el("span", { class: "note" }, "promotions: " +
         s.promotions.map((p) => `${p.from_status}→${p.to_status} (${p.at})`).join(", "))] : []),
@@ -360,7 +371,7 @@ async function loadReport(id) {
       A8: `MC p95 DD ${fmt(a.dd_p95_pct_of_capital, 1)}% of capital`,
       A9: `best regime ${a.best_regime} · outside ${fmt(a.net_outside_best, 0)}`,
     }[k] || a.name;
-    return el("div", { class: "attack" }, el("b", {}, k + " "), badge(state === "soft" ? "soft" : state),
+    return el("div", { class: "attack" }, el("b", {}, k + " "), infoBtn(k, k), badge(state === "soft" ? "soft" : state),
       el("div", { class: "muted" }, a.name || ""), el("div", {}, detail));
   }));
 }
@@ -465,7 +476,8 @@ async function loadPatterns() {
   const cls = { SUPPORTED: "b-pass", SUGGESTIVE: "b-soft", OPPOSITE: "b-fail" };
   fillTable($("patterns"), [
     ["claim", (r) => r.claim, true], ["asset", (r) => r.asset, true], ["h days", (r) => String(r.h)],
-    ["status", (r) => el("span", { class: "badge " + (cls[r.status] || "b-none") }, r.status), true],
+    ["status", (r) => el("span", {}, el("span", { class: "badge " + (cls[r.status] || "b-none") }, r.status),
+                         infoBtn("pat_" + r.status.toLowerCase().replace(" ", "_"), r.status)), true],
     ["windows", (r) => `${r.n ?? "–"} / ${r.n_base ?? "–"}`],
     ["mean on %", (r) => pct1(r.mean_on, 100)], ["mean base %", (r) => pct1(r.mean_base, 100)],
     ["p", (r) => fmt(r.p, 3)], ["on now", (r) => r.active ? "yes" : ""], ["last on", (r) => r.last_on ?? "–"],
@@ -495,25 +507,64 @@ async function loadInsider() {
 }
 
 /* ---------------- market context ---------------- */
-let EXPLAIN = null;
-async function explainEntry(key) {
-  if (!EXPLAIN) {
-    const r = await fetch("/explain.json");
-    EXPLAIN = r.ok ? await r.json() : {};
-  }
-  return EXPLAIN[key];
+let EXPLAIN = null, GLOSSARY = null;
+async function loadTexts() {
+  if (!EXPLAIN) { const r = await fetch("/explain.json"); EXPLAIN = r.ok ? await r.json() : {}; }
+  if (!GLOSSARY) { const r = await fetch("/glossary.json"); GLOSSARY = r.ok ? await r.json() : {}; }
 }
+async function explainEntry(key) { await loadTexts(); return EXPLAIN[key]; }
 async function showExplain(key, title) {
-  const box = $("ctx-explain");
-  const e = await explainEntry(key);
-  if (!e) { box.replaceChildren(el("div", { class: "err" }, "no explanation for " + key)); box.hidden = false; return; }
-  const items = [["What it is", e.what_it_is], ["Traditional reading", e.traditional_reading],
-                 ["What the record shows", e.what_the_record_shows]];
-  box.replaceChildren(el("h3", {}, title),
-    el("dl", {}, ...items.flatMap(([t, v]) => [el("dt", {}, t), el("dd", {}, v)]),
-      el("dt", {}, "Source"), el("dd", {}, el("a", { href: e.source, target: "_blank", rel: "noopener" }, e.source))),
-    el("button", { on: ["click", () => { box.hidden = true; }] }, "close"));
+  await loadTexts();
+  const box = $("explain-pop");
+  const g = GLOSSARY[key], e = EXPLAIN[key] || (g && g.explain ? EXPLAIN[g.explain] : null);
+  if (!g && !e) { box.replaceChildren(el("div", { class: "err" }, "no explanation for " + key)); box.hidden = false; return; }
+  const parts = [el("h3", {}, (g && g.term) || title)];
+  if (g) parts.push(el("div", { class: "remember" }, "Remember it as: " + g.remember));
+  const dl = el("dl");
+  if (g && g.plain) dl.append(el("dt", {}, "In plain words"), el("dd", {}, g.plain));
+  if (e) {
+    for (const [t, v] of [["What it is", e.what_it_is], ["Traditional reading", e.traditional_reading],
+                          ["What the record shows", e.what_the_record_shows]]) dl.append(el("dt", {}, t), el("dd", {}, v));
+    dl.append(el("dt", {}, "Source"), el("dd", {}, el("a", { href: e.source, target: "_blank", rel: "noopener" }, e.source)));
+  }
+  if (g && g.provenance) {
+    const pv = g.provenance;
+    dl.append(el("dt", {}, "Where this comes from"), el("dd", {}, pv.from),
+              el("dt", {}, "Made by"), el("dd", {}, pv.made_by), el("dt", {}, "Updated"), el("dd", {}, pv.updated));
+  }
+  parts.push(dl, el("button", { on: ["click", () => { box.hidden = true; }] }, "close"));
+  box.replaceChildren(...parts);
   box.hidden = false;
+}
+// column header label -> glossary key: every table header with one of these labels gets an (i)
+const HEADER_KEYS = {
+  "#": "col_id", "pair": "col_pair", "tf": "col_tf", "family": "col_family", "verdict": "col_verdict", "DSR": "dsr",
+  "WF": "col_wf", "plateau": "col_plateau", "SR/trade": "sharpe", "MC DD95 %": "col_mc_dd95", "IS n": "col_n",
+  "OOS n": "col_n", "IS PF": "col_pf", "OOS PF": "col_pf", "OOS net": "col_net", "gate": "col_gate",
+  "12m / vol": "vol_adj", "vol %": "volatility", "$vol rank": "dollar_vol_rank", "flags": "reversal_flag",
+  "1m %": "percentile_change", "12m %": "percentile_change", "windows": "pat_windows", "p": "p_value",
+  "on now": "pat_on_now", "status": "pat_statuses", "regime": "regime", "VIX band": "vix_band", "hold h": "hold_h",
+  "alert price": "alert_price", "engine price": "alert_price", "engine fired": "engine_fired", "CAGR %": "cagr",
+  "max DD %": "drawdown", "Sharpe": "sharpe", "cluster": "ins_cluster", "open-market buy": "ins_open_market",
+  "state": "panel_jobs", "next due (UTC)": "panel_jobs",
+};
+function decorate(root) {
+  for (const th of root.querySelectorAll("th:not([data-gd])")) {
+    th.dataset.gd = "1";
+    const label = (th.firstChild && th.firstChild.nodeType === 3 ? th.firstChild.textContent : th.textContent).trim();
+    const key = HEADER_KEYS[label];
+    if (key && !th.querySelector("button.info")) th.append(infoBtn(key, label));
+  }
+  for (const h of root.querySelectorAll("h2[data-g]:not([data-gd])")) {
+    h.dataset.gd = "1";
+    h.insertBefore(infoBtn(h.dataset.g, h.firstChild.textContent.trim()), h.firstChild.nextSibling);
+  }
+}
+async function loadGlossary() {
+  await loadTexts();
+  const keys = Object.keys(GLOSSARY).sort((a, b) => GLOSSARY[a].term.localeCompare(GLOSSARY[b].term));
+  $("glossary").replaceChildren(...keys.map((k) => el("div", {},
+    el("a", { on: ["click", () => showExplain(k, GLOSSARY[k].term)] }, GLOSSARY[k].term), " — ", GLOSSARY[k].remember)));
 }
 const infoBtn = (key, title) => el("button", { class: "info", title: "what is this?",
   on: ["click", () => showExplain(key, title)] }, "i");
@@ -620,7 +671,7 @@ async function loadTrend() {
         .map(([day, st]) => el("i", { class: st, title: `${day}: ${st}` })));
     return el("div", { class: "trend-card " + m.state, title: m.what },
       el("b", {}, m.label), " ", el("span", { class: "muted" }, m.symbol),
-      el("div", { class: "state" }, m.state),
+      el("div", { class: "state" }, m.state, infoBtn(m.state.toLowerCase(), m.state)),
       el("div", { class: "muted" }, `since ${m.since} · ${m.pct_vs_sma >= 0 ? "+" : ""}${m.pct_vs_sma.toFixed(1)}% vs 200-day`),
       el("div", { class: m.stale ? "err" : "muted" }, `as of ${m.as_of}` + (m.stale ? " (stale)" : "") +
         ` · ${m.changes_last_year} changes in 12 months`),
@@ -689,12 +740,14 @@ async function boot() {
   $("status").textContent = "loading…";
   try { STRATS = await api("/api/strategies"); renderTree(); }
   catch (e) { fail($("tree"), e); }
-  await Promise.all([loadTrend(), loadTracker(), loadAutopsy(), loadJobs(), loadCands(), loadHealth(), loadPaper(), loadScreen(),
+  await Promise.all([loadGlossary(), loadTrend(), loadTracker(), loadAutopsy(), loadJobs(), loadCands(), loadHealth(), loadPaper(), loadScreen(),
                      loadPatterns(), loadInsider(), loadContext()]);
+  decorate(document);
   $("status").textContent = "updated " + new Date().toLocaleTimeString();
 }
 for (const k of ["tf", "family", "passed", "reported", "limit"]) $("f-" + k).addEventListener("change", loadCands);
 $("p-strat").addEventListener("change", loadPaper);
+new MutationObserver(() => decorate(document)).observe(document.querySelector("main"), { childList: true, subtree: true });
 boot();
 </script>
 </body>

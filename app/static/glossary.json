@@ -1,0 +1,512 @@
+{
+ "panel_trend": {
+  "term": "Market trend",
+  "remember": "Is each market above or below its long-run average, and is that average rising?",
+  "plain": "One word per market: Bull, Flat or Bear, from a fixed 200-day rule. It describes the trend; it does not predict it. Tested as a trading switch, it cut losses in crashes but earned less (F22).",
+  "provenance": {
+   "from": "Daily closing prices: SPY, IEF, GLD, UUP from Tiingo (refreshed Sundays), Bitcoin from Coinbase hourly candles",
+   "made_by": "market_trend.py",
+   "updated": "computed each time the page loads"
+  }
+ },
+ "panel_lineage": {
+  "term": "Lineage",
+  "remember": "The family tree of strategies we chose to track, and how far each has been promoted.",
+  "plain": "Each strategy started as one optimizer result. Promotion needs evidence: a strategy rejected by the adversary can never move past 'backtest winner'. 'Forward test' means it is being watched on new data, which promotes nothing.",
+  "provenance": {
+   "from": "forge.db tables strategies and promotions",
+   "made_by": "lineage.py",
+   "updated": "when a strategy is registered, promoted or marked"
+  }
+ },
+ "panel_decay": {
+  "term": "Decay monitor",
+  "remember": "An alarm that fires if a strategy starts doing worse than it did when it was tested.",
+  "plain": "For each watched strategy, every new trade is compared with the trades from its test period. A running score (CUSUM) falls when results are below that baseline; crossing -3 is the alert.",
+  "provenance": {
+   "from": "Backtests on new candles, or TradingView paper trades if any",
+   "made_by": "health.py",
+   "updated": "daily (job 'health')"
+  }
+ },
+ "panel_jobs": {
+  "term": "Jobs",
+  "remember": "The collector's to-do list: what ran, when, and whether it worked.",
+  "plain": "Each line is a scheduled task. 'ok' means it finished; 'failed' shows the error on hover; 'overdue' means it should have run more than two hours ago. The newest crypto candle shows the collector is alive.",
+  "provenance": {
+   "from": "forge.db table jobs",
+   "made_by": "main.py (the collector)",
+   "updated": "live"
+  }
+ },
+ "panel_candidates": {
+  "term": "Candidates",
+  "remember": "Every strategy setting the optimizer ever tried, with the adversary's verdict on the best ones.",
+  "plain": "Thousands of random settings were tested on old data. A few looked good; the adversary then attacked them. Failures are never deleted, because the number of tries is what tells us how lucky the best one probably was.",
+  "provenance": {
+   "from": "forge.db tables candidates and adversarial_reports",
+   "made_by": "optimizer.py (by hand) and adversary.py",
+   "updated": "the adversary weekly; the optimizer only when run"
+  }
+ },
+ "panel_report": {
+  "term": "Report",
+  "remember": "The adversary's nine attacks on one candidate, with its profit curve.",
+  "plain": "Click a reported candidate to see whether it survived each attack, and its account value and drawdown over its test windows. One hard attack landing means REJECTED.",
+  "provenance": {
+   "from": "forge.db adversarial_reports, plus the engine re-running the candidate on its pinned windows",
+   "made_by": "adversary.py, engine.py",
+   "updated": "when the adversary runs"
+  }
+ },
+ "panel_screen": {
+  "term": "Screen",
+  "remember": "A ranking of the 50 most-traded US funds by how smoothly they rose over a year.",
+  "plain": "Each fund's 12-month return divided by how much it swung. A ranking, not a signal: momentum tested on funds found no edge (F20). The top-50 list itself is re-chosen weekly by trading volume.",
+  "provenance": {
+   "from": "Daily prices: Alpaca (screen funds) and Tiingo (research funds); fund list from Tiingo's ticker list and Alpaca",
+   "made_by": "screen.py, etf_universe.py",
+   "updated": "list Sundays 23:00 UTC, ranking Mondays 06:00 UTC"
+  }
+ },
+ "panel_patterns": {
+  "term": "Pattern ledger",
+  "remember": "52 old market sayings, each tested once on real data, with the verdict kept.",
+  "plain": "Sayings like 'sell in May' or 'don't fight the Fed', written down before testing and never removed. None proved out; five were suggestive, about what luck gives (F18).",
+  "provenance": {
+   "from": "Prices from Tiingo; economic data from the US Treasury, CBOE, BLS and NY Fed, each value dated when it was released",
+   "made_by": "patterns.py, macro_data.py",
+   "updated": "Sundays 22:00 UTC"
+  }
+ },
+ "panel_context": {
+  "term": "Market context",
+  "remember": "The economy's dashboard lights: fear gauge, interest rates, credit stress, valuation.",
+  "plain": "Each line is one widely watched series with a plain status word. Context only: none of them may trigger a trade, and the classic readings of most of them were tested and not established (F18).",
+  "provenance": {
+   "from": "CBOE (VIX, put/call), FRED (yields, credit spreads, Sahm rule, fed funds), Shiller (CAPE), and SPY's own prices",
+   "made_by": "market_context.py, regime_equity.py",
+   "updated": "daily (job 'market_context')"
+  }
+ },
+ "panel_insider": {
+  "term": "Insider activity",
+  "remember": "Company bosses buying their own company's stock, from their legal filings.",
+  "plain": "Executives and directors must report their trades to the SEC on Form 4 within two days. A 'cluster' is several of them buying at once. Untested here: it may say nothing about what the price does next.",
+  "provenance": {
+   "from": "SEC Form 4 filings, collected by the Edgar Alert project",
+   "made_by": "insider_feed.py",
+   "updated": "daily (job 'insider')"
+  }
+ },
+ "panel_tracker": {
+  "term": "Tracker",
+  "remember": "Today's big US companies you or a screen chose to watch, with their key numbers.",
+  "plain": "Price changes, valuation ratios and financial-health scores for S&P 100 names, each with how it ranks among the 100 and within its industry. Facts and traditional readings, not recommendations.",
+  "provenance": {
+   "from": "S&P 100 list from Wikipedia; prices from Alpaca; company financials from SEC filings (XBRL company facts)",
+   "made_by": "tracker.py, fundamentals.py, screens.py",
+   "updated": "daily (job 'tracker')"
+  }
+ },
+ "panel_autopsy": {
+  "term": "Forward-trade autopsy",
+  "remember": "A plain record of each new trade the two forward tests made, and the conditions at the time.",
+  "plain": "Shows the market mood, weekday and outcome of each forward trade. Descriptive only: picking strategies from what winners had in common is a known trap, so nothing is built from this table.",
+  "provenance": {
+   "from": "The same forward trades the decay monitor uses",
+   "made_by": "autopsy.py, health.py",
+   "updated": "computed when the page loads, cached until a new candle"
+  }
+ },
+ "panel_paper": {
+  "term": "Paper vs engine",
+  "remember": "Does the live TradingView alert match what our own backtest engine would have done?",
+  "plain": "Each TradingView alert is a pretend (paper) trade. This table checks the alert's price and timing against the engine's. Mismatches mean the live version and the tested version have drifted apart.",
+  "provenance": {
+   "from": "TradingView alerts relayed by davesbridge (signals.db, read-only), and engine re-runs",
+   "made_by": "paper.py",
+   "updated": "hourly (job 'paper')"
+  }
+ },
+ "panel_glossary": {
+  "term": "Glossary",
+  "remember": "Every term on this page, in one line each.",
+  "plain": "Click any (i) button for the full entry; this list has them all, A to Z."
+ },
+ "backtest": {
+  "term": "Backtest",
+  "remember": "Replaying a strategy on old prices to see what it would have done.",
+  "plain": "Useful but easy to fool: try enough settings and one will look brilliant by luck. That is why every backtest here is attacked before anyone believes it."
+ },
+ "is": {
+  "term": "In-sample (IS)",
+  "remember": "The older data a strategy was chosen on: its practice exam.",
+  "plain": "Results here are flattering by construction, because the settings were picked to do well on exactly this data."
+ },
+ "oos": {
+  "term": "Out-of-sample (OOS)",
+  "remember": "Newer data the strategy never saw while being chosen: its real exam.",
+  "plain": "A strategy that only works in-sample learned noise. The out-of-sample result is the one that counts."
+ },
+ "forward_test": {
+  "term": "Forward test",
+  "remember": "Watching a strategy on data that did not exist when it was chosen.",
+  "plain": "The cleanest evidence there is, but slow: it takes as long as the trades take to happen. Three are running here; none may be re-tuned while it runs."
+ },
+ "pre_registration": {
+  "term": "Pre-registration",
+  "remember": "Writing down the test and its pass mark before looking at the answer.",
+  "plain": "Stops us from moving the goalposts after seeing results. Every study here is registered, approved by you, then run once."
+ },
+ "buy_and_hold": {
+  "term": "Buy-and-hold",
+  "remember": "Just owning the thing and doing nothing. The benchmark every strategy must beat.",
+  "plain": "If a clever rule earns less than simply holding, the rule is costing money. Nothing in this project has beaten buy-and-hold yet."
+ },
+ "sharpe": {
+  "term": "Sharpe ratio",
+  "remember": "Reward per unit of bumpiness: how much you earned for the ups and downs you sat through.",
+  "plain": "Average return divided by how much returns swing. Higher is better; above 1 a year is good for a whole portfolio. 'SR/trade' is the same idea per trade."
+ },
+ "psr": {
+  "term": "PSR (probabilistic Sharpe)",
+  "remember": "How sure we can be the true Sharpe is above zero, given how few results we have.",
+  "plain": "Goes from 0 to 1. Our usual bar is 0.95: about a 1-in-20 chance the result is luck. Fewer trades or wild results lower it."
+ },
+ "dsr": {
+  "term": "DSR (deflated Sharpe)",
+  "remember": "PSR after allowing for how many strategies were tried: 'is this better than the luckiest of N random tries?'",
+  "plain": "The adversary's key test (A2). Needs 0.95 to pass. More tries raise the bar, which is why failures are never deleted."
+ },
+ "p_value": {
+  "term": "p-value",
+  "remember": "The chance of seeing a result this strong if nothing real were going on.",
+  "plain": "Small is good: 0.01 means 1 in 100. With many tests, some small ones happen by luck, so the bar is divided by the number of tests (see Bonferroni)."
+ },
+ "bonferroni": {
+  "term": "Bonferroni correction",
+  "remember": "Ten lottery tickets win more often than one: so with ten tests, demand ten times stronger proof.",
+  "plain": "The pass mark is divided by the number of tests. 40 tests at 0.05 means each needs p below 0.00125."
+ },
+ "drawdown": {
+  "term": "Drawdown",
+  "remember": "The drop from a peak to the lowest point before a new high: the worst stretch you sat through.",
+  "plain": "A 50% drawdown needs a 100% gain to get back. 'Max drawdown' is the worst one in the period."
+ },
+ "cagr": {
+  "term": "CAGR",
+  "remember": "The steady yearly growth rate that would turn the starting amount into the ending amount.",
+  "plain": "Compound annual growth rate. It hides the bumps: two strategies with the same CAGR can have very different drawdowns."
+ },
+ "basis_point": {
+  "term": "Basis point (bp)",
+  "remember": "One hundredth of one percent: 100 bp = 1%.",
+  "plain": "Used for small differences: a 5 bp daily edge is 0.05% a day."
+ },
+ "survivorship": {
+  "term": "Survivorship bias",
+  "remember": "Studying only the winners that are still around, and forgetting the ones that died.",
+  "plain": "Today's S&P 100 contains only companies that succeeded. Testing on that list flatters any strategy, so backtests use a list of who was in the index at each past date."
+ },
+ "percentile": {
+  "term": "Percentile",
+  "remember": "Where a value ranks: 80 means higher than 80% of the others.",
+  "plain": "In the Tracker, the first small number is the rank among the S&P 100, the second among companies in the same industry."
+ },
+ "ttm": {
+  "term": "Trailing twelve months (TTM)",
+  "remember": "The last four quarters added up: a rolling year.",
+  "plain": "Used for profits and sales so every company is measured over a full, recent year, whatever its fiscal calendar."
+ },
+ "sic": {
+  "term": "SIC sector",
+  "remember": "The government's industry code for a company, used to compare it with its peers.",
+  "plain": "Standard Industrial Classification, from the company's SEC registration. Two-digit groups such as 35 (machinery and computers) are used here."
+ },
+ "col_id": {
+  "term": "#",
+  "remember": "The candidate's ID number.",
+  "plain": "Each optimizer result gets one; reports and lineage refer to it."
+ },
+ "col_pair": {
+  "term": "Pair / symbol",
+  "remember": "What was traded, e.g. BTC-USD (bitcoin priced in dollars) or SPY.",
+  "plain": "Crypto pairs trade around the clock; funds only in market hours."
+ },
+ "col_tf": {
+  "term": "Timeframe (tf)",
+  "remember": "How long each price bar is: 1h is hourly, 1d is daily.",
+  "plain": "Shorter bars mean more trades and more costs."
+ },
+ "col_family": {
+  "term": "Family",
+  "remember": "The kind of strategy: each family is one trading idea with adjustable settings.",
+  "plain": "smrt_v41 (a multi-indicator trend system), core (simpler trend), squeeze (breakouts after quiet periods)."
+ },
+ "col_verdict": {
+  "term": "Verdict",
+  "remember": "The adversary's ruling: SURVIVED, FRAGILE or REJECTED.",
+  "plain": "REJECTED: a hard attack (A1, A2 or A6) landed. FRAGILE: two or more soft ones. SURVIVED: at most one soft one, which only earns paper trading. Every candidate so far is REJECTED."
+ },
+ "col_wf": {
+  "term": "WF (walk-forward)",
+  "remember": "Did it make money in most separate time slices, or just one lucky stretch?",
+  "plain": "The share of walk-forward folds that were profitable (attack A3)."
+ },
+ "col_plateau": {
+  "term": "Plateau",
+  "remember": "Do nearby settings work too? Good strategies sit on a plateau, not a spike.",
+  "plain": "Share of small setting nudges that keep the result (attack A4). Low means the exact settings were luck."
+ },
+ "col_mc_dd95": {
+  "term": "MC DD95 %",
+  "remember": "A bad-luck worst case: the drawdown you would hit in 1 of 20 shuffled histories.",
+  "plain": "Monte Carlo: the trades are reshuffled thousands of times; this is the 95th-percentile drawdown (attack A8)."
+ },
+ "col_n": {
+  "term": "IS n / OOS n",
+  "remember": "How many trades in the practice and real-exam periods.",
+  "plain": "Below about 30, any result is mostly noise (attack A1)."
+ },
+ "col_pf": {
+  "term": "PF (profit factor)",
+  "remember": "Money won divided by money lost. Above 1 makes money; 1.5 is good.",
+  "plain": "Shown for in-sample and out-of-sample separately."
+ },
+ "col_net": {
+  "term": "OOS net",
+  "remember": "Profit in dollars in the out-of-sample period, on a $10,000 test account.",
+  "plain": "After costs."
+ },
+ "col_gate": {
+  "term": "Gate",
+  "remember": "Did it pass the optimizer's first, simple filter (enough trades, PF above a floor)?",
+  "plain": "1 = passed. Passing the gate only earns an adversary report."
+ },
+ "A1": {
+  "term": "A1 sample size",
+  "remember": "Too few trades to tell skill from luck.",
+  "plain": "Hard attack: fewer out-of-sample trades than a statistical floor means REJECTED."
+ },
+ "A2": {
+  "term": "A2 deflated Sharpe",
+  "remember": "Is this better than the luckiest of all the random strategies we tried?",
+  "plain": "Hard attack: DSR below 0.95 means REJECTED. Every candidate so far has failed here."
+ },
+ "A3": {
+  "term": "A3 walk-forward",
+  "remember": "Does it work in most separate stretches of time?",
+  "plain": "Soft attack: too few profitable folds."
+ },
+ "A4": {
+  "term": "A4 plateau",
+  "remember": "Does it still work if the settings are nudged 10-25%?",
+  "plain": "Soft attack: a result that collapses when nudged was tuned to noise."
+ },
+ "A5": {
+  "term": "A5 cost stress",
+  "remember": "Does the edge survive if trading costs double?",
+  "plain": "Soft attack."
+ },
+ "A6": {
+  "term": "A6 look-ahead",
+  "remember": "Does it get better if trades are filled later? That means it is cheating with the future.",
+  "plain": "Hard attack: real edges get worse when delayed, not better."
+ },
+ "A7": {
+  "term": "A7 transfer",
+  "remember": "Does the idea work on other markets too?",
+  "plain": "Soft attack: no other pair reaches a profit factor of 1.1."
+ },
+ "A8": {
+  "term": "A8 drawdown",
+  "remember": "Would bad luck produce a drop bigger than the risk budget?",
+  "plain": "Soft attack, from the Monte Carlo shuffle."
+ },
+ "A9": {
+  "term": "A9 regime",
+  "remember": "Did all the profit come from one kind of market, such as one bull run?",
+  "plain": "Soft attack."
+ },
+ "st_hypothesis": {
+  "term": "hypothesis",
+  "remember": "Registered for tracking; no evidence attached yet.",
+  "plain": "The bottom of the promotion ladder."
+ },
+ "st_backtest_winner": {
+  "term": "backtest_winner",
+  "remember": "Looked good in a backtest. As far as a rejected strategy can ever go.",
+  "plain": "Promotion past this needs the adversary's SURVIVED verdict."
+ },
+ "st_oos_validated": {
+  "term": "oos_validated",
+  "remember": "Survived the adversary on its out-of-sample data.",
+  "plain": "Licence to paper-trade, not to trade."
+ },
+ "st_paper_validated": {
+  "term": "paper_validated",
+  "remember": "Matched its backtest in live paper trading over enough time.",
+  "plain": "Needs about 30 reconciled trades over 60 days."
+ },
+ "st_approved": {
+  "term": "approved",
+  "remember": "A human decision. Code can never set it.",
+  "plain": "Nothing here is approved."
+ },
+ "st_retired": {
+  "term": "retired",
+  "remember": "No longer watched; its history is kept.",
+  "plain": "Its history and all its trials stay on record, so they keep counting."
+ },
+ "cusum": {
+  "term": "CUSUM",
+  "remember": "A running tally of 'worse than expected' that triggers an alert at -3.",
+  "plain": "Cumulative sum: each forward trade adds how far it was above or below the baseline; good trades pull it back up to 0. Slow but steady: it needs dozens of trades."
+ },
+ "baseline": {
+  "term": "Baseline",
+  "remember": "What a strategy's trades looked like in its test period: the yardstick for new trades.",
+  "plain": "The decay monitor compares new trades against it."
+ },
+ "vol_adj": {
+  "term": "12m / vol",
+  "remember": "Return per unit of bumpiness over a year: smooth risers score high.",
+  "plain": "12-month return divided by 12-month volatility."
+ },
+ "volatility": {
+  "term": "Volatility (vol)",
+  "remember": "How much the price swings, as a yearly percentage.",
+  "plain": "About 15-20% for the stock market, 50%+ for bitcoin."
+ },
+ "reversal_flag": {
+  "term": "Short-term extreme (reversal risk)",
+  "remember": "Up or down a lot in the last month: big short moves often partly reverse.",
+  "plain": "Flags the top and bottom 10% by 1-month return."
+ },
+ "dollar_vol_rank": {
+  "term": "$vol rank",
+  "remember": "Rank by how many dollars change hands each day: 1 is the most traded.",
+  "plain": "Median of the last 20 trading days."
+ },
+ "cash_like": {
+  "term": "Cash-like",
+  "remember": "A fund that barely moves (T-bills), so return per swing means nothing for it; ranked last.",
+  "plain": "Volatility under 2% a year."
+ },
+ "stale": {
+  "term": "Stale",
+  "remember": "This price is more than a few days old.",
+  "plain": "The data feed for it may have stopped; treat the number with care."
+ },
+ "pat_supported": {
+  "term": "SUPPORTED",
+  "remember": "Held up after correcting for testing 52 sayings at once, in both halves of history.",
+  "plain": "None has reached this."
+ },
+ "pat_suggestive": {
+  "term": "SUGGESTIVE",
+  "remember": "Pointed the right way, but not strongly enough to rule out luck.",
+  "plain": "Five of 52, about what luck alone would give."
+ },
+ "pat_not_supported": {
+  "term": "NOT SUPPORTED",
+  "remember": "The data did not back the saying.",
+  "plain": "Most of the 52 sayings ended here."
+ },
+ "pat_opposite": {
+  "term": "OPPOSITE",
+  "remember": "The data pointed the other way, strongly.",
+  "plain": "One saying ended here: the data pointed against it."
+ },
+ "pat_too_few": {
+  "term": "TOO FEW",
+  "remember": "Not enough separate occasions to test.",
+  "plain": "Usually a rare event, such as a recession signal, with only a handful of past cases."
+ },
+ "pat_on_now": {
+  "term": "On now",
+  "remember": "The saying's condition holds today.",
+  "plain": "Context only, never a trading rule."
+ },
+ "pat_windows": {
+  "term": "Windows",
+  "remember": "How many separate, non-overlapping occasions were tested.",
+  "plain": "Eight windows can only say so much."
+ },
+ "ins_cluster": {
+  "term": "Cluster",
+  "remember": "Two or more insiders buying the same company's stock within days.",
+  "plain": "The classic claim is that this means they see good news. Untested here."
+ },
+ "ins_open_market": {
+  "term": "Open-market buy",
+  "remember": "An insider paying their own money for shares on the exchange (Form 4 code P).",
+  "plain": "Unlike awards or option exercises, it costs them cash."
+ },
+ "ins_form4": {
+  "term": "Form 4",
+  "remember": "The SEC filing an insider must make within two business days of a trade.",
+  "plain": "Its date of filing can be later than the trade itself; the screens use the trade date."
+ },
+ "regime": {
+  "term": "Regime tag",
+  "remember": "The day's market mood: trend_up, trend_down or chop (going sideways).",
+  "plain": "From the previous day's 50-day average slope and the ADX trend-strength reading (below 20 = chop)."
+ },
+ "vix_band": {
+  "term": "VIX band",
+  "remember": "How nervous the stock market was that day, compared with the past year: <50, 50-90 or >90.",
+  "plain": "The VIX's percentile over the last 252 trading days."
+ },
+ "hold_h": {
+  "term": "Hold h",
+  "remember": "How many hours the trade was open.",
+  "plain": "From the fill at entry to the exit, or to now if the trade is still open."
+ },
+ "alert_price": {
+  "term": "Alert price / engine price",
+  "remember": "The price TradingView reported vs the price our engine used.",
+  "plain": "They should match."
+ },
+ "engine_fired": {
+  "term": "Engine fired",
+  "remember": "Whether our engine would have signalled the same trade at that moment.",
+  "plain": "'no' means the live and tested versions disagree."
+ },
+ "rolling_pf": {
+  "term": "Rolling 30-day PF",
+  "remember": "Profit factor over the last 30 days of paper trades.",
+  "plain": "Needs about 1.2 over 30+ trades to count."
+ },
+ "bull": {
+  "term": "Bull",
+  "remember": "Price above its 200-day average, and the average rising.",
+  "plain": "A rising market by this rule."
+ },
+ "bear": {
+  "term": "Bear",
+  "remember": "Price below its 200-day average, and the average falling.",
+  "plain": "A falling market by this rule."
+ },
+ "flat": {
+  "term": "Flat",
+  "remember": "Price and average disagree, or the average is level: no clear trend.",
+  "plain": "Treasuries flipped in and out of this state ten times in a year, which shows how noisy one reading can be."
+ },
+ "sma200": {
+  "term": "200-day average",
+  "remember": "The average closing price of the last 200 trading days: the long-run trend line.",
+  "plain": "Crypto uses 200 calendar days, since it trades every day."
+ },
+ "percentile_change": {
+  "term": "1m % / 12m %",
+  "remember": "How much the price changed over the last month or year.",
+  "plain": "Total return over 21 or 252 trading days, dividends included (adjusted prices)."
+ },
+ "pat_statuses": {
+  "term": "Pattern status",
+  "remember": "The verdict each saying got when tested: SUPPORTED, SUGGESTIVE, NOT SUPPORTED, OPPOSITE or TOO FEW.",
+  "plain": "Click the (i) beside each status word for what it means. No saying reached SUPPORTED."
+ }
+}
