@@ -227,7 +227,7 @@ Goal: the test F16 says is the honest next one: a diversified, volatility-scaled
   - **Statistic:** Welch's t on mean daily return, on days against off days, with the normal tail for p (n is in the thousands). Effect reported in basis points a day and in percent a year of on days.
   - **Pass, per test:** p < 0.05 / 40 = 0.00125 (Bonferroni over 4 hypotheses x 10 ETFs), **and** the same sign in both halves of that ETF's history. F18 already tested C1 on SPY: that row is reported but counts as a repeat, not new evidence (it can neither pass nor fail anew); the bar stays 0.05/40.
   - **Also reported, information only:** each test's p before correction, the halves, and 2x the ETF's quoted spread charged on entering and leaving the on-days (whether an effect would survive trading it).
-  - **What follows:** a pass is a calendar fact, not a strategy: it earns a cost-inclusive trading-rule registration of its own, never a direct entry signal (section 9). Written up as a FINDINGS entry whatever the result. A further calendar idea (Halloween, holidays, pre-FOMC) is a new registration counted against this family.
+  - **What follows:** a pass is a calendar fact, not a strategy: it earns a cost-inclusive trading-rule registration of its own, never a direct entry signal (section 9). Written up as a FINDINGS entry whatever the result. A further calendar idea (Halloween, holidays, pre-FOMC) is a new registration counted against this family. *(Code: `app/calendar_effects.py`, tests/test_calendar_effects.py, committed before the run.)*
 
 ---
 
