@@ -217,7 +217,17 @@ Goal: the test F16 says is the honest next one: a diversified, volatility-scaled
   - Pass: PSR vs 0 >= 0.95 on monthly returns of book minus benchmark, N = 1 (about annualised excess Sharpe 0.38 over 18.6 years). Report also: CAGR, max drawdown, 2x cost, fills one day later, each sleeve's share of return, and a benchmark volatility-matched to the book.
   - A pass earns a forward test on data after 2026-10-30, not a promotion.
 
-- [ ] **P10.3 Calendar-effects study on the ETF universe** *(planned 2026-11-27; not registered, not run).* Turn of month, day of week, options-expiration week and month end, on the research ten in snapshot `etf-2026-10-30`. The hypothesis list is declared in `docs/RESEARCH_BACKLOG.md` (B8) before any run; the bar is Bonferroni across the whole list (40 tests); written up as a FINDINGS entry whatever the result. F18 already tested turn-of-month on SPY (SUGGESTIVE, not corrected-significant), and that test stays on the record. P10.1 and P10.2 are finished (F17); this item needs its own registration, with the test statistic, before it runs.
+- [ ] **P10.3 Calendar-effects study on the ETF universe** *(planned 2026-11-27; registration written 2026-11-27, AWAITING OWNER APPROVAL; nothing run).* The hypothesis list is RESEARCH_BACKLOG B8, fixed before this registration. One test per hypothesis and ETF, run once.
+  - **Data:** the research ten (`equities.UNIVERSE`) in snapshot `etf-2026-10-30`, each from its first bar to 2026-10-30; daily close-to-close returns of adjusted closes. Calendar days are those ETF's own trading days; the third Friday is the calendar's (if it was a holiday, the week still counts).
+  - **Hypotheses**, each "on" days against all other days of that ETF:
+    - C1 turn of month: the last trading day and first three of each month; one-sided, higher.
+    - C2 day of week: each weekday against the other four, two-sided; the hypothesis's p is the smallest of the five times 5.
+    - C3 options-expiration week: the Monday-Friday week holding the month's third Friday; one-sided, higher.
+    - C4 month end: the last five trading days of the month; one-sided, higher.
+  - **Statistic:** Welch's t on mean daily return, on days against off days, with the normal tail for p (n is in the thousands). Effect reported in basis points a day and in percent a year of on days.
+  - **Pass, per test:** p < 0.05 / 40 = 0.00125 (Bonferroni over 4 hypotheses x 10 ETFs), **and** the same sign in both halves of that ETF's history. F18 already tested C1 on SPY: that row is reported but counts as a repeat, not new evidence (it can neither pass nor fail anew); the bar stays 0.05/40.
+  - **Also reported, information only:** each test's p before correction, the halves, and 2x the ETF's quoted spread charged on entering and leaving the on-days (whether an effect would survive trading it).
+  - **What follows:** a pass is a calendar fact, not a strategy: it earns a cost-inclusive trading-rule registration of its own, never a direct entry signal (section 9). Written up as a FINDINGS entry whatever the result. A further calendar idea (Halloween, holidays, pre-FOMC) is a new registration counted against this family.
 
 ---
 

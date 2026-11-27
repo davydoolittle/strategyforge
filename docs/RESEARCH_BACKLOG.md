@@ -18,7 +18,7 @@ closed family's trials keep counting.
 | B5 | Sector-only cross-sectional momentum | not registered | F20: the sector sleeve was slightly ahead (PSR 0.60), which is not evidence; would count F20 as trial 1. |
 | B6 | Another trend rule (50-day, momentum score, per-pair trend) | not registered | F22 is trial 1 of that family. |
 | B7 | 15m timeframe for squeeze (more trades per hypothesis) | not registered | F11; budget to be declared before the run. |
-| B8 | Calendar effects on the ETF universe (below) | declared, not registered | F18 already tested turn-of-month on SPY (SUGGESTIVE, did not survive the correction): it counts. |
+| B8 | Calendar effects on the ETF universe (below) | registration written (V2_PROMPT P10.3), awaiting approval | F18 already tested turn-of-month on SPY (SUGGESTIVE, did not survive the correction): it counts. |
 | B9 | Profitability factor with complete data | not testable now | F23: 58.6% data coverage on free XBRL. |
 
 ## B8. Calendar-effects study: hypothesis list (declared 2026-11-27, before any run)
