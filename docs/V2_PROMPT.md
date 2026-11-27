@@ -634,6 +634,18 @@ child candidates; the parents keep running as registered.
 | Market context series as entry signals (P7.6) | **not in scope** | They feed sizing research only (the roadmap's portfolio and regime phase, P11; Phase 10 is the finished F17 test). None of VIX, the yield curve, credit spreads, the Sahm rule, fed funds, put/call, CAPE, the 200-day state, crosses, weekly RSI or the regime tag may trigger an entry. F18 tested the classic readings of most of them as patterns: none was established. |
 | Live order execution | **never in this repo** | davesbridge `DRY_RUN` is the boundary. |
 
+### Declined directions  (added 2026-11-27)
+
+Proposed and declined; reopening one needs a written case in DECISION_LOG first.
+
+| direction | reason |
+|---|---|
+| Descendants derived from autopsies of winning candidates | Uncountable selection bias: every look at a winner is an untracked trial. Forward tests are pre-registered instead (F13). |
+| An autonomous hypothesis-generation service | Forking paths: hypotheses generated after looking at data cannot be counted honestly; and it adds API cost for no new observations. |
+| Sentiment or narrative engines, social-media sources | Not licensed or not scrapeable within terms, and they add no independent observations to any test here. |
+| A DCF / valuation-signal module as a strategy input | No evidence in scope; valuation is display only (P9.4 tracker). F23's value factor failed. |
+| Multi-agent personas (bull, bear, analyst roles) | The adversary is the red team; personas add opinions, not tests. |
+
 ---
 
 ## 10. Working rules for the agent
