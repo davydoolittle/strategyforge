@@ -246,7 +246,7 @@ Goal: the test F16 says is the honest next one: a diversified, volatility-scaled
   - **Pass, per fund:** PSR vs 0 >= 0.975 (0.95 over two funds) on the 72 monthly returns of rule minus cash.
   - **Caveats stated now:** the effect is published (bond index extension at month end) and may fade; the forward window may hold very different rate moves from 2002-2026. Neither is a reason to change the rule once registered.
   - **What follows:** a pass means month-end Treasury exposure is a validated cash alternative for that fund, and may be shown as such on the dashboard with its numbers; it is still never a trading signal for anything else. A fail ends this family. Written up as a FINDINGS entry either way.
-  - [ ] **P10.5.1 Evaluator.** `treasury_month_end.py --forward`: the P10.4 code with the window fixed to December 2026 on and the cash benchmark, read-only on `candles`; refuses to print a verdict before 72 forward months exist. Tests.
+  - [x] **P10.5.1 Evaluator.** *(done 2026-11-27, before any forward month exists; tests/test_treasury_month_end.py.)* `treasury_month_end.py --forward`: the P10.4 code with the window fixed to December 2026 on and the cash benchmark, read-only on `candles`; refuses to print a verdict before 72 forward months exist. Tests.
 ---
 
 ## 8e. Noteworthy: the pattern ledger  (added 2026-11-01, done, FINDINGS F18)

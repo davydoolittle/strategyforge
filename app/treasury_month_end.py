@@ -17,7 +17,14 @@ funds) on monthly returns of rule minus buy-and-hold.
 Information only: CAGR, max drawdown, volatility, time in the market, 2x costs,
 entry a day later (open of the fourth-last day), both halves, rule vs cash alone.
 
-  python treasury_month_end.py
+P10.5 (approved 2026-11-27), forward only: the same rule against cash alone,
+from December 2026, on the live adjusted closes in `candles` (never the
+snapshot). One verdict, on exactly the first 72 forward months (to 2032-11);
+before that, --forward prints a reading for the record that cannot pass, fail
+or end the test.
+
+  python treasury_month_end.py              # P10.4, the historical test (run once)
+  python treasury_month_end.py --forward    # P10.5 reading, or its verdict at 72 months
 """
 
 import math
@@ -32,6 +39,8 @@ SNAPSHOT = "etf-2026-10-30"
 FUNDS = ("IEF", "TLT")
 MIN_PSR = 1 - 0.05 / len(FUNDS)        # 0.975
 ON_DAYS = 5
+FORWARD_START = "2026-12"           # first forward month (P10.5)
+FORWARD_MONTHS = 72                 # the registered size: one verdict, never earlier
 
 
 def load(conn, symbol, snapshot=SNAPSHOT):
@@ -40,6 +49,48 @@ def load(conn, symbol, snapshot=SNAPSHOT):
     first, last = dates[0][:7], dates[-1][:7]
     keep = [i for i, d in enumerate(dates) if d[:7] not in (first, last)]
     return [dates[i] for i in keep], [opens[i] for i in keep], [closes[i] for i in keep], rate
+
+
+def load_forward(conn, symbol, today=None):
+    """(dates, opens, closes, side cost) from live candles, full months from
+    FORWARD_START on: the current month is left out until it has ended."""
+    today = today or datetime.now(timezone.utc).date()
+    rows = conn.execute("SELECT ts, open, close FROM candles WHERE pair=? AND session='us_equity' AND close > 0"
+                        " ORDER BY ts", (symbol,)).fetchall()
+    spread, frac = conn.execute("SELECT spread_bps, slippage_frac FROM instruments WHERE symbol=?",
+                                (symbol,)).fetchone()
+    cur = today.isoformat()[:7]
+    out = [(datetime.fromtimestamp(t, timezone.utc).date().isoformat(), o, c) for t, o, c in rows]
+    out = [r for r in out if FORWARD_START <= r[0][:7] < cur]
+    return [r[0] for r in out], [r[1] for r in out], [r[2] for r in out], spread * frac / 10000.0
+
+
+def first_months(data, n):
+    """The data cut to its first n calendar months."""
+    dates = data[0]
+    months = sorted({d[:7] for d in dates})[:n]
+    keep = [i for i, d in enumerate(dates) if d[:7] in months]
+    return tuple([x[i] for i in keep] for x in data[:3]) + (data[3],)
+
+
+def forward(conn, cy, symbol, today=None):
+    """{"months": k, "verdict": None until FORWARD_MONTHS, then the PSR test}."""
+    data = load_forward(conn, symbol, today)
+    months = len({d[:7] for d in data[0]})
+    out = {"symbol": symbol, "months": months, "verdict": None}
+    if months == 0:
+        return out
+    if months >= FORWARD_MONTHS:
+        data = first_months(data, FORWARD_MONTHS)
+    on = on_flags(data[0])
+    rule = simulate(*data, cy, on)
+    cash = simulate(*data, cy, on, always_cash=True)
+    vs = compare(data[0], rule, cash)
+    out.update(psr=vs["psr"] if months > 2 else None, ann_sr=vs["ann_sr"] if months > 2 else None,
+               first=data[0][0], last=data[0][-1])
+    if months >= FORWARD_MONTHS:
+        out["verdict"] = "PASS" if vs["psr"] >= MIN_PSR else "FAIL"
+    return out
 
 
 def on_flags(dates, n_on=ON_DAYS, skip_first=0):
@@ -120,10 +171,30 @@ def evaluate(dates, opens, closes, rate, cy, cost_x=1.0, skip_first=0):
             "passed": vs_hold["psr"] >= MIN_PSR, "first": dates[0], "last": dates[-1]}
 
 
-def main_cli():
+def main_cli(argv=None):
+    import argparse
     import main
+    ap = argparse.ArgumentParser(description=__doc__.split("\n\n")[0])
+    ap.add_argument("--forward", action="store_true", help="P10.5: the forward reading, or its verdict at 72 months")
+    args = ap.parse_args(argv)
     conn = sqlite3.connect(f"file:{main.DB_PATH}?mode=ro", uri=True, timeout=main.DB_TIMEOUT_S)
     cy = TS.cash_yield(conn)
+    if args.forward:
+        print(f"P10.5 month-end Treasury exposure vs cash, forward from {FORWARD_START}; one verdict at"
+              f" {FORWARD_MONTHS} months, PSR >= {MIN_PSR}\n")
+        for sym in FUNDS:
+            r = forward(conn, cy, sym)
+            if r["months"] == 0:
+                print(f"{sym}: no full forward month yet (the first is {FORWARD_START})")
+            elif r["verdict"] is None:
+                extra = (f", excess Sharpe so far {r['ann_sr']:+.3f}, PSR so far {r['psr']:.3f}"
+                         if r["psr"] is not None else "")
+                print(f"{sym}: month {r['months']} of {FORWARD_MONTHS} ({r['first']} .. {r['last']}){extra}."
+                      " For the record only: no verdict before month 72.")
+            else:
+                print(f"{sym}: VERDICT {r['verdict']} on months 1-{FORWARD_MONTHS} ({r['first']} .. {r['last']}):"
+                      f" excess Sharpe {r['ann_sr']:+.3f}, PSR {r['psr']:.4f}")
+        return 0
     print(f"P10.4 Treasury month-end rule: snapshot {SNAPSHOT}; pass PSR vs 0 >= {MIN_PSR} per fund on monthly"
           " rule minus buy-and-hold\n")
     for sym in FUNDS:
