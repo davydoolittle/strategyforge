@@ -25,6 +25,8 @@ nothing here can write):
   /explain.json                       plain-language notes for the context panel (static)
   /api/insider                        insider clusters and large open-market
                                       buys, last 90 days: UNTESTED, no prediction
+  /api/autopsy                        forward-trade autopsy of #3214 and #4027,
+                                      descriptive only (autopsy.py)
   /api/trend                          Bull / Flat / Bear per market (market_trend.py),
                                       one fixed 200-day rule; context only
   /api/screen                         momentum screen (screen.json next to
@@ -59,6 +61,7 @@ import insider_feed as IF
 import main
 import market_context as MC
 import market_trend as MT
+import autopsy as AU
 import windows as W
 
 PORT = int(os.environ.get("WEB_PORT", "8091"))
@@ -365,6 +368,19 @@ def insider(conn, today=None):
     return out
 
 
+_autopsy_cache = {}
+
+
+def autopsy_cached(conn):
+    """The forward-trade autopsy re-runs two backtests; cache it until a new
+    candle arrives for either pair."""
+    key = conn.execute("SELECT MAX(ts) FROM candles WHERE pair IN ('ETH-USD', 'BTC-USD')").fetchone()[0]
+    if key not in _autopsy_cache:
+        _autopsy_cache.clear()
+        _autopsy_cache[key] = AU.panel(conn)
+    return _autopsy_cache[key]
+
+
 def health(conn):
     if not has_table(conn, "health"):
         return []
@@ -406,6 +422,7 @@ ROUTES = [
     (re.compile(r"^/api/insider$"), lambda c, m, qs, db: insider(c)),
     (re.compile(r"^/api/context$"), lambda c, m, qs, db: MC.panel(c)),
     (re.compile(r"^/api/trend$"), lambda c, m, qs, db: MT.panel(c)),
+    (re.compile(r"^/api/autopsy$"), lambda c, m, qs, db: autopsy_cached(c)),
     (re.compile(r"^/api/screen$"), lambda c, m, qs, db: screen_json(db)),
 ]
 

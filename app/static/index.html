@@ -167,6 +167,12 @@
   </section>
 
   <section class="wide">
+    <h2>Forward-trade autopsy <small>#3214 and #4027, descriptive only (autopsy.py)</small></h2>
+    <div id="autopsy"></div>
+    <div id="autopsy-foot" class="muted"></div>
+  </section>
+
+  <section class="wide">
     <h2>Paper vs engine <small>reconciliation per TradingView alert (paper.py)</small></h2>
     <div class="controls"><label>strategy <select id="p-strat"></select></label></div>
     <div class="scroll"><table id="paper"><thead></thead><tbody></tbody></table></div>
@@ -511,6 +517,22 @@ function spark(values) {
   }
   return svg;
 }
+async function loadAutopsy() {
+  let d;
+  try { d = await api("/api/autopsy"); } catch (e) { fail($("autopsy"), e); return; }
+  $("autopsy").replaceChildren(...d.strategies.map((s) => {
+    const t = el("table", {}, el("thead"), el("tbody"));
+    fillTable(t, [
+      ["signal (UTC)", (r) => r.signal, true], ["side", (r) => r.dir, true], ["regime", (r) => r.regime ?? "–", true],
+      ["VIX band", (r) => r.vix_band ?? "–"], ["weekday", (r) => r.weekday], ["hold h", (r) => fmt(r.hold_h, 1)],
+      ["return %", (r) => fmt(r.ret_pct, 2)], ["outcome", (r) => r.outcome, true], ["exit", (r) => r.reason, true],
+    ], s.trades, s.missing ? "strategy not registered" : "no forward trades yet");
+    return el("div", {}, el("h3", {}, `${s.strategy} `, el("small", { class: "muted" }, `${s.pair ?? ""} · ${s.source ?? ""} trades`)),
+              el("div", { class: "scroll" }, t));
+  }));
+  $("autopsy-foot").textContent = d.note;
+}
+
 async function loadTrend() {
   let d;
   try { d = await api("/api/trend"); } catch (e) { fail($("trend"), e); return; }
@@ -590,7 +612,7 @@ async function boot() {
   $("status").textContent = "loading…";
   try { STRATS = await api("/api/strategies"); renderTree(); }
   catch (e) { fail($("tree"), e); }
-  await Promise.all([loadTrend(), loadJobs(), loadCands(), loadHealth(), loadPaper(), loadScreen(),
+  await Promise.all([loadTrend(), loadAutopsy(), loadJobs(), loadCands(), loadHealth(), loadPaper(), loadScreen(),
                      loadPatterns(), loadInsider(), loadContext()]);
   $("status").textContent = "updated " + new Date().toLocaleTimeString();
 }

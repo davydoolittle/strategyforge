@@ -95,9 +95,12 @@ def cusum(z, k=CUSUM_K, h=CUSUM_H):
     return s, lo, breach
 
 
-def measure(conn, strat):
-    """One health row (without day / notified) for a strategy dict from
-    paper.strategy_by_name."""
+def forward_trades(conn, strat):
+    """(source, baseline returns, forward [(trade, return)]) for a strategy dict
+    from paper.strategy_by_name. The forward trades are the paper trades
+    TradingView's alerts drove, or else the engine's own trades with signal at
+    or after the validation window's end. The forward-trade autopsy reads the
+    same list, so the two can never disagree."""
     tf_s = W.tf_seconds(strat["tf"])
     is_start, split, oos_end = W.for_candidate(conn, strat["candidate_id"])
     cfg = W.pin_cfg(strat["cfg"], is_start, tf_s)
@@ -110,11 +113,14 @@ def measure(conn, strat):
     paper.ensure_tables(conn)
     alerts = paper.own_alerts(conn, strat)
     if alerts:
-        source = "paper"
-        fwd = returns(paper.simulate(conn, strat, alerts, newest)["trades"], cfg["initial_capital"])
-    else:
-        source = "engine"
-        fwd = [(t, x) for t, x in rets if t["signal_ts"] >= end_ts]
+        return "paper", base, returns(paper.simulate(conn, strat, alerts, newest)["trades"], cfg["initial_capital"])
+    return "engine", base, [(t, x) for t, x in rets if t["signal_ts"] >= end_ts]
+
+
+def measure(conn, strat):
+    """One health row (without day / notified) for a strategy dict from
+    paper.strategy_by_name."""
+    source, base, fwd = forward_trades(conn, strat)
     row = {"strategy_id": strat["id"], "source": source, "n_baseline": len(base),
            "mu": None, "sigma": None, "n_forward": len(fwd), "cusum": None,
            "min_cusum": None, "breach_ts": None, "alert": 0, "detail": None}
