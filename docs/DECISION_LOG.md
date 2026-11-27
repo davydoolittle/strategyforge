@@ -26,3 +26,4 @@ they are made.
 | 2026-11-27 | Calendar effects: only month end in Treasuries passes (IEF, TLT); no stock calendar rule is earned; a cost-inclusive Treasury month-end rule may be registered next (backlog B10). | F24 |
 | 2026-11-27 | P10.4 Treasury month-end rule registered and approved as written (IEF and TLT, vs buy-and-hold, PSR >= 0.975 each). | V2_PROMPT P10.4 |
 | 2026-11-27 | Treasury month-end rule fails against buy-and-hold as registered; no rule switches on it; a forward test against cash would be a new registration (backlog B11). | F25 |
+| 2026-11-27 | P10.5 registered and approved as written: month-end Treasury exposure vs cash, IEF and TLT, forward from 2026-12, one verdict at 72 months (2032-11), PSR >= 0.975 each. | V2_PROMPT P10.5 |
