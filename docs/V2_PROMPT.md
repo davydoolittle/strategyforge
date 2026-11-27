@@ -217,7 +217,7 @@ Goal: the test F16 says is the honest next one: a diversified, volatility-scaled
   - Pass: PSR vs 0 >= 0.95 on monthly returns of book minus benchmark, N = 1 (about annualised excess Sharpe 0.38 over 18.6 years). Report also: CAGR, max drawdown, 2x cost, fills one day later, each sleeve's share of return, and a benchmark volatility-matched to the book.
   - A pass earns a forward test on data after 2026-10-30, not a promotion.
 
-- [ ] **P10.3 Calendar-effects study on the ETF universe** *(planned 2026-11-27; registration written 2026-11-27, AWAITING OWNER APPROVAL; nothing run).* The hypothesis list is RESEARCH_BACKLOG B8, fixed before this registration. One test per hypothesis and ETF, run once.
+- [ ] **P10.3 Calendar-effects study on the ETF universe** *(planned 2026-11-27; registration written and approved by the owner as written 2026-11-27).* Mechanical note fixed before the run: each ETF's first and last calendar month in the data are left out of every test, since a partial month cannot say which days are its first three or last five. The hypothesis list is RESEARCH_BACKLOG B8, fixed before this registration. One test per hypothesis and ETF, run once.
   - **Data:** the research ten (`equities.UNIVERSE`) in snapshot `etf-2026-10-30`, each from its first bar to 2026-10-30; daily close-to-close returns of adjusted closes. Calendar days are those ETF's own trading days; the third Friday is the calendar's (if it was a holiday, the week still counts).
   - **Hypotheses**, each "on" days against all other days of that ETF:
     - C1 turn of month: the last trading day and first three of each month; one-sided, higher.

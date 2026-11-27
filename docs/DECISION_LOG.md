@@ -22,3 +22,4 @@ they are made.
 | 2026-10-30 | #4027 registered as the N = 1 forward test (PSR vs 0 >= 0.95 on forward trades, no re-tuning). | F13 |
 | 2026-11-01 | On official TSP prices F12 stands: nothing beats 100% C; DSRs above 0.95 there come from one config moving the noise ceiling. | F14 |
 | 2026-11-01 | Core 1d on ten ETFs rejected; the declared 1d ETF budget is spent and the bars stay frozen in snapshot etf-2026-10-30. | F16 |
+| 2026-11-27 | P10.3 calendar-effects study registered and approved as written (4 hypotheses x 10 ETFs, p < 0.05/40, same sign in both halves). | V2_PROMPT P10.3 |
