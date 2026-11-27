@@ -236,7 +236,7 @@ Goal: the test F16 says is the honest next one: a diversified, volatility-scaled
   - **Data:** snapshot `etf-2026-10-30`, each fund from its first full month (2002-08) to 2026-09, the months F24 used.
   - **Pass, per fund:** PSR vs 0 >= 0.975 (0.95 corrected for two funds) on monthly returns of the rule minus buy-and-hold. Also reported, information only: CAGR, max drawdown, volatility, time in the market, 2x costs, entry a day later (the open of the fourth-last day), both halves, and the rule against cash alone.
   - **Caveat stated now:** most of a bond fund's return is its yield, earned every day; the rule gives up roughly three quarters of that, so against buy-and-hold it starts behind and the month-end edge must make it up. A FAIL against buy-and-hold with a PASS against cash would mean "a real but small effect, not worth the yield given up", and would be written so.
-  - **What follows:** a pass earns a forward test on data after the snapshot, never a direct entry signal. Written up as a FINDINGS entry whatever the result.
+  - **What follows:** a pass earns a forward test on data after the snapshot, never a direct entry signal. Written up as a FINDINGS entry whatever the result. *(Code: `app/treasury_month_end.py`, tests/test_treasury_month_end.py, committed before the run.)*
 ---
 
 ## 8e. Noteworthy: the pattern ledger  (added 2026-11-01, done, FINDINGS F18)
