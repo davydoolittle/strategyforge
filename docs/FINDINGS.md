@@ -6,6 +6,57 @@ pinned windows on each candidate (P2.1).
 
 ---
 
+## F25. Treasury month-end rule against buy-and-hold: FAIL as registered; it earned more with far less risk, but the difference from holding cannot be told from luck
+
+*2026-11-27. P10.4, V2_PROMPT 8d, registered and approved as written before the
+run; evaluator committed (5de8f0b) before the run; run once per fund, read-only
+on snapshot `etf-2026-10-30`, 2002-08 to 2026-09 (290 months). Rule: hold the fund
+from the open of the month's fifth-last trading day to the close of its last,
+cash at the 3-month yield otherwise, half the quoted spread on every switch.
+Pass: PSR vs 0 >= 0.975 on monthly rule minus buy-and-hold.*
+
+| | rule CAGR | max DD | vol | in market | buy-and-hold CAGR | max DD | vol | excess Sharpe | PSR | verdict |
+|---|---|---|---|---|---|---|---|---|---|---|
+| IEF | 3.97% | -6.3% | 2.9% | 24% | 3.20% | -23.9% | 6.8% | +0.094 | 0.677 | FAIL |
+| TLT | 5.26% | -14.2% | 6.1% | 24% | 3.25% | -48.3% | 14.3% | +0.092 | 0.674 | FAIL |
+
+**Verdict: FAIL for both funds, as registered.** No forward test is earned.
+
+Information only, not part of the verdict:
+
+| | vs buy-and-hold: 2x costs | entry a day later | 2002-2014 | 2014-2026 | vs cash alone |
+|---|---|---|---|---|---|
+| IEF | PSR 0.565 | 0.584 | -0.30 (PSR 0.15) | +0.51 (PSR 0.96) | Sharpe +0.85, PSR 1.000 |
+| TLT | PSR 0.623 | 0.620 | -0.20 (PSR 0.23) | +0.39 (PSR 0.91) | Sharpe +0.67, PSR 0.999 |
+
+**What the numbers show.**
+
+- **The month-end effect is real and survives costs.** Against cash, being in
+  Treasuries for only the last five days of each month earned 3.97% and 5.26% a
+  year against cash's 1.79%, with PSR 0.999-1.000, and it holds at 2x costs, a
+  day late and in both halves. That confirms F24 with costs included.
+- **Against holding the bonds, it is not established.** The rule actually earned
+  more than buy-and-hold (TLT 5.26% vs 3.25%) with a third of the drawdown, but
+  the monthly difference is dominated by what bonds do in the three weeks the
+  rule sits out. From 2002 to 2014, while falling rates rewarded holding, the
+  rule trailed; from 2014, including the 2022 bond crash, it led. Twenty-four
+  years of that is still too noisy to call (PSR 0.68).
+- **So the registered caveat came out the other way round.** It expected the rule
+  to give up return to the bonds' yield. It did not; it gave up the bond market's
+  long swings, which helped in one half and hurt in the other.
+
+**What this licenses.**
+
+- **No rule switches on it.** As registered, a FAIL against buy-and-hold ends this
+  rule; the dashboard may show F24 and F25 as dated facts.
+- **A different question would be a new registration:** whether month-end
+  Treasury exposure beats cash *forward*, from 2026-10 on, as a forward test
+  counted as trial 2 of this family. That is a cash-alternative question, not a
+  bond-investor's one, and it would have to be approved before any forward data
+  is read.
+
+---
+
 ## F24. Calendar effects on the research ten: Treasuries rise in the last five trading days of the month; every other calendar effect fails
 
 *2026-11-27. P10.3, V2_PROMPT 8d, registered and approved as written before the
