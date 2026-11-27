@@ -104,6 +104,9 @@ JOB_SPECS = [
     # P9.4 tracker, display only: today's S&P 100, Alpaca bars, SEC company
     # facts and ratios, the declared screens (tracker.py)
     ("tracker", "1d", "tracker.py --refresh", 3600),
+    # quarterly readings of every running forward test, sent via ntfy; for the
+    # record only, never a verdict (forward_readings.py)
+    ("forward_readings", "91d", "forward_readings.py --notify", 900),
 ]
 # Jobs taken out of JOB_SPECS. Their rows stay in the jobs table as the record;
 # the scheduler skips any name not in JOB_SPECS and the dashboard hides these.
