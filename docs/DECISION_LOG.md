@@ -24,3 +24,4 @@ they are made.
 | 2026-11-01 | Core 1d on ten ETFs rejected; the declared 1d ETF budget is spent and the bars stay frozen in snapshot etf-2026-10-30. | F16 |
 | 2026-11-27 | P10.3 calendar-effects study registered and approved as written (4 hypotheses x 10 ETFs, p < 0.05/40, same sign in both halves). | V2_PROMPT P10.3 |
 | 2026-11-27 | Calendar effects: only month end in Treasuries passes (IEF, TLT); no stock calendar rule is earned; a cost-inclusive Treasury month-end rule may be registered next (backlog B10). | F24 |
+| 2026-11-27 | P10.4 Treasury month-end rule registered and approved as written (IEF and TLT, vs buy-and-hold, PSR >= 0.975 each). | V2_PROMPT P10.4 |

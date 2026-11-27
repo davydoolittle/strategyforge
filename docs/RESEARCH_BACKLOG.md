@@ -19,7 +19,7 @@ closed family's trials keep counting.
 | B6 | Another trend rule (50-day, momentum score, per-pair trend) | not registered | F22 is trial 1 of that family. |
 | B7 | 15m timeframe for squeeze (more trades per hypothesis) | not registered | F11; budget to be declared before the run. |
 | B8 | Calendar effects on the ETF universe (below) | done 2026-11-27 (F24): Treasury month end passes, all else fails | F18 already tested turn-of-month on SPY (SUGGESTIVE, did not survive the correction): it counts. |
-| B10 | Treasury month-end rule, cost-inclusive (hold IEF or TLT in the last five trading days of the month, cash otherwise) vs buy-and-hold | registration written (V2_PROMPT P10.4), awaiting approval | Counts F24 as trial 1 of the family; the effect is published (index extension) and may fade. |
+| B10 | Treasury month-end rule, cost-inclusive (hold IEF or TLT in the last five trading days of the month, cash otherwise) vs buy-and-hold | registered (V2_PROMPT P10.4), approved 2026-11-27 | Counts F24 as trial 1 of the family; the effect is published (index extension) and may fade. |
 | B9 | Profitability factor with complete data | not testable now | F23: 58.6% data coverage on free XBRL. |
 
 ## B8. Calendar-effects study: hypothesis list (declared 2026-11-27, before any run)
