@@ -229,6 +229,13 @@ Goal: the test F16 says is the honest next one: a diversified, volatility-scaled
   - **Also reported, information only:** each test's p before correction, the halves, and 2x the ETF's quoted spread charged on entering and leaving the on-days (whether an effect would survive trading it).
   - **What follows:** a pass is a calendar fact, not a strategy: it earns a cost-inclusive trading-rule registration of its own, never a direct entry signal (section 9). Written up as a FINDINGS entry whatever the result. A further calendar idea (Halloween, holidays, pre-FOMC) is a new registration counted against this family. *(Code: `app/calendar_effects.py`, tests/test_calendar_effects.py, committed before the run.)*
 
+- [ ] **P10.4 Treasury month-end rule, cost-inclusive** *(backlog B10, earned by F24; registration written 2026-11-27, AWAITING OWNER APPROVAL; nothing run).* N = 1 per fund, IEF and TLT, run once each. It counts F24 as trial 1 of this family; a variant (other days, other funds, leverage) is a new registration.
+  - **Rule:** hold the fund from the open of the month's fifth-last trading day through the close of its last trading day; otherwise hold cash earning the 3-month Treasury yield (`macro_series` y3m, the latest value usable that day). The days are known in advance from the exchange calendar, so the entry is placed on the open of the fifth-last day, not after seeing anything. Costs: the instrument's quoted spread (half per side, from `instruments`), on every entry and exit; about 12 round trips a year.
+  - **Benchmark:** buy-and-hold of the same fund over the same days, same costs.
+  - **Data:** snapshot `etf-2026-10-30`, each fund from its first full month (2002-08) to 2026-09, the months F24 used.
+  - **Pass, per fund:** PSR vs 0 >= 0.975 (0.95 corrected for two funds) on monthly returns of the rule minus buy-and-hold. Also reported, information only: CAGR, max drawdown, volatility, time in the market, 2x costs, entry a day later (the open of the fourth-last day), both halves, and the rule against cash alone.
+  - **Caveat stated now:** most of a bond fund's return is its yield, earned every day; the rule gives up roughly three quarters of that, so against buy-and-hold it starts behind and the month-end edge must make it up. A FAIL against buy-and-hold with a PASS against cash would mean "a real but small effect, not worth the yield given up", and would be written so.
+  - **What follows:** a pass earns a forward test on data after the snapshot, never a direct entry signal. Written up as a FINDINGS entry whatever the result.
 ---
 
 ## 8e. Noteworthy: the pattern ledger  (added 2026-11-01, done, FINDINGS F18)
