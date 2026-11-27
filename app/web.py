@@ -5,8 +5,8 @@ rest of the repo, so it runs in plain python:3.12-slim with no image to build.
   python web.py                       # 0.0.0.0:8091, FORGE_DB read-only
   WEB_PORT=8092 python web.py
 
-Endpoints (GET only; every request opens forge.db with SQLite mode=ro, so
-nothing here can write):
+Endpoints (GET, every one on a SQLite mode=ro connection; the only writes are
+POST/DELETE /api/watchlist, below, on a connection fenced to that table):
   /api/strategies                     lineage rows + latest verdict + promotions
   /api/candidates?tf=&passed=&pair=&family=&reported=&limit=
                                       candidates with their latest adversary
@@ -25,6 +25,13 @@ nothing here can write):
   /explain.json                       plain-language notes for the context panel (static)
   /api/insider                        insider clusters and large open-market
                                       buys, last 90 days: UNTESTED, no prediction
+  /api/watchlist                      the tracker's watchlist (all rows, with status)
+  POST /api/watchlist {"ticker","notes"}   add a user row (token; the ticker must be
+                                      an equity instrument)
+  DELETE /api/watchlist/<ticker>      mark the user's row removed (kept as history)
+                                      Both write through connect_watchlist(): an
+                                      authorizer-fenced connection that can only
+                                      insert into and update `watchlist`.
   /api/autopsy                        forward-trade autopsy of #3214 and #4027,
                                       descriptive only (autopsy.py)
   /api/trend                          Bull / Flat / Bear per market (market_trend.py),
@@ -79,6 +86,42 @@ class HttpError(Exception):
     def __init__(self, status, msg):
         super().__init__(msg)
         self.status = status
+
+
+WRITE_TABLE = "watchlist"
+READ_TABLES = {"watchlist", "instruments", "sqlite_master"}
+MAX_BODY = 4096
+
+
+def _watchlist_only(action, arg1, arg2, dbname, source):
+    """sqlite3 authorizer for the one writable connection: read watchlist and
+    instruments, insert into and update watchlist, nothing else (no DELETE:
+    rows are never deleted; no CREATE, DROP, ALTER, PRAGMA or ATTACH)."""
+    if action == sqlite3.SQLITE_READ:
+        return sqlite3.SQLITE_OK if arg1 in READ_TABLES else sqlite3.SQLITE_DENY
+    if action in (sqlite3.SQLITE_INSERT, sqlite3.SQLITE_UPDATE):
+        return sqlite3.SQLITE_OK if arg1 == WRITE_TABLE else sqlite3.SQLITE_DENY
+    if action in (sqlite3.SQLITE_SELECT, sqlite3.SQLITE_TRANSACTION, sqlite3.SQLITE_FUNCTION):
+        return sqlite3.SQLITE_OK
+    return sqlite3.SQLITE_DENY
+
+
+def connect_watchlist(db_path=None):
+    """The only read-write connection web.py opens: fenced to the watchlist
+    table by an authorizer. Every other route uses connect() (mode=ro)."""
+    path = db_path or main.DB_PATH
+    if not os.path.exists(path):
+        raise HttpError(503, f"database not found: {path}")
+    conn = sqlite3.connect(path, timeout=main.DB_TIMEOUT_S, check_same_thread=False)
+    conn.set_authorizer(_watchlist_only)
+    return conn
+
+
+def watchlist_rows(conn):
+    import watchlist as WL
+    if not has_table(conn, "watchlist"):
+        return {"rows": [], "missing": "no watchlist yet: the tracker job or watchlist.py creates it"}
+    return {"rows": WL.rows(conn, include_inactive=True)}
 
 
 def connect(db_path=None):
@@ -423,6 +466,7 @@ ROUTES = [
     (re.compile(r"^/api/context$"), lambda c, m, qs, db: MC.panel(c)),
     (re.compile(r"^/api/trend$"), lambda c, m, qs, db: MT.panel(c)),
     (re.compile(r"^/api/autopsy$"), lambda c, m, qs, db: autopsy_cached(c)),
+    (re.compile(r"^/api/watchlist$"), lambda c, m, qs, db: watchlist_rows(c)),
     (re.compile(r"^/api/screen$"), lambda c, m, qs, db: screen_json(db)),
 ]
 
@@ -513,9 +557,66 @@ class Handler(BaseHTTPRequestHandler):
     do_HEAD = do_GET
 
     def refuse(self):
-        self.send_json(405, {"error": "read-only API: GET only"})
+        self.send_json(405, {"error": "read-only API: GET only, except POST/DELETE /api/watchlist"})
 
-    do_POST = do_PUT = do_PATCH = do_DELETE = refuse
+    def _unauthorized(self):
+        self.send_response(401)
+        self.send_header("WWW-Authenticate", 'Bearer realm="strategyforge"')
+        body = b'{"error":"bearer token required"}'
+        self.send_header("Content-Type", "application/json")
+        self.send_header("Content-Length", str(len(body)))
+        self.end_headers()
+        self.wfile.write(body)
+
+    def _watchlist_write(self, fn):
+        """Token first, then a small JSON body, then one write through the
+        fenced connection."""
+        if not self.authorized():
+            return self._unauthorized()
+        try:
+            n = int(self.headers.get("Content-Length") or 0)
+            if n > MAX_BODY:
+                raise HttpError(413, f"body larger than {MAX_BODY} bytes")
+            raw = self.rfile.read(n) if n else b"{}"
+            try:
+                body = json.loads(raw or b"{}")
+            except ValueError:
+                raise HttpError(400, "body must be JSON")
+            if not isinstance(body, dict):
+                raise HttpError(400, "body must be a JSON object")
+            conn = connect_watchlist(self.db_path)
+            try:
+                if not has_table(conn, "watchlist"):
+                    raise HttpError(503, "no watchlist table yet: run watchlist.py list once")
+                self.send_json(200, fn(conn, body))
+            finally:
+                conn.close()
+        except HttpError as e:
+            self.send_json(e.status, {"error": str(e)})
+        except ValueError as e:
+            self.send_json(400, {"error": str(e)})
+        except Exception as e:  # noqa: BLE001
+            main.log(f"web 500 {self.path}: {traceback.format_exc()}")
+            self.send_json(500, {"error": f"{type(e).__name__}: {e}"})
+
+    def do_POST(self):
+        import watchlist as WL
+        if urlparse(self.path).path != "/api/watchlist":
+            return self.refuse()
+
+        def add(conn, body):
+            rid, created = WL.add(conn, body.get("ticker"), WL.USER, notes=body.get("notes"))
+            return {"id": rid, "created": created}
+        self._watchlist_write(add)
+
+    def do_DELETE(self):
+        import watchlist as WL
+        m = re.match(r"^/api/watchlist/([A-Za-z.\-]{1,10})$", urlparse(self.path).path)
+        if not m:
+            return self.refuse()
+        self._watchlist_write(lambda conn, body: {"removed": WL.remove(conn, m.group(1))})
+
+    do_PUT = do_PATCH = refuse
 
 
 def check_token(token):

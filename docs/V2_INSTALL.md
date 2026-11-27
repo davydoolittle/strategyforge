@@ -165,7 +165,7 @@ Failure `WEB_TOKEN must be set...`: the token is missing or shorter than 16 char
   Cloudflare tunnel route for it. Tailscale is the only remote path.
 - The database is opened with SQLite `mode=ro` on every request, so the
   dashboard cannot write. `/data` is mounted read-write only so that SQLite
-  can read while the collector holds a journal; the process never writes.
+  can read while the collector holds a journal. Since P9.4 (2026-11-27) it writes in exactly one place: `POST`/`DELETE /api/watchlist` (token required) insert or update rows of the `watchlist` table, through a separate connection whose SQLite authorizer refuses every other write, any `DELETE`, schema change, `PRAGMA` and `ATTACH`. Every other request is `mode=ro`.
 - Code changes to `web.py` or `static/index.html` need `docker restart strategyforge-web`
   (it reads `/app` from the share, so no rebuild).
 - To rotate the token: `docker rm -f strategyforge-web`, then step 2 with the new one.
