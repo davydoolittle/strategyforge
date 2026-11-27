@@ -209,6 +209,8 @@ Goal: the test F16 says is the honest next one: a diversified, volatility-scaled
   - Pass: PSR vs 0 >= 0.95 on monthly returns of book minus benchmark, N = 1 (about annualised excess Sharpe 0.38 over 18.6 years). Report also: CAGR, max drawdown, 2x cost, fills one day later, each sleeve's share of return, and a benchmark volatility-matched to the book.
   - A pass earns a forward test on data after 2026-10-30, not a promotion.
 
+- [ ] **P10.3 Calendar-effects study on the ETF universe** *(planned 2026-11-27; not registered, not run).* Turn of month, day of week, options-expiration week and month end, on the research ten in snapshot `etf-2026-10-30`. The hypothesis list is declared in `docs/RESEARCH_BACKLOG.md` (B8) before any run; the bar is Bonferroni across the whole list (40 tests); written up as a FINDINGS entry whatever the result. F18 already tested turn-of-month on SPY (SUGGESTIVE, not corrected-significant), and that test stays on the record. P10.1 and P10.2 are finished (F17); this item needs its own registration, with the test statistic, before it runs.
+
 ---
 
 ## 8e. Noteworthy: the pattern ledger  (added 2026-11-01, done, FINDINGS F18)
