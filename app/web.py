@@ -25,6 +25,8 @@ POST/DELETE /api/watchlist, below, on a connection fenced to that table):
   /explain.json                       plain-language notes for the context panel (static)
   /api/insider                        insider clusters and large open-market
                                       buys, last 90 days: UNTESTED, no prediction
+  /api/tracker                        the Tracker panel: watchlist names with prices,
+                                      ratios, percentiles and who added them
   /api/watchlist                      the tracker's watchlist (all rows, with status)
   POST /api/watchlist {"ticker","notes"}   add a user row (token; the ticker must be
                                       an equity instrument)
@@ -115,6 +117,52 @@ def connect_watchlist(db_path=None):
     conn = sqlite3.connect(path, timeout=main.DB_TIMEOUT_S, check_same_thread=False)
     conn.set_authorizer(_watchlist_only)
     return conn
+
+
+TRACKER_FOOTER = "Facts and traditional readings, not recommendations. Nothing here is a validated signal."
+TRACKER_RATIOS = ("pe", "ps", "pb", "ev_ebitda", "gross_margin", "operating_margin", "net_margin", "roe", "roa",
+                  "debt_to_equity", "net_debt_ebitda", "interest_coverage", "current_ratio", "fcf_yield",
+                  "revenue_growth_3y", "eps_growth_3y", "share_change_1y", "altman_z")
+
+
+def _changes(conn, symbol):
+    rows = conn.execute("SELECT ts, close FROM candles WHERE pair=? AND session='us_equity' AND close > 0"
+                        " ORDER BY ts DESC LIMIT 253", (symbol,)).fetchall()
+    if not rows:
+        return {"price": None, "as_of": None}
+    c = [r[1] for r in rows]
+
+    def chg(n):
+        return c[0] / c[n] - 1 if len(c) > n else None
+    from datetime import datetime as _dt, timezone as _tz
+    return {"price": c[0], "as_of": _dt.fromtimestamp(rows[0][0], _tz.utc).date().isoformat(),
+            "chg_1d": chg(1), "chg_1m": chg(21), "chg_12m": chg(252)}
+
+
+def tracker_panel(conn):
+    """One row per ticker on the watchlist (active rows), with price changes,
+    the key ratios and their percentiles, and who added it and why."""
+    import fundamentals as FU
+    import screens as SN
+    out = {"footer": TRACKER_FOOTER, "screens": SN.SCREENS, "not_available": FU.NOT_AVAILABLE, "rows": []}
+    if not has_table(conn, "watchlist"):
+        out["missing"] = "no watchlist yet: the tracker job or watchlist.py creates it"
+        return out
+    import watchlist as WL
+    metrics = FU.latest_metrics(conn)
+    by = {}
+    for r in WL.rows(conn):
+        by.setdefault(r["ticker"], []).append({"added_by": r["added_by"], "added_on": r["added_on"],
+                                               "trigger_values": r["trigger_values"], "notes": r["notes"]})
+    for t in sorted(by):
+        m = metrics.get(t, {})
+        out["rows"].append({"ticker": t, "name": m.get("name"), "sector": m.get("sic_desc"),
+                            "sector_peers": m.get("sector_peers"), **_changes(conn, t),
+                            "ratios": {k: {"value": m.get(k), "pct_sp100": (m.get("pct_all") or {}).get(k),
+                                           "pct_sector": (m.get("pct_sector") or {}).get(k)} for k in TRACKER_RATIOS},
+                            "piotroski_f": m.get("piotroski_f"), "facts_through": m.get("facts_through"),
+                            "note": m.get("note"), "added": by[t]})
+    return out
 
 
 def watchlist_rows(conn):
@@ -467,6 +515,7 @@ ROUTES = [
     (re.compile(r"^/api/trend$"), lambda c, m, qs, db: MT.panel(c)),
     (re.compile(r"^/api/autopsy$"), lambda c, m, qs, db: autopsy_cached(c)),
     (re.compile(r"^/api/watchlist$"), lambda c, m, qs, db: watchlist_rows(c)),
+    (re.compile(r"^/api/tracker$"), lambda c, m, qs, db: tracker_panel(c)),
     (re.compile(r"^/api/screen$"), lambda c, m, qs, db: screen_json(db)),
 ]
 

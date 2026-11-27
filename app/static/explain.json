@@ -1,104 +1,242 @@
 {
-  "vix": {
-    "what_it_is": "The VIX estimates how much traders expect the S&P 500 to swing over the next 30 days, worked out from option prices. A higher number means more expected turbulence.",
-    "traditional_reading": "Below 20 is read as calm and above 30 as fear. Many investors treat a reading above 30 as a sign that selling is overdone and a low is near.",
-    "what_the_record_shows": "It closed at a record 82.69 on 16 March 2020, a week before that year's low, so fear was a good contrarian sign then. In late 2008 it stayed above 30 for months while stocks kept falling until March 2009. This project's ledger found the over-30 rule not supported (F18).",
-    "source": "https://www.cboe.com/tradable_products/vix/"
-  },
-  "t10y2y": {
-    "what_it_is": "The 10-year US Treasury yield minus the 2-year yield. Long-term rates are normally higher, so the gap is usually positive.",
-    "traditional_reading": "When the gap turns negative, called an inverted curve, a recession is traditionally expected within one to two years.",
-    "what_the_record_shows": "It inverted before the 2001 and 2008 recessions. It then stayed inverted for most of the time from mid-2022 to September 2024, more than two years, and no recession had followed by the time it ended. This project's ledger had too few inversions to judge (F18).",
-    "source": "https://fred.stlouisfed.org/series/T10Y2Y"
-  },
-  "hy_oas": {
-    "what_it_is": "The extra yield investors demand to hold risky company bonds instead of Treasuries. It rises when lenders worry more about defaults.",
-    "traditional_reading": "Roughly 3 to 4 percentage points is calm, above 5 signals stress, and above 8 signals a crisis.",
-    "what_the_record_shows": "It passed 20 points in December 2008 and reached about 11 in March 2020, both near market lows, but it can stay low right up to a downturn. FRED provides only the last three years of this series, so the panel's history is short.",
-    "source": "https://fred.stlouisfed.org/series/BAMLH0A0HYM2"
-  },
-  "sahm": {
-    "what_it_is": "A recession warning built from the unemployment rate. It compares the latest three-month average with the lowest three-month average of the past year.",
-    "traditional_reading": "A rise of 0.50 percentage points or more is the classic sign that a recession has already begun.",
-    "what_the_record_shows": "It flagged each US recession since 1970 close to its start. It crossed 0.50 with the July 2024 jobs report, published in August 2024, without a recession following soon after; Claudia Sahm, who devised it, warned it could misfire. The data are monthly and get revised.",
-    "source": "https://fred.stlouisfed.org/series/SAHMREALTIME"
-  },
-  "fedfunds": {
-    "what_it_is": "The interest rate banks charge each other overnight, which the Federal Reserve steers. It sets the base cost of borrowing across the economy.",
-    "traditional_reading": "'Don't fight the Fed': rising rates are read as bad for stocks and rate cuts as good for them.",
-    "what_the_record_shows": "The Fed began cutting in January 2001 and in September 2007, and stocks fell hard after both. In this project's ledger, first cuts and first hikes were too few to judge, and 'stocks rise while the Fed eases' was not supported (F18).",
-    "source": "https://fred.stlouisfed.org/series/FEDFUNDS"
-  },
-  "putcall_equity": {
-    "what_it_is": "Each day, the number of put options traded on individual stocks divided by the number of call options. Puts pay off when prices fall, so a higher number means more traders are paying for protection.",
-    "traditional_reading": "Contrarians read above about 1.0 as excessive fear and below about 0.5 as complacency.",
-    "what_the_record_shows": "It reached 1.10 on 16 March 2020, the day the VIX peaked, close to that year's low. Daily readings are noisy, and many fear spikes pass without a turning point, so analysts usually smooth it. This project has not tested it.",
-    "source": "https://www.cboe.com/us/options/market_statistics/daily/"
-  },
-  "cape": {
-    "what_it_is": "The S&P 500's price divided by its average inflation-adjusted earnings over the past ten years. It shows how expensive stocks are compared with their longer-run earnings.",
-    "traditional_reading": "The long-run average is about 17. Above 30 is read as expensive, implying low returns over the following decade.",
-    "what_the_record_shows": "It peaked at 44.2 in December 1999, and the next decade's returns were poor. But it has been above 30 for much of the time since 2017 while stocks kept rising, so it has said little about timing. Updated monthly.",
-    "source": "http://www.econ.yale.edu/~shiller/data.htm"
-  },
-  "spy_sma200": {
-    "what_it_is": "The average closing price of SPY, a fund that tracks the S&P 500, over the last 200 trading days, about ten months. The panel shows whether the price is above or below that average.",
-    "traditional_reading": "A price above its 200-day average is read as an uptrend, and below it as a downtrend.",
-    "what_the_record_shows": "Waiting below it would have sidestepped most of the 2008 crash, but it also gave false alarms, such as in 2015-16 and late 2018. This project's ledger found 'below the 200-day, stocks are weak' not supported (F18), and a monthly version trailed simply holding (F12).",
-    "source": "https://www.investopedia.com/terms/m/movingaverage.asp"
-  },
-  "spy_cross": {
-    "what_it_is": "A cross is the day SPY's 50-day average moves above its 200-day average (a golden cross) or below it (a death cross). It marks a change in the medium-term trend.",
-    "traditional_reading": "A golden cross is read as bullish and a death cross as bearish.",
-    "what_the_record_shows": "Crosses lag the market: the death cross of 31 March 2020 came about a week after that year's low. In this project's ledger, stocks did better than normal after death crosses, and the golden-cross claim was not supported (F18).",
-    "source": "https://www.investopedia.com/terms/g/goldencross.asp"
-  },
-  "spy_rsi_weekly": {
-    "what_it_is": "RSI compares the size of recent gains with recent losses on a scale of 0 to 100. Here it uses SPY's weekly closes over the last 14 weeks.",
-    "traditional_reading": "Above 70 is read as overbought and below 30 as oversold.",
-    "what_the_record_shows": "Weekly readings below 30 are rare: 2001-02, October 2008, March 2020 and April 2025. Prices recovered quickly in 2020 and 2025, but kept falling for months in 2002 and until March 2009. A strong market can also stay above 70 for months.",
-    "source": "https://www.investopedia.com/terms/r/rsi.asp"
-  },
-  "trend_up_calm": {
-    "what_it_is": "SPY is above a rising 200-day average, and the VIX is below its median of the past year. Prices are climbing and swings are small.",
-    "traditional_reading": "The classic 'steady bull market': trend followers stay invested and volatility is treated as no concern.",
-    "what_the_record_shows": "2017 and 2021 sat here on more than 80% of trading days. Calm can end fast: the VIX went from 11 on 26 January 2018 to 37 on 5 February.",
-    "source": "https://www.investopedia.com/terms/m/movingaverage.asp"
-  },
-  "trend_up_vol": {
-    "what_it_is": "SPY is above a rising 200-day average, but the VIX is at or above its median of the past year. The trend is up while swings are larger than usual.",
-    "traditional_reading": "Read as an uptrend under strain: still rising, with more risk of a sharp pullback.",
-    "what_the_record_shows": "Most of 2018 sat here, ending in the late-2018 sell-off, and so did much of the 2020 recovery. Because the band is relative, late January 2018 already counted as 'vol' at a VIX near 12. The state alone has not settled which way it resolves.",
-    "source": "https://www.cboe.com/tradable_products/vix/"
-  },
-  "trend_down_calm": {
-    "what_it_is": "SPY is below a falling 200-day average, while the VIX is below its median of the past year. Prices are sliding without much turbulence.",
-    "traditional_reading": "Read as a quiet downtrend, which some see as a slow loss of confidence.",
-    "what_the_record_shows": "Rarer than its volatile twin: 394 days since 1993 against 963. Nearly half of 2001 sat here, as prices slid between sharper sell-offs. Because the band is relative to a turbulent year, 'calm' here can still mean a high VIX.",
-    "source": "https://www.investopedia.com/terms/m/movingaverage.asp"
-  },
-  "trend_down_vol": {
-    "what_it_is": "SPY is below a falling 200-day average, and the VIX is at or above its median of the past year. Prices are falling and swings are large.",
-    "traditional_reading": "The classic bear market. Trend followers stay out; contrarians watch for panic as a sign of a low.",
-    "what_the_record_shows": "Late 2008 sat here almost every trading day, for months before the low. March 2020 moved through it only briefly: the 200-day average turned down so late that most of that crash shows as range_vol.",
-    "source": "https://www.cboe.com/tradable_products/vix/"
-  },
-  "range_calm": {
-    "what_it_is": "Neither a clear uptrend nor a clear downtrend: SPY and the slope of its 200-day average disagree. The VIX is below its median of the past year.",
-    "traditional_reading": "Read as a sideways or turning market; trend signals are expected to be unreliable here.",
-    "what_the_record_shows": "Turning points pass through this state, such as the recovery from the early-2016 low in March and April 2016, so it often comes just before a new trend. That makes it a poor state for acting on any trend rule.",
-    "source": "https://www.investopedia.com/terms/m/movingaverage.asp"
-  },
-  "range_vol": {
-    "what_it_is": "No clear trend, and the VIX is at or above its median of the past year. The market is swinging without direction.",
-    "traditional_reading": "Read as a choppy market, where trend signals give many false starts.",
-    "what_the_record_shows": "December 2015, December 2018 and most of March 2020 sat here, with false starts in both directions before a trend returned.",
-    "source": "https://www.cboe.com/tradable_products/vix/"
-  },
-  "sizing_context": {
-    "what_it_is": "Volatility targeting means taking smaller positions when markets swing more, so each position risks about the same amount. This line applies fixed VIX bands to show what such a rule would say today.",
-    "traditional_reading": "Cut size as volatility rises and restore it as volatility falls. Many funds aim for a fixed yearly volatility, such as 10%.",
-    "what_the_record_shows": "Moreira and Muir (2017) found it improved risk-adjusted returns; later studies found the gain smaller after costs and uneven across markets. In this project, F17's volatility-scaled book cut drawdowns but trailed simply holding.",
-    "source": "https://www.nber.org/papers/w22208"
-  }
+ "vix": {
+  "what_it_is": "The VIX estimates how much traders expect the S&P 500 to swing over the next 30 days, worked out from option prices. A higher number means more expected turbulence.",
+  "traditional_reading": "Below 20 is read as calm and above 30 as fear. Many investors treat a reading above 30 as a sign that selling is overdone and a low is near.",
+  "what_the_record_shows": "It closed at a record 82.69 on 16 March 2020, a week before that year's low, so fear was a good contrarian sign then. In late 2008 it stayed above 30 for months while stocks kept falling until March 2009. This project's ledger found the over-30 rule not supported (F18).",
+  "source": "https://www.cboe.com/tradable_products/vix/"
+ },
+ "t10y2y": {
+  "what_it_is": "The 10-year US Treasury yield minus the 2-year yield. Long-term rates are normally higher, so the gap is usually positive.",
+  "traditional_reading": "When the gap turns negative, called an inverted curve, a recession is traditionally expected within one to two years.",
+  "what_the_record_shows": "It inverted before the 2001 and 2008 recessions. It then stayed inverted for most of the time from mid-2022 to September 2024, more than two years, and no recession had followed by the time it ended. This project's ledger had too few inversions to judge (F18).",
+  "source": "https://fred.stlouisfed.org/series/T10Y2Y"
+ },
+ "hy_oas": {
+  "what_it_is": "The extra yield investors demand to hold risky company bonds instead of Treasuries. It rises when lenders worry more about defaults.",
+  "traditional_reading": "Roughly 3 to 4 percentage points is calm, above 5 signals stress, and above 8 signals a crisis.",
+  "what_the_record_shows": "It passed 20 points in December 2008 and reached about 11 in March 2020, both near market lows, but it can stay low right up to a downturn. FRED provides only the last three years of this series, so the panel's history is short.",
+  "source": "https://fred.stlouisfed.org/series/BAMLH0A0HYM2"
+ },
+ "sahm": {
+  "what_it_is": "A recession warning built from the unemployment rate. It compares the latest three-month average with the lowest three-month average of the past year.",
+  "traditional_reading": "A rise of 0.50 percentage points or more is the classic sign that a recession has already begun.",
+  "what_the_record_shows": "It flagged each US recession since 1970 close to its start. It crossed 0.50 with the July 2024 jobs report, published in August 2024, without a recession following soon after; Claudia Sahm, who devised it, warned it could misfire. The data are monthly and get revised.",
+  "source": "https://fred.stlouisfed.org/series/SAHMREALTIME"
+ },
+ "fedfunds": {
+  "what_it_is": "The interest rate banks charge each other overnight, which the Federal Reserve steers. It sets the base cost of borrowing across the economy.",
+  "traditional_reading": "'Don't fight the Fed': rising rates are read as bad for stocks and rate cuts as good for them.",
+  "what_the_record_shows": "The Fed began cutting in January 2001 and in September 2007, and stocks fell hard after both. In this project's ledger, first cuts and first hikes were too few to judge, and 'stocks rise while the Fed eases' was not supported (F18).",
+  "source": "https://fred.stlouisfed.org/series/FEDFUNDS"
+ },
+ "putcall_equity": {
+  "what_it_is": "Each day, the number of put options traded on individual stocks divided by the number of call options. Puts pay off when prices fall, so a higher number means more traders are paying for protection.",
+  "traditional_reading": "Contrarians read above about 1.0 as excessive fear and below about 0.5 as complacency.",
+  "what_the_record_shows": "It reached 1.10 on 16 March 2020, the day the VIX peaked, close to that year's low. Daily readings are noisy, and many fear spikes pass without a turning point, so analysts usually smooth it. This project has not tested it.",
+  "source": "https://www.cboe.com/us/options/market_statistics/daily/"
+ },
+ "cape": {
+  "what_it_is": "The S&P 500's price divided by its average inflation-adjusted earnings over the past ten years. It shows how expensive stocks are compared with their longer-run earnings.",
+  "traditional_reading": "The long-run average is about 17. Above 30 is read as expensive, implying low returns over the following decade.",
+  "what_the_record_shows": "It peaked at 44.2 in December 1999, and the next decade's returns were poor. But it has been above 30 for much of the time since 2017 while stocks kept rising, so it has said little about timing. Updated monthly.",
+  "source": "http://www.econ.yale.edu/~shiller/data.htm"
+ },
+ "spy_sma200": {
+  "what_it_is": "The average closing price of SPY, a fund that tracks the S&P 500, over the last 200 trading days, about ten months. The panel shows whether the price is above or below that average.",
+  "traditional_reading": "A price above its 200-day average is read as an uptrend, and below it as a downtrend.",
+  "what_the_record_shows": "Waiting below it would have sidestepped most of the 2008 crash, but it also gave false alarms, such as in 2015-16 and late 2018. This project's ledger found 'below the 200-day, stocks are weak' not supported (F18), and a monthly version trailed simply holding (F12).",
+  "source": "https://www.investopedia.com/terms/m/movingaverage.asp"
+ },
+ "spy_cross": {
+  "what_it_is": "A cross is the day SPY's 50-day average moves above its 200-day average (a golden cross) or below it (a death cross). It marks a change in the medium-term trend.",
+  "traditional_reading": "A golden cross is read as bullish and a death cross as bearish.",
+  "what_the_record_shows": "Crosses lag the market: the death cross of 31 March 2020 came about a week after that year's low. In this project's ledger, stocks did better than normal after death crosses, and the golden-cross claim was not supported (F18).",
+  "source": "https://www.investopedia.com/terms/g/goldencross.asp"
+ },
+ "spy_rsi_weekly": {
+  "what_it_is": "RSI compares the size of recent gains with recent losses on a scale of 0 to 100. Here it uses SPY's weekly closes over the last 14 weeks.",
+  "traditional_reading": "Above 70 is read as overbought and below 30 as oversold.",
+  "what_the_record_shows": "Weekly readings below 30 are rare: 2001-02, October 2008, March 2020 and April 2025. Prices recovered quickly in 2020 and 2025, but kept falling for months in 2002 and until March 2009. A strong market can also stay above 70 for months.",
+  "source": "https://www.investopedia.com/terms/r/rsi.asp"
+ },
+ "trend_up_calm": {
+  "what_it_is": "SPY is above a rising 200-day average, and the VIX is below its median of the past year. Prices are climbing and swings are small.",
+  "traditional_reading": "The classic 'steady bull market': trend followers stay invested and volatility is treated as no concern.",
+  "what_the_record_shows": "2017 and 2021 sat here on more than 80% of trading days. Calm can end fast: the VIX went from 11 on 26 January 2018 to 37 on 5 February.",
+  "source": "https://www.investopedia.com/terms/m/movingaverage.asp"
+ },
+ "trend_up_vol": {
+  "what_it_is": "SPY is above a rising 200-day average, but the VIX is at or above its median of the past year. The trend is up while swings are larger than usual.",
+  "traditional_reading": "Read as an uptrend under strain: still rising, with more risk of a sharp pullback.",
+  "what_the_record_shows": "Most of 2018 sat here, ending in the late-2018 sell-off, and so did much of the 2020 recovery. Because the band is relative, late January 2018 already counted as 'vol' at a VIX near 12. The state alone has not settled which way it resolves.",
+  "source": "https://www.cboe.com/tradable_products/vix/"
+ },
+ "trend_down_calm": {
+  "what_it_is": "SPY is below a falling 200-day average, while the VIX is below its median of the past year. Prices are sliding without much turbulence.",
+  "traditional_reading": "Read as a quiet downtrend, which some see as a slow loss of confidence.",
+  "what_the_record_shows": "Rarer than its volatile twin: 394 days since 1993 against 963. Nearly half of 2001 sat here, as prices slid between sharper sell-offs. Because the band is relative to a turbulent year, 'calm' here can still mean a high VIX.",
+  "source": "https://www.investopedia.com/terms/m/movingaverage.asp"
+ },
+ "trend_down_vol": {
+  "what_it_is": "SPY is below a falling 200-day average, and the VIX is at or above its median of the past year. Prices are falling and swings are large.",
+  "traditional_reading": "The classic bear market. Trend followers stay out; contrarians watch for panic as a sign of a low.",
+  "what_the_record_shows": "Late 2008 sat here almost every trading day, for months before the low. March 2020 moved through it only briefly: the 200-day average turned down so late that most of that crash shows as range_vol.",
+  "source": "https://www.cboe.com/tradable_products/vix/"
+ },
+ "range_calm": {
+  "what_it_is": "Neither a clear uptrend nor a clear downtrend: SPY and the slope of its 200-day average disagree. The VIX is below its median of the past year.",
+  "traditional_reading": "Read as a sideways or turning market; trend signals are expected to be unreliable here.",
+  "what_the_record_shows": "Turning points pass through this state, such as the recovery from the early-2016 low in March and April 2016, so it often comes just before a new trend. That makes it a poor state for acting on any trend rule.",
+  "source": "https://www.investopedia.com/terms/m/movingaverage.asp"
+ },
+ "range_vol": {
+  "what_it_is": "No clear trend, and the VIX is at or above its median of the past year. The market is swinging without direction.",
+  "traditional_reading": "Read as a choppy market, where trend signals give many false starts.",
+  "what_the_record_shows": "December 2015, December 2018 and most of March 2020 sat here, with false starts in both directions before a trend returned.",
+  "source": "https://www.cboe.com/tradable_products/vix/"
+ },
+ "sizing_context": {
+  "what_it_is": "Volatility targeting means taking smaller positions when markets swing more, so each position risks about the same amount. This line applies fixed VIX bands to show what such a rule would say today.",
+  "traditional_reading": "Cut size as volatility rises and restore it as volatility falls. Many funds aim for a fixed yearly volatility, such as 10%.",
+  "what_the_record_shows": "Moreira and Muir (2017) found it improved risk-adjusted returns; later studies found the gain smaller after costs and uneven across markets. In this project, F17's volatility-scaled book cut drawdowns but trailed simply holding.",
+  "source": "https://www.nber.org/papers/w22208"
+ },
+ "t_pe": {
+  "what_it_is": "Price-to-earnings: the share price divided by the company's profit per share over the last twelve months. It says how many years of today's profit the price pays for.",
+  "traditional_reading": "Below about 15 is traditionally read as cheap and above about 25 as expensive, compared with the company's own history and its peers.",
+  "what_the_record_shows": "Earnings can collapse faster than prices: the S&P 500's trailing P/E went above 100 in 2009 because profits fell, not because stocks were dear. This project's value test on 2017-2026 data found no edge (F23).",
+  "source": "https://en.wikipedia.org/wiki/Price%E2%80%93earnings_ratio"
+ },
+ "t_ps": {
+  "what_it_is": "Price-to-sales: the company's market value divided by its revenue over the last twelve months. It works even when there is no profit.",
+  "traditional_reading": "Below 1 is traditionally read as cheap and above about 10 as very rich, depending on the industry's margins.",
+  "what_the_record_shows": "In 2002 Sun Microsystems' chief executive said that at 10 times sales in 2000 a buyer needed ten years of all revenue, with no costs, to be paid back.",
+  "source": "https://en.wikipedia.org/wiki/Price%E2%80%93sales_ratio"
+ },
+ "t_pb": {
+  "what_it_is": "Price-to-book: market value divided by the accounting value of the company's net assets (assets minus debts).",
+  "traditional_reading": "Below 1 means the market values the company at less than its books; that is traditionally read as cheap, or as a sign the books are doubted.",
+  "what_the_record_shows": "In March 2009 several large US banks traded far below book value; Citigroup fell to about a tenth of it. Many later wrote those assets down.",
+  "source": "https://en.wikipedia.org/wiki/P/B_ratio"
+ },
+ "t_ev_ebitda": {
+  "what_it_is": "Enterprise value (market value plus debt minus cash) divided by profit before interest, tax, depreciation and amortisation. It compares companies regardless of how much they borrow.",
+  "traditional_reading": "Below about 10 is traditionally read as cheap and above about 15 as expensive.",
+  "what_the_record_shows": "Loughran and Wellman (2011) found that US stocks with low EV/EBITDA did better from 1963 to 2009. Such findings tend to weaken once published; this project has not tested it.",
+  "source": "https://en.wikipedia.org/wiki/EV/Ebitda"
+ },
+ "t_gross_margin": {
+  "what_it_is": "Revenue minus the direct cost of what was sold, as a share of revenue.",
+  "traditional_reading": "A high and steady gross margin is traditionally read as pricing power: customers pay well above cost.",
+  "what_the_record_shows": "Novy-Marx (2013) found that companies with high gross profit relative to assets did better in 1963-2010. This project could not test profitability with free data (F23).",
+  "source": "https://en.wikipedia.org/wiki/Gross_margin"
+ },
+ "t_operating_margin": {
+  "what_it_is": "Operating profit (after running costs, before interest and tax) as a share of revenue.",
+  "traditional_reading": "Above about 15% is traditionally read as strong; it varies widely by industry.",
+  "what_the_record_shows": "Walmart's has been near 4% for years (fiscal 2024 about 4%) while it stayed one of the largest US companies: a low margin is normal for a high-volume retailer.",
+  "source": "https://en.wikipedia.org/wiki/Operating_margin"
+ },
+ "t_net_margin": {
+  "what_it_is": "Net profit after every cost, interest and tax, as a share of revenue.",
+  "traditional_reading": "Above about 10% is traditionally read as healthy, with large differences between industries.",
+  "what_the_record_shows": "Supermarkets run thin: Kroger's net margin was under 2% in 2023. One-off gains can also inflate it for a year.",
+  "source": "https://en.wikipedia.org/wiki/Profit_margin"
+ },
+ "t_roe": {
+  "what_it_is": "Return on equity: net profit over the last twelve months divided by shareholders' equity.",
+  "traditional_reading": "Above about 15% is traditionally read as a business that uses its owners' money well.",
+  "what_the_record_shows": "Buybacks shrink equity and inflate this number: Apple's return on equity was above 150% in fiscal 2023. A company with negative equity can show a meaningless figure.",
+  "source": "https://en.wikipedia.org/wiki/Return_on_equity"
+ },
+ "t_roa": {
+  "what_it_is": "Return on assets: net profit over the last twelve months divided by everything the company owns.",
+  "traditional_reading": "Above about 5% is traditionally read as good for most companies; banks run near 1%.",
+  "what_the_record_shows": "US banks' return on assets averaged about 1.1% in 2023, according to the FDIC.",
+  "source": "https://www.fdic.gov/analysis/quarterly-banking-profile"
+ },
+ "t_debt_to_equity": {
+  "what_it_is": "Total borrowing divided by shareholders' equity.",
+  "traditional_reading": "Below 1 is traditionally read as conservative and above 2 as heavily borrowed, except for banks, which run far higher by nature.",
+  "what_the_record_shows": "Lehman Brothers' assets were about 30 times its equity at the end of 2007; it failed in September 2008.",
+  "source": "https://en.wikipedia.org/wiki/Bankruptcy_of_Lehman_Brothers"
+ },
+ "t_net_debt_ebitda": {
+  "what_it_is": "Debt minus cash, divided by yearly profit before interest, tax, depreciation and amortisation: roughly, years of profit needed to repay the debt.",
+  "traditional_reading": "Below 2 or 3 is traditionally read as comfortable and above 4 or 5 as stretched.",
+  "what_the_record_shows": "TXU's 2007 buyout loaded it with debt; as Energy Future Holdings it filed for bankruptcy in 2014.",
+  "source": "https://en.wikipedia.org/wiki/Energy_Future_Holdings"
+ },
+ "t_interest_coverage": {
+  "what_it_is": "Operating profit divided by interest paid: how many times profit covers the interest bill.",
+  "traditional_reading": "Above 3 is traditionally read as comfortable and below 1.5 as strained.",
+  "what_the_record_shows": "In 2020 airlines' operating profit turned negative when travel stopped, so their coverage fell below zero.",
+  "source": "https://en.wikipedia.org/wiki/Times_interest_earned"
+ },
+ "t_current_ratio": {
+  "what_it_is": "Short-term assets (cash, receivables, stock) divided by bills due within a year.",
+  "traditional_reading": "Above 1 traditionally means the company can meet its short-term bills; above 2 is read as very safe.",
+  "what_the_record_shows": "Strong retailers often run below 1 on purpose, because customers pay before suppliers are paid: Walmart's was about 0.8 in fiscal 2024.",
+  "source": "https://en.wikipedia.org/wiki/Current_ratio"
+ },
+ "t_fcf_yield": {
+  "what_it_is": "Free cash flow (cash from operations minus spending on equipment) over the last twelve months, divided by market value.",
+  "traditional_reading": "Above about 5% is traditionally read as cheap; negative means the business consumed cash.",
+  "what_the_record_shows": "Oil producers' free cash flow turned negative in 2020, when US crude futures briefly traded below zero on 20 April.",
+  "source": "https://en.wikipedia.org/wiki/Free_cash_flow"
+ },
+ "t_revenue_growth_3y": {
+  "what_it_is": "Average yearly revenue growth over the last three fiscal years.",
+  "traditional_reading": "Double-digit growth is traditionally read as a growth company; it says nothing about the price paid for it.",
+  "what_the_record_shows": "NVIDIA's revenue roughly doubled from fiscal 2023 to 2024 and doubled again into 2025.",
+  "source": "https://en.wikipedia.org/wiki/Nvidia"
+ },
+ "t_eps_growth_3y": {
+  "what_it_is": "Average yearly growth in profit per share over the last three fiscal years.",
+  "traditional_reading": "Steady growth above about 10% a year is traditionally read as strong.",
+  "what_the_record_shows": "Per-share profit can grow faster than profit when the share count falls: Apple's share count fell by about 40% from 2012 to 2023 as it bought back stock.",
+  "source": "https://en.wikipedia.org/wiki/Earnings_per_share"
+ },
+ "t_share_change_1y": {
+  "what_it_is": "The change in the average diluted share count over the last fiscal year.",
+  "traditional_reading": "A falling count (buybacks) is traditionally read as returning cash; a rising one as dilution of existing owners.",
+  "what_the_record_shows": "Tesla sold about 12 billion dollars of new shares in 2020, raising its count, while its price rose that year.",
+  "source": "https://en.wikipedia.org/wiki/Stock_dilution"
+ },
+ "t_piotroski_f": {
+  "what_it_is": "A 0-9 checklist of nine accounting tests: profit, cash flow, falling debt, better margins and turnover, no new shares.",
+  "traditional_reading": "8 or 9 is traditionally read as financially strong and 0 to 2 as weak.",
+  "what_the_record_shows": "Piotroski (2000) found that among cheap stocks, high scorers beat low scorers by about 23% a year in 1976-1996, mostly in small companies.",
+  "source": "https://en.wikipedia.org/wiki/Piotroski_F-score"
+ },
+ "t_altman_z": {
+  "what_it_is": "A bankruptcy-risk score combining working capital, retained earnings, operating profit, market value and sales, each relative to the company's size.",
+  "traditional_reading": "Above 2.99 is traditionally read as safe and below 1.81 as in distress. It is not meant for banks and insurers, so they show a dash.",
+  "what_the_record_shows": "Altman's 1968 study classified about 95% of its bankrupt manufacturers correctly one year before they failed.",
+  "source": "https://en.wikipedia.org/wiki/Altman_Z-score"
+ },
+ "t_paid_estimates": {
+  "what_it_is": "Forward P/E, PEG and analyst estimates use forecasts of next year's profit.",
+  "traditional_reading": "Analysts' forecasts are traditionally used to judge whether a high price is justified by growth.",
+  "what_the_record_shows": "They need a paid data feed, so they are not shown. Studies such as McKinsey's in 2010 found consensus forecasts started too optimistic and were revised down.",
+  "source": "https://en.wikipedia.org/wiki/Price/earnings_to_growth_ratio"
+ },
+ "t_screen_momentum": {
+  "what_it_is": "A name whose last year's return was high relative to how much it swung, leaving out names that jumped most in the last month.",
+  "traditional_reading": "Momentum is traditionally read as a trend likely to continue for some months.",
+  "what_the_record_shows": "Jegadeesh and Titman (1993) found past winners kept outperforming for months. This project's cross-sectional momentum test on ETFs, 2000-2026, found no edge (F20).",
+  "source": "https://en.wikipedia.org/wiki/Momentum_(finance)"
+ },
+ "t_screen_value_quality": {
+  "what_it_is": "A name with a Piotroski score of 7 or more, a P/E below its sector's median in the S&P 100, and positive free cash flow.",
+  "traditional_reading": "Cheap and financially sound together is the traditional value-investing combination.",
+  "what_the_record_shows": "This project's value factor on 2017-2026 S&P 500 data found no edge (F23); Piotroski's 1976-1996 results came mostly from small companies.",
+  "source": "https://en.wikipedia.org/wiki/Value_investing"
+ },
+ "t_screen_insider_cluster": {
+  "what_it_is": "Three or more open-market purchases by at least two different company insiders within 30 days, from their Form 4 filings.",
+  "traditional_reading": "Several insiders buying with their own money is traditionally read as confidence.",
+  "what_the_record_shows": "Lakonishok and Lee (2001) found insider purchases predicted returns mainly in small companies over 1975-1995. Here insider data is untested (no registered study has passed).",
+  "source": "https://www.sec.gov/files/forms-3-4-5.pdf"
+ }
 }

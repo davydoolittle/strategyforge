@@ -64,6 +64,8 @@
   .b-fwd { background: #1d2a3a; color: var(--accent); }
   pre.report { white-space: pre-wrap; margin: 0 0 10px; font: 12.5px/1.5 ui-monospace, Menlo, Consolas, monospace;
                background: var(--bg); border: 1px solid var(--line); border-radius: 6px; padding: 10px; }
+  .pct { display: block; font-size: 11px; color: var(--muted); }
+  .trk-by { display: inline-block; margin: 1px 2px; }
   .trend-cards { display: grid; grid-template-columns: repeat(auto-fit, minmax(170px, 1fr)); gap: 10px; }
   .trend-card { border: 1px solid var(--line); border-radius: 8px; padding: 10px 12px; }
   .trend-card .state { font-size: 20px; font-weight: 700; margin: 2px 0; }
@@ -164,6 +166,18 @@
     <div class="scroll" style="margin-top:10px"><table id="ins-buys"><thead></thead><tbody></tbody></table></div>
     <div class="muted">What insiders reported doing, nothing more. No study has tested whether any of it predicts
       a move. Sales are not shown: most large-company selling is routine.</div>
+  </section>
+
+  <section class="wide">
+    <h2>Tracker <small id="trk-meta">S&amp;P 100 names on the watchlist (tracker.py, fundamentals.py, screens.py)</small></h2>
+    <form id="trk-add" class="controls">
+      <label>ticker <input id="trk-ticker" size="7" maxlength="10" placeholder="AAPL"></label>
+      <label>notes <input id="trk-notes" size="30" maxlength="500"></label>
+      <button>add to watchlist</button> <span id="trk-msg" class="muted"></span>
+    </form>
+    <div class="scroll"><table id="tracker"><thead></thead><tbody></tbody></table></div>
+    <div id="trk-screens" class="muted"></div>
+    <div id="trk-foot" class="muted"></div>
   </section>
 
   <section class="wide">
@@ -517,6 +531,69 @@ function spark(values) {
   }
   return svg;
 }
+async function apiSend(method, path, body) {
+  const r = await fetch(path, { method, headers: { "Content-Type": "application/json", "Authorization": "Bearer " + TOKEN },
+                                body: body ? JSON.stringify(body) : undefined });
+  const out = await r.json().catch(() => ({ error: r.statusText }));
+  if (!r.ok) throw new Error(out.error || r.statusText);
+  return out;
+}
+const TRK_COLS = [
+  ["pe", "P/E", 1, 1], ["ps", "P/S", 1, 1], ["pb", "P/B", 1, 1], ["ev_ebitda", "EV/EBITDA", 1, 1],
+  ["gross_margin", "gross m.", 100, 0], ["operating_margin", "oper. m.", 100, 0], ["net_margin", "net m.", 100, 0],
+  ["roe", "ROE", 100, 0], ["roa", "ROA", 100, 1], ["debt_to_equity", "debt/eq.", 1, 2],
+  ["net_debt_ebitda", "net debt/EBITDA", 1, 1], ["interest_coverage", "int. cover", 1, 1],
+  ["current_ratio", "current", 1, 2], ["fcf_yield", "FCF yield", 100, 1], ["revenue_growth_3y", "rev. 3y", 100, 1],
+  ["eps_growth_3y", "EPS 3y", 100, 1], ["share_change_1y", "shares 1y", 100, 1], ["altman_z", "Altman Z", 1, 1],
+];
+async function loadTracker() {
+  const t = $("tracker");
+  let d;
+  try { d = await api("/api/tracker"); } catch (e) { fail(t.tBodies[0], e); return; }
+  const pctOf = (x) => x === null || x === undefined ? "–" : (x >= 0 ? "+" : "") + (100 * x).toFixed(1) + "%";
+  const head = [el("th", { class: "l" }, "ticker"), el("th", {}, "price"), el("th", {}, "1d"), el("th", {}, "1m"), el("th", {}, "12m"),
+    ...TRK_COLS.map(([k, label]) => el("th", {}, label, infoBtn("t_" + k, label))),
+    el("th", {}, "F-score", infoBtn("t_piotroski_f", "Piotroski F-score")),
+    el("th", {}, "fwd P/E, PEG", infoBtn("t_paid_estimates", "Forward P/E and PEG")),
+    el("th", { class: "l" }, "added by"), el("th", {}, "")];
+  t.tHead.replaceChildren(el("tr", {}, ...head));
+  if (!d.rows.length) {
+    t.tBodies[0].replaceChildren(el("tr", {}, el("td", { class: "l empty", colspan: head.length }, d.missing || "nothing on the watchlist yet")));
+  } else {
+    t.tBodies[0].replaceChildren(...d.rows.map((r) => el("tr", {},
+      el("td", { class: "l", title: r.sector || "" }, el("b", {}, r.ticker), el("span", { class: "pct" }, r.name || "")),
+      el("td", {}, fmt(r.price, 2), el("span", { class: "pct" }, r.as_of || "")),
+      el("td", {}, pctOf(r.chg_1d)), el("td", {}, pctOf(r.chg_1m)), el("td", {}, pctOf(r.chg_12m)),
+      ...TRK_COLS.map(([k, , scale, dp]) => {
+        const x = r.ratios[k];
+        const v = x.value === null || x.value === undefined ? "–" : (scale === 100 ? (100 * x.value).toFixed(dp) + "%" : x.value.toFixed(dp));
+        const p = (q) => q === null || q === undefined ? "–" : Math.round(q);
+        return el("td", { title: `percentile: ${p(x.pct_sp100)} in the S&P 100, ${p(x.pct_sector)} in its sector (${r.sector_peers ?? 0} names)` },
+          v, el("span", { class: "pct" }, `${p(x.pct_sp100)} · ${p(x.pct_sector)}`));
+      }),
+      el("td", {}, r.piotroski_f ?? "–"),
+      el("td", { class: "muted" }, "n/a"),
+      el("td", { class: "l" }, ...r.added.map((a) => el("span", { class: "badge b-none trk-by",
+        title: (a.notes ? a.notes + " · " : "") + JSON.stringify(a.trigger_values) }, `${a.added_by} ${a.added_on}`))),
+      el("td", {}, r.added.some((a) => a.added_by === "user")
+        ? el("button", { on: ["click", async () => { try { await apiSend("DELETE", "/api/watchlist/" + encodeURIComponent(r.ticker)); loadTracker(); }
+                                                     catch (e) { $("trk-msg").textContent = e.message; } }] }, "remove") : ""))));
+  }
+  $("trk-screens").replaceChildren("Screens: ", ...Object.entries(d.screens).map(([k, txt]) =>
+    el("span", {}, el("b", {}, k), infoBtn("t_screen_" + k, k), ` ${txt}. `)));
+  $("trk-foot").textContent = d.footer + " Under each ratio: its percentile in the S&P 100 · in its SEC sector. " +
+    `Forward P/E, PEG and estimates: ${d.not_available}.`;
+}
+$("trk-add").addEventListener("submit", async (ev) => {
+  ev.preventDefault();
+  try {
+    const r = await apiSend("POST", "/api/watchlist", { ticker: $("trk-ticker").value.trim(), notes: $("trk-notes").value.trim() || null });
+    $("trk-msg").textContent = r.created ? "added" : "already on the watchlist";
+    $("trk-ticker").value = ""; $("trk-notes").value = "";
+    loadTracker();
+  } catch (e) { $("trk-msg").textContent = e.message; }
+});
+
 async function loadAutopsy() {
   let d;
   try { d = await api("/api/autopsy"); } catch (e) { fail($("autopsy"), e); return; }
@@ -612,7 +689,7 @@ async function boot() {
   $("status").textContent = "loading…";
   try { STRATS = await api("/api/strategies"); renderTree(); }
   catch (e) { fail($("tree"), e); }
-  await Promise.all([loadTrend(), loadAutopsy(), loadJobs(), loadCands(), loadHealth(), loadPaper(), loadScreen(),
+  await Promise.all([loadTrend(), loadTracker(), loadAutopsy(), loadJobs(), loadCands(), loadHealth(), loadPaper(), loadScreen(),
                      loadPatterns(), loadInsider(), loadContext()]);
   $("status").textContent = "updated " + new Date().toLocaleTimeString();
 }
