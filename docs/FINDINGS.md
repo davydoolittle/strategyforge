@@ -6,6 +6,57 @@ pinned windows on each candidate (P2.1).
 
 ---
 
+## F24. Calendar effects on the research ten: Treasuries rise in the last five trading days of the month; every other calendar effect fails
+
+*2026-11-27. P10.3, V2_PROMPT 8d, registered and approved as written before the
+run; evaluator committed (b08bfc6) before the run; run once, read-only on
+snapshot `etf-2026-10-30`. 4 hypotheses x 10 ETFs = 40 tests, bar p < 0.05/40 =
+0.00125 plus the same sign in both halves; SPY's turn of month repeats F18 and
+was not scored, so 39 were.*
+
+**Result: 2 of 39 pass, both C4 (month end) in Treasuries.**
+
+| ETF | on - off | t | p | first half / second half | gross, % a year | net of 2x spread, % a year |
+|---|---|---|---|---|---|---|
+| IEF (7-10y) | +5.1 bp a day | 4.16 | 0.000016 | +3.7 / +6.5 bp | +3.06 | +1.62 |
+| TLT (20y+) | +8.6 bp a day | 3.35 | 0.00041 | +6.5 / +10.6 bp | +5.14 | +3.70 |
+
+Over 2002-08 to 2026-09 (6,080 days, 1,450 of them month-end days), the last five
+trading days of the month averaged 5-9 basis points a day more than other days
+in both bond funds, in both halves of the period.
+
+**Everything else failed.** No turn-of-month, weekday or options-expiration
+effect in stocks (SPY, QQQ, IWM, EFA, EEM), gold, commodities or the dollar
+clears the bar. The closest were EEM's turn of month (p 0.015) and IWM's month
+end (p 0.033), both far from 0.00125 and both mostly from the first half.
+SPY's turn of month (the F18 repeat) is +3.9 bp, p 0.11, as F18 found.
+
+**What it does and does not mean.**
+
+- **One effect, not two.** IEF and TLT hold the same kind of bond and move
+  together; the two passes are one finding about Treasuries.
+- **It has a known mechanism.** Bond index providers lengthen their indexes at
+  each month end, and funds benchmarked to them buy longer Treasuries to match.
+  That is a documented, published effect, so part of it may be widely traded
+  already, and it may fade.
+- **It is a calendar fact, not a strategy.** The "net" column charges twice the
+  quoted spread on each of about 12 entries and exits a year; it is the on-day
+  excess over other days, not the return of a book that holds bonds only at
+  month end. Whether that book beats holding the bonds, after costs, is the
+  next and separate question.
+
+**What this licenses.**
+
+- **One new registration is earned:** a cost-inclusive Treasury month-end rule
+  (hold IEF or TLT in the last five trading days, cash or the other days),
+  against buy-and-hold of the same fund, N = 1 per fund, written and approved
+  before it runs. It counts this study as its family's first trial.
+- **No stock calendar rule is earned.**
+- **No message may quote it as a reason to trade.** The dashboard may show it as
+  a dated fact with this entry's numbers.
+
+---
+
 ## F23. Stock factor battery, point-in-time S&P 500, 2017-2026: FAIL, 0 of 6 testable; profitability not testable
 
 *2026-11-20. Phase 15, V2_PROMPT 8j, approved as written 2026-11-18; code
