@@ -101,6 +101,9 @@ JOB_SPECS = [
     # P13F (route B): current members, their new 8-Ks, Alpaca bars, recorded
     # forward from the first run (filings_forward.py); into stocks.db
     ("filings_forward", "1d", "filings_forward.py", 3600),
+    # P9.4 tracker, display only: today's S&P 100, Alpaca bars, SEC company
+    # facts and ratios, the declared screens (tracker.py)
+    ("tracker", "1d", "tracker.py --refresh", 3600),
 ]
 # Jobs taken out of JOB_SPECS. Their rows stay in the jobs table as the record;
 # the scheduler skips any name not in JOB_SPECS and the dashboard hides these.
