@@ -238,5 +238,419 @@
   "traditional_reading": "Several insiders buying with their own money is traditionally read as confidence.",
   "what_the_record_shows": "Lakonishok and Lee (2001) found insider purchases predicted returns mainly in small companies over 1975-1995. Here insider data is untested (no registered study has passed).",
   "source": "https://www.sec.gov/files/forms-3-4-5.pdf"
+ },
+ "A1": {
+  "what_it_is": "Too few trades to tell skill from luck. Hard attack: fewer out-of-sample trades than a statistical floor means REJECTED.",
+  "traditional_reading": "n/a",
+  "how_to_read_this_panel": "A red A1 means too few trades: the result cannot be told from luck.",
+  "source": "app/adversary.py"
+ },
+ "A2": {
+  "what_it_is": "Is this better than the luckiest of all the random strategies we tried? Hard attack: DSR below 0.95 means REJECTED. Every candidate so far has failed here.",
+  "traditional_reading": "n/a",
+  "how_to_read_this_panel": "A red A2 means the result is no better than the luckiest of the strategies tried.",
+  "source": "app/adversary.py"
+ },
+ "A3": {
+  "what_it_is": "Does it work in most separate stretches of time? Soft attack: too few profitable folds.",
+  "traditional_reading": "n/a",
+  "how_to_read_this_panel": "A soft fail: most of the profit came from a few periods.",
+  "source": "app/adversary.py"
+ },
+ "A4": {
+  "what_it_is": "Does it still work if the settings are nudged 10-25%? Soft attack: a result that collapses when nudged was tuned to noise.",
+  "traditional_reading": "n/a",
+  "how_to_read_this_panel": "A soft fail: small setting changes break it.",
+  "source": "app/adversary.py"
+ },
+ "A5": {
+  "what_it_is": "Does the edge survive if trading costs double? Soft attack.",
+  "traditional_reading": "n/a",
+  "how_to_read_this_panel": "A soft fail: doubling costs removes the edge.",
+  "source": "app/adversary.py"
+ },
+ "A6": {
+  "what_it_is": "Does it get better if trades are filled later? That means it is cheating with the future. Hard attack: real edges get worse when delayed, not better.",
+  "traditional_reading": "n/a",
+  "how_to_read_this_panel": "A red A6 is serious: getting better with delayed fills means it used information it could not have had.",
+  "source": "app/adversary.py"
+ },
+ "A7": {
+  "what_it_is": "Does the idea work on other markets too? Soft attack: no other pair reaches a profit factor of 1.1.",
+  "traditional_reading": "n/a",
+  "how_to_read_this_panel": "A soft fail: the idea works only on the market it was tuned on.",
+  "source": "app/adversary.py"
+ },
+ "A8": {
+  "what_it_is": "Would bad luck produce a drop bigger than the risk budget? Soft attack, from the Monte Carlo shuffle.",
+  "traditional_reading": "n/a",
+  "how_to_read_this_panel": "A soft fail: bad luck could cause a larger loss than allowed.",
+  "source": "app/adversary.py"
+ },
+ "A9": {
+  "what_it_is": "Did all the profit come from one kind of market, such as one bull run? Soft attack.",
+  "traditional_reading": "n/a",
+  "how_to_read_this_panel": "A soft fail: the profit came from one kind of market.",
+  "source": "app/adversary.py"
+ },
+ "alert_price": {
+  "what_it_is": "The price TradingView reported vs the price our engine used. They should match.",
+  "traditional_reading": "n/a",
+  "how_to_read_this_panel": "The two columns should be equal; a gap means the live chart and the engine saw different prices.",
+  "source": "app/paper.py"
+ },
+ "bear": {
+  "what_it_is": "Price below its 200-day average, and the average falling. A falling market by this rule.",
+  "traditional_reading": "Price below the 200-day average is the classic definition of a downtrend.",
+  "what_the_record_shows": "Holding stocks only in Bull and cash otherwise halved the worst drop since 1993 but earned less (F22, 2026).",
+  "source": "https://en.wikipedia.org/wiki/Market_trend"
+ },
+ "bull": {
+  "what_it_is": "Price above its 200-day average, and the average rising. A rising market by this rule.",
+  "traditional_reading": "Price above the 200-day average is the classic definition of an uptrend.",
+  "what_the_record_shows": "On 2026-11-19 the strip turned SPY from Bull to Flat when it slipped 2% under its 200-day average.",
+  "source": "https://en.wikipedia.org/wiki/Market_trend"
+ },
+ "cagr": {
+  "what_it_is": "The steady yearly growth rate that would turn the starting amount into the ending amount. Compound annual growth rate. It hides the bumps: two strategies with the same CAGR can have very different drawdowns.",
+  "traditional_reading": "Large US stocks have returned about 10% a year over the long run, before inflation.",
+  "what_the_record_shows": "From 1993 to 2026 SPY grew about 10.8% a year in this project's data (F22).",
+  "source": "https://en.wikipedia.org/wiki/Compound_annual_growth_rate"
+ },
+ "col_family": {
+  "what_it_is": "The kind of strategy: each family is one trading idea with adjustable settings. smrt_v41 (a multi-indicator trend system), core (simpler trend), squeeze (breakouts after quiet periods).",
+  "traditional_reading": "n/a",
+  "how_to_read_this_panel": "Compare candidates within a family; each family's tries count against its own bar.",
+  "source": "app/optimizer.py, app/adversary.py"
+ },
+ "col_gate": {
+  "what_it_is": "Did it pass the optimizer's first, simple filter (enough trades, PF above a floor)? 1 = passed. Passing the gate only earns an adversary report.",
+  "traditional_reading": "n/a",
+  "how_to_read_this_panel": "1 means it passed the first filter and earned a report; 0 means it did not.",
+  "source": "app/optimizer.py, app/adversary.py"
+ },
+ "col_id": {
+  "what_it_is": "The candidate's ID number. Each optimizer result gets one; reports and lineage refer to it.",
+  "traditional_reading": "n/a",
+  "how_to_read_this_panel": "Click a row's number in Lineage or Report to find the same candidate elsewhere.",
+  "source": "app/optimizer.py, app/adversary.py"
+ },
+ "col_mc_dd95": {
+  "what_it_is": "A bad-luck worst case: the drawdown you would hit in 1 of 20 shuffled histories. Monte Carlo: the trades are reshuffled thousands of times; this is the 95th-percentile drawdown (attack A8).",
+  "traditional_reading": "More than about 25-30% is traditionally read as too much risk for one strategy.",
+  "what_the_record_shows": "Most candidates attacked in October-November 2026 passed A8; it was A2 that rejected them.",
+  "source": "app/adversary.py"
+ },
+ "col_n": {
+  "what_it_is": "How many trades in the practice and real-exam periods. Below about 30, any result is mostly noise (attack A1).",
+  "traditional_reading": "About 30 trades is a common minimum before reading anything into a result.",
+  "how_to_read_this_panel": "Compare IS n and OOS n: a result on 20 trades is mostly noise.",
+  "source": "app/optimizer.py, app/adversary.py"
+ },
+ "col_net": {
+  "what_it_is": "Profit in dollars in the out-of-sample period, on a $10,000 test account. After costs.",
+  "traditional_reading": "n/a",
+  "how_to_read_this_panel": "Positive is a profit on the test account after costs; compare with the trade count.",
+  "source": "app/optimizer.py, app/adversary.py"
+ },
+ "col_pair": {
+  "what_it_is": "What was traded, e.g. BTC-USD (bitcoin priced in dollars) or SPY. Crypto pairs trade around the clock; funds only in market hours.",
+  "traditional_reading": "n/a",
+  "how_to_read_this_panel": "Crypto pairs end in -USD; funds and stocks are plain tickers.",
+  "source": "app/optimizer.py, app/adversary.py"
+ },
+ "col_pf": {
+  "what_it_is": "Money won divided by money lost. Above 1 makes money; 1.5 is good. Shown for in-sample and out-of-sample separately.",
+  "traditional_reading": "Above 1.5 is traditionally read as good; below 1 loses money.",
+  "what_the_record_shows": "In 2026 the best candidates here showed out-of-sample PF about 1.4-1.6 and still failed the deflated-Sharpe test.",
+  "source": "https://en.wikipedia.org/wiki/Profit_factor"
+ },
+ "col_plateau": {
+  "what_it_is": "Do nearby settings work too? Good strategies sit on a plateau, not a spike. Share of small setting nudges that keep the result (attack A4). Low means the exact settings were luck.",
+  "traditional_reading": "Above about 0.6 is traditionally read as robust.",
+  "how_to_read_this_panel": "Close to 1 means nearby settings work as well; low means a fragile spike.",
+  "source": "app/optimizer.py, app/adversary.py"
+ },
+ "col_tf": {
+  "what_it_is": "How long each price bar is: 1h is hourly, 1d is daily. Shorter bars mean more trades and more costs.",
+  "traditional_reading": "n/a",
+  "how_to_read_this_panel": "1h rows were tested on hourly bars, 1d rows on daily bars.",
+  "source": "app/optimizer.py, app/adversary.py"
+ },
+ "col_verdict": {
+  "what_it_is": "The adversary's ruling: SURVIVED, FRAGILE or REJECTED. REJECTED: a hard attack (A1, A2 or A6) landed. FRAGILE: two or more soft ones. SURVIVED: at most one soft one, which only earns paper trading. Every candidate so far is REJECTED.",
+  "traditional_reading": "n/a",
+  "what_the_record_shows": "Up to November 2026 every candidate reported here is REJECTED.",
+  "source": "app/optimizer.py, app/adversary.py"
+ },
+ "col_wf": {
+  "what_it_is": "Did it make money in most separate time slices, or just one lucky stretch? The share of walk-forward folds that were profitable (attack A3).",
+  "traditional_reading": "Above about 0.6 is traditionally read as consistent.",
+  "how_to_read_this_panel": "1.00 means every fold made money; below about 0.6 the profit came from a few stretches.",
+  "source": "app/optimizer.py, app/adversary.py"
+ },
+ "dollar_vol_rank": {
+  "what_it_is": "Rank by how many dollars change hands each day: 1 is the most traded. Median of the last 20 trading days.",
+  "traditional_reading": "n/a",
+  "how_to_read_this_panel": "1 is the most traded fund in the US; the list is rebuilt every Sunday.",
+  "source": "app/etf_universe.py"
+ },
+ "drawdown": {
+  "what_it_is": "The drop from a peak to the lowest point before a new high: the worst stretch you sat through. A 50% drawdown needs a 100% gain to get back. 'Max drawdown' is the worst one in the period.",
+  "traditional_reading": "Stock investors traditionally expect a 20-35% drawdown now and then; over 50% is a crash-size loss.",
+  "what_the_record_shows": "The S&P 500 fell about 55% from October 2007 to March 2009 and only regained its peak in 2013.",
+  "source": "https://en.wikipedia.org/wiki/Drawdown_(economics)"
+ },
+ "dsr": {
+  "what_it_is": "PSR after allowing for how many strategies were tried: 'is this better than the luckiest of N random tries?' The adversary's key test (A2). Needs 0.95 to pass. More tries raise the bar, which is why failures are never deleted.",
+  "traditional_reading": "This project's bar is 0.95: below it, the result may be the luck of trying many strategies.",
+  "what_the_record_shows": "Every candidate tested here up to November 2026 scored below 0.95; the best, #4027, reached 0.26 (F9).",
+  "source": "https://en.wikipedia.org/wiki/Deflated_Sharpe_ratio"
+ },
+ "engine_fired": {
+  "what_it_is": "Whether our engine would have signalled the same trade at that moment. 'no' means the live and tested versions disagree.",
+  "traditional_reading": "n/a",
+  "how_to_read_this_panel": "yes is good; no means the engine would not have traded there.",
+  "source": "app/paper.py"
+ },
+ "flat": {
+  "what_it_is": "Price and average disagree, or the average is level: no clear trend. Treasuries flipped in and out of this state ten times in a year, which shows how noisy one reading can be.",
+  "traditional_reading": "Traditionally read as no clear trend in either direction.",
+  "what_the_record_shows": "Treasuries flipped between states ten times in the twelve months to November 2026.",
+  "source": "https://en.wikipedia.org/wiki/Market_trend"
+ },
+ "hold_h": {
+  "what_it_is": "How many hours the trade was open. From the fill at entry to the exit, or to now if the trade is still open.",
+  "traditional_reading": "n/a",
+  "how_to_read_this_panel": "Long holds tie up the position; very short ones often mean a stop was hit fast.",
+  "source": "app/autopsy.py"
+ },
+ "ins_cluster": {
+  "what_it_is": "Two or more insiders buying the same company's stock within days. The classic claim is that this means they see good news. Untested here.",
+  "traditional_reading": "Several insiders buying at once is traditionally read as confidence in the company.",
+  "what_the_record_shows": "Untested here. Lakonishok and Lee (2001) found insider buying predicted returns mainly in small firms, 1975-1995.",
+  "source": "https://www.sec.gov/files/forms-3-4-5.pdf"
+ },
+ "ins_open_market": {
+  "what_it_is": "An insider paying their own money for shares on the exchange (Form 4 code P). Unlike awards or option exercises, it costs them cash.",
+  "traditional_reading": "Traditionally a stronger sign than awards or option exercises, since it costs the insider cash.",
+  "what_the_record_shows": "Untested here. In November 2026 the feed held 134 open-market purchases across S&P 100 companies.",
+  "source": "https://www.sec.gov/files/forms-3-4-5.pdf"
+ },
+ "p_value": {
+  "what_it_is": "The chance of seeing a result this strong if nothing real were going on. Small is good: 0.01 means 1 in 100. With many tests, some small ones happen by luck, so the bar is divided by the number of tests (see Bonferroni).",
+  "traditional_reading": "Below 0.05 is the traditional cut for 'significant'; with many tests the cut is divided by their number.",
+  "what_the_record_shows": "In November 2026 this project ran 40 calendar tests; only two passed the corrected bar, both month end in Treasuries (F24).",
+  "source": "https://en.wikipedia.org/wiki/P-value"
+ },
+ "panel_autopsy": {
+  "what_it_is": "A plain record of each new trade the two forward tests made, and the conditions at the time. Shows the market mood, weekday and outcome of each forward trade. Descriptive only: picking strategies from what winners had in common is a known trap, so nothing is built from this table.",
+  "traditional_reading": "n/a",
+  "how_to_read_this_panel": "One row per forward trade: when it fired, which way, the market mood and fear level that day, how long it was held and how it ended. Far too few rows to draw conclusions from.",
+  "source": "app/autopsy.py (The same forward trades the decay monitor uses; updated computed when the page loads, cached until a new candle)"
+ },
+ "panel_candidates": {
+  "what_it_is": "Every strategy setting the optimizer ever tried, with the adversary's verdict on the best ones. Thousands of random settings were tested on old data. A few looked good; the adversary then attacked them. Failures are never deleted, because the number of tries is what tells us how lucky the best one probably was.",
+  "traditional_reading": "n/a",
+  "how_to_read_this_panel": "Sorted by DSR, the key column: anything below 0.95 has not proved itself. Use the filters for timeframe, family and verdict, and click a row with a report to open it below.",
+  "source": "app/optimizer.py (forge.db tables candidates and adversarial_reports; updated the adversary weekly; the optimizer only when run)"
+ },
+ "panel_context": {
+  "what_it_is": "The economy's dashboard lights: fear gauge, interest rates, credit stress, valuation. Each line is one widely watched series with a plain status word. Context only: none of them may trigger a trade, and the classic readings of most of them were tested and not established (F18).",
+  "traditional_reading": "n/a",
+  "how_to_read_this_panel": "Each row is one economy-wide indicator with its latest value, date and a fixed-rule status word; press (i) for what the reading has meant historically. Below: today's regime tag and a sizing note.",
+  "source": "app/market_context.py (CBOE (VIX, put/call), FRED (yields, credit spreads, Sahm rule, fed funds), Shiller (CAPE), and SPY's own prices; updated daily (job 'market_context'))"
+ },
+ "panel_decay": {
+  "what_it_is": "An alarm that fires if a strategy starts doing worse than it did when it was tested. For each watched strategy, every new trade is compared with the trades from its test period. A running score (CUSUM) falls when results are below that baseline; crossing -3 is the alert.",
+  "traditional_reading": "n/a",
+  "how_to_read_this_panel": "One line per watched strategy: a small chart of its CUSUM score and today's value. Green means fine; red means the score crossed -3 and the strategy is doing worse than in its test.",
+  "source": "app/health.py (Backtests on new candles, or TradingView paper trades if any; updated daily (job 'health'))"
+ },
+ "panel_glossary": {
+  "what_it_is": "Every term on this page, in one line each. Click any (i) button for the full entry; this list has them all, A to Z.",
+  "traditional_reading": "n/a",
+  "how_to_read_this_panel": "Every term on the page, A to Z, each with a one-line memory hook. Click a term for its full explanation.",
+  "source": "app/static/glossary.json (written for this dashboard, no data)"
+ },
+ "panel_insider": {
+  "what_it_is": "Company bosses buying their own company's stock, from their legal filings. Executives and directors must report their trades to the SEC on Form 4 within two days. A 'cluster' is several of them buying at once. Untested here: it may say nothing about what the price does next.",
+  "traditional_reading": "n/a",
+  "how_to_read_this_panel": "The top table lists clusters (several insiders buying one stock); the lower one each open-market purchase of $100,000 or more in the last 90 days. Sales are left out.",
+  "source": "app/insider_feed.py (SEC Form 4 filings, collected by the Edgar Alert project; updated daily (job 'insider'))"
+ },
+ "panel_jobs": {
+  "what_it_is": "The collector's to-do list: what ran, when, and whether it worked. Each line is a scheduled task. 'ok' means it finished; 'failed' shows the error on hover; 'overdue' means it should have run more than two hours ago. The newest crypto candle shows the collector is alive.",
+  "traditional_reading": "n/a",
+  "how_to_read_this_panel": "Each row is a scheduled task with when it last started and when it is due. Look at the state column: ok, failed (hover for the error), overdue or paused. The heading's candle time shows the collector is alive.",
+  "source": "app/main.py (forge.db table jobs; updated live)"
+ },
+ "panel_lineage": {
+  "what_it_is": "The family tree of strategies we chose to track, and how far each has been promoted. Each strategy started as one optimizer result. Promotion needs evidence: a strategy rejected by the adversary can never move past 'backtest winner'. 'Forward test' means it is being watched on new data, which promotes nothing.",
+  "traditional_reading": "n/a",
+  "how_to_read_this_panel": "Each line is one tracked strategy: its number, status, family, market and candidate. Indented lines are children of the line above. A badge shows the adversary's latest verdict; 'forward test' means it is being watched on new data.",
+  "source": "app/lineage.py (forge.db tables strategies and promotions; updated when a strategy is registered, promoted or marked)"
+ },
+ "panel_paper": {
+  "what_it_is": "Does the live TradingView alert match what our own backtest engine would have done? Each TradingView alert is a pretend (paper) trade. This table checks the alert's price and timing against the engine's. Mismatches mean the live version and the tested version have drifted apart.",
+  "traditional_reading": "n/a",
+  "how_to_read_this_panel": "Pick a strategy; each row is one TradingView alert. 'Engine fired' should say yes and the two prices should match; a 'no' means the live and tested versions disagree.",
+  "source": "app/paper.py (TradingView alerts relayed by davesbridge (signals.db, read-only), and engine re-runs; updated hourly (job 'paper'))"
+ },
+ "panel_patterns": {
+  "what_it_is": "52 old market sayings, each tested once on real data, with the verdict kept. Sayings like 'sell in May' or 'don't fight the Fed', written down before testing and never removed. None proved out; five were suggestive, about what luck gives (F18).",
+  "traditional_reading": "n/a",
+  "how_to_read_this_panel": "One row per old market saying, with how often it applied, the average return when it did and when it did not, and the verdict. 'On now' marks sayings whose condition holds today.",
+  "source": "app/patterns.py (Prices from Tiingo; economic data from the US Treasury, CBOE, BLS and NY Fed, each value dated when it was released; updated Sundays 22:00 UTC)"
+ },
+ "panel_report": {
+  "what_it_is": "The adversary's nine attacks on one candidate, with its profit curve. Click a reported candidate to see whether it survived each attack, and its account value and drawdown over its test windows. One hard attack landing means REJECTED.",
+  "traditional_reading": "n/a",
+  "how_to_read_this_panel": "The top chart is the account value over the candidate's test windows, the lower one its drawdown. Each box is one attack: a red hard fail (A1, A2, A6) means REJECTED.",
+  "source": "app/adversary.py (forge.db adversarial_reports, plus the engine re-running the candidate on its pinned windows; updated when the adversary runs)"
+ },
+ "panel_screen": {
+  "what_it_is": "A ranking of the 50 most-traded US funds by how smoothly they rose over a year. Each fund's 12-month return divided by how much it swung. A ranking, not a signal: momentum tested on funds found no edge (F20). The top-50 list itself is re-chosen weekly by trading volume.",
+  "traditional_reading": "n/a",
+  "how_to_read_this_panel": "Funds are ranked by 12-month return per unit of swing; flags mark big one-month moves. It is a ranking of what already happened, not a forecast.",
+  "source": "app/screen.py (Daily prices: Alpaca (screen funds) and Tiingo (research funds); fund list from Tiingo's ticker list and Alpaca; updated list Sundays 23:00 UTC, ranking Mondays 06:00 UTC)"
+ },
+ "panel_tracker": {
+  "what_it_is": "Today's big US companies you or a screen chose to watch, with their key numbers. Price changes, valuation ratios and financial-health scores for S&P 100 names, each with how it ranks among the 100 and within its industry. Facts and traditional readings, not recommendations.",
+  "traditional_reading": "n/a",
+  "how_to_read_this_panel": "One row per watched company: price changes, then ratios with two small rank numbers under each (S&P 100, then its industry). 'Added by' shows who chose it and, on hover, why.",
+  "source": "app/tracker.py (S&P 100 list from Wikipedia; prices from Alpaca; company financials from SEC filings (XBRL company facts); updated daily (job 'tracker'))"
+ },
+ "panel_trend": {
+  "what_it_is": "Is each market above or below its long-run average, and is that average rising? One word per market: Bull, Flat or Bear, from a fixed 200-day rule. It describes the trend; it does not predict it. Tested as a trading switch, it cut losses in crashes but earned less (F22).",
+  "traditional_reading": "n/a",
+  "how_to_read_this_panel": "Read the big word on each card: Bull, Flat or Bear. 'Since' says when that state began; the coloured bar under it shows the last 12 months. Many changes in a year mean the reading is noisy.",
+  "source": "app/market_trend.py (Daily closing prices: SPY, IEF, GLD, UUP from Tiingo (refreshed Sundays), Bitcoin from Coinbase hourly candles; updated computed each time the page loads)"
+ },
+ "pat_not_supported": {
+  "what_it_is": "The data did not back the saying. Most of the 52 sayings ended here.",
+  "traditional_reading": "n/a",
+  "how_to_read_this_panel": "The saying did not hold up in the data.",
+  "source": "app/patterns.py"
+ },
+ "pat_on_now": {
+  "what_it_is": "The saying's condition holds today. Context only, never a trading rule.",
+  "traditional_reading": "n/a",
+  "how_to_read_this_panel": "'yes' means the saying's condition is met today; it is context, not a call.",
+  "source": "app/patterns.py"
+ },
+ "pat_opposite": {
+  "what_it_is": "The data pointed the other way, strongly. One saying ended here: the data pointed against it.",
+  "traditional_reading": "n/a",
+  "how_to_read_this_panel": "The data pointed the other way.",
+  "source": "app/patterns.py"
+ },
+ "pat_statuses": {
+  "what_it_is": "The verdict each saying got when tested: SUPPORTED, SUGGESTIVE, NOT SUPPORTED, OPPOSITE or TOO FEW. Click the (i) beside each status word for what it means. No saying reached SUPPORTED.",
+  "traditional_reading": "n/a",
+  "how_to_read_this_panel": "Read the status word on each row, and press its (i) for what it means.",
+  "source": "app/patterns.py"
+ },
+ "pat_suggestive": {
+  "what_it_is": "Pointed the right way, but not strongly enough to rule out luck. Five of 52, about what luck alone would give.",
+  "traditional_reading": "n/a",
+  "how_to_read_this_panel": "Treat as 'maybe, but probably luck'.",
+  "source": "app/patterns.py"
+ },
+ "pat_supported": {
+  "what_it_is": "Held up after correcting for testing 52 sayings at once, in both halves of history. None has reached this.",
+  "traditional_reading": "n/a",
+  "how_to_read_this_panel": "No saying has this status.",
+  "source": "app/patterns.py"
+ },
+ "pat_too_few": {
+  "what_it_is": "Not enough separate occasions to test. Usually a rare event, such as a recession signal, with only a handful of past cases.",
+  "traditional_reading": "n/a",
+  "how_to_read_this_panel": "Too few cases to say anything.",
+  "source": "app/patterns.py"
+ },
+ "pat_windows": {
+  "what_it_is": "How many separate, non-overlapping occasions were tested. Eight windows can only say so much.",
+  "traditional_reading": "n/a",
+  "how_to_read_this_panel": "The first number is occasions when the saying applied, the second the comparison occasions.",
+  "source": "app/patterns.py"
+ },
+ "percentile_change": {
+  "what_it_is": "How much the price changed over the last month or year. Total return over 21 or 252 trading days, dividends included (adjusted prices).",
+  "traditional_reading": "n/a",
+  "how_to_read_this_panel": "Positive means the price rose over that period.",
+  "source": "app/screen.py"
+ },
+ "regime": {
+  "what_it_is": "The day's market mood: trend_up, trend_down or chop (going sideways). From the previous day's 50-day average slope and the ADX trend-strength reading (below 20 = chop).",
+  "traditional_reading": "n/a",
+  "how_to_read_this_panel": "trend_up and trend_down mean a clear daily trend; chop means sideways.",
+  "source": "app/features.py (RegimeTagger)"
+ },
+ "reversal_flag": {
+  "what_it_is": "Up or down a lot in the last month: big short moves often partly reverse. Flags the top and bottom 10% by 1-month return.",
+  "traditional_reading": "Traditionally read as a warning that part of a big one-month move may reverse.",
+  "what_the_record_shows": "This project's 2026 momentum tests on funds found no edge from rankings or flags (F20).",
+  "source": "https://en.wikipedia.org/wiki/Momentum_(finance)"
+ },
+ "sharpe": {
+  "what_it_is": "Reward per unit of bumpiness: how much you earned for the ups and downs you sat through. Average return divided by how much returns swing. Higher is better; above 1 a year is good for a whole portfolio. 'SR/trade' is the same idea per trade.",
+  "traditional_reading": "Above 1 a year is traditionally read as good for a whole portfolio; above 2 as excellent and rare.",
+  "what_the_record_shows": "The best strategy found here, #4027, reached about 0.18 per trade (2026), far below what proof needs at its trade count.",
+  "source": "https://en.wikipedia.org/wiki/Sharpe_ratio"
+ },
+ "st_approved": {
+  "what_it_is": "A human decision. Code can never set it. Nothing here is approved.",
+  "traditional_reading": "n/a",
+  "how_to_read_this_panel": "Only a person can set it; nothing here is approved.",
+  "source": "app/lineage.py"
+ },
+ "st_backtest_winner": {
+  "what_it_is": "Looked good in a backtest. As far as a rejected strategy can ever go. Promotion past this needs the adversary's SURVIVED verdict.",
+  "traditional_reading": "n/a",
+  "how_to_read_this_panel": "The highest rung a rejected strategy can reach.",
+  "source": "app/lineage.py"
+ },
+ "st_hypothesis": {
+  "what_it_is": "Registered for tracking; no evidence attached yet. The bottom of the promotion ladder.",
+  "traditional_reading": "n/a",
+  "how_to_read_this_panel": "The first rung of the ladder.",
+  "source": "app/lineage.py"
+ },
+ "st_oos_validated": {
+  "what_it_is": "Survived the adversary on its out-of-sample data. Licence to paper-trade, not to trade.",
+  "traditional_reading": "n/a",
+  "how_to_read_this_panel": "Would allow paper trading; no strategy here has reached it.",
+  "source": "app/lineage.py"
+ },
+ "st_paper_validated": {
+  "what_it_is": "Matched its backtest in live paper trading over enough time. Needs about 30 reconciled trades over 60 days.",
+  "traditional_reading": "n/a",
+  "how_to_read_this_panel": "Would follow a successful paper-trading period; none has.",
+  "source": "app/lineage.py"
+ },
+ "st_retired": {
+  "what_it_is": "No longer watched; its history is kept. Its history and all its trials stay on record, so they keep counting.",
+  "traditional_reading": "n/a",
+  "how_to_read_this_panel": "Kept for the record; no longer watched.",
+  "source": "app/lineage.py"
+ },
+ "vix_band": {
+  "what_it_is": "How nervous the stock market was that day, compared with the past year: <50, 50-90 or >90. The VIX's percentile over the last 252 trading days.",
+  "traditional_reading": "The top band (above 90) is traditionally read as market stress.",
+  "what_the_record_shows": "The VIX closed at a record 82.69 on 16 March 2020, the top of its band.",
+  "source": "https://www.cboe.com/tradable_products/vix/"
+ },
+ "vol_adj": {
+  "what_it_is": "Return per unit of bumpiness over a year: smooth risers score high. 12-month return divided by 12-month volatility.",
+  "traditional_reading": "Higher is traditionally read as a steadier, stronger trend.",
+  "what_the_record_shows": "In November 2026 the screen's top fund scored about 3.5; T-bill funds are ranked last because the ratio means nothing for them.",
+  "source": "https://en.wikipedia.org/wiki/Sharpe_ratio"
+ },
+ "volatility": {
+  "what_it_is": "How much the price swings, as a yearly percentage. About 15-20% for the stock market, 50%+ for bitcoin.",
+  "traditional_reading": "About 15-20% a year is normal for the stock market; under 5% is bond- or cash-like.",
+  "what_the_record_shows": "Bitcoin's yearly volatility ran above 50% in 2021-2026, about three times the stock market's (F22).",
+  "source": "https://en.wikipedia.org/wiki/Volatility_(finance)"
  }
 }

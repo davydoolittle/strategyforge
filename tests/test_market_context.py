@@ -199,12 +199,19 @@ class TestExplain(unittest.TestCase):
         self.assertEqual(need - set(self.e), set())
 
     def test_four_short_fields(self):
+        """what_it_is, traditional_reading ("n/a" allowed for panels and labels),
+        then either a dated what_the_record_shows or a how_to_read_this_panel,
+        and a source: a web page, or the app/ module that makes the item."""
         for k, v in self.e.items():
-            self.assertEqual(set(v), {"what_it_is", "traditional_reading", "what_the_record_shows", "source"}, k)
-            for f in ("what_it_is", "traditional_reading", "what_the_record_shows"):
+            third = {"what_the_record_shows", "how_to_read_this_panel"} & set(v)
+            self.assertEqual(len(third), 1, k)
+            self.assertEqual(set(v), {"what_it_is", "traditional_reading", "source"} | third, k)
+            for f in ("what_it_is", "traditional_reading") + tuple(third):
+                self.assertTrue(v[f], f"{k}.{f}")
                 self.assertLess(len(v[f].split()), 60, f"{k}.{f}")
-            self.assertTrue(v["source"].startswith(("http://", "https://")), k)
-            self.assertRegex(v["what_the_record_shows"], r"\b(19|20)\d\d\b", f"{k} has no dated example")
+            self.assertTrue(v["source"].startswith(("http://", "https://", "app/")), k)
+            if "what_the_record_shows" in v:
+                self.assertRegex(v["what_the_record_shows"], r"\b(19|20)\d\d\b", f"{k} has no dated example")
 
 
 class TestNoTradeCalls(unittest.TestCase):

@@ -524,8 +524,11 @@ async function showExplain(key, title) {
   if (g && g.plain) dl.append(el("dt", {}, "In plain words"), el("dd", {}, g.plain));
   if (e) {
     for (const [t, v] of [["What it is", e.what_it_is], ["Traditional reading", e.traditional_reading],
-                          ["What the record shows", e.what_the_record_shows]]) dl.append(el("dt", {}, t), el("dd", {}, v));
-    dl.append(el("dt", {}, "Source"), el("dd", {}, el("a", { href: e.source, target: "_blank", rel: "noopener" }, e.source)));
+                          ["What the record shows", e.what_the_record_shows], ["How to read it", e.how_to_read_this_panel]]) {
+      if (v && v !== "n/a") dl.append(el("dt", {}, t), el("dd", {}, v));
+    }
+    const src = /^https?:\/\//.test(e.source) ? el("a", { href: e.source, target: "_blank", rel: "noopener" }, e.source) : e.source;
+    dl.append(el("dt", {}, "Source"), el("dd", {}, src));
   }
   if (g && g.provenance) {
     const pv = g.provenance;
