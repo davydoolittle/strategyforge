@@ -104,6 +104,8 @@ JOB_SPECS = [
     # P9.4 tracker, display only: today's S&P 100, Alpaca bars, SEC company
     # facts and ratios, the declared screens (tracker.py)
     ("tracker", "1d", "tracker.py --refresh", 3600),
+    # names just added to the watchlist get their bars, facts and ratios within the hour
+    ("tracker_new", "1h", "tracker.py --new", 900),
     # quarterly readings of every running forward test, sent via ntfy; for the
     # record only, never a verdict (forward_readings.py)
     ("forward_readings", "91d", "forward_readings.py --notify", 900),

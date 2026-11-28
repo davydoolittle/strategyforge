@@ -178,7 +178,7 @@
     <form id="trk-add" class="controls">
       <label>ticker <input id="trk-ticker" size="7" maxlength="10" placeholder="AAPL"></label>
       <label>notes <input id="trk-notes" size="30" maxlength="500"></label>
-      <button>add to watchlist</button> <span id="trk-msg" class="muted"></span>
+      <button>add to watchlist</button> <span class="muted">any US-listed stock or fund</span> <span id="trk-msg" class="muted"></span>
     </form>
     <div class="scroll"><table id="tracker"><thead></thead><tbody></tbody></table></div>
     <div id="trk-screens" class="muted"></div>
@@ -615,7 +615,9 @@ async function loadTracker() {
     t.tBodies[0].replaceChildren(el("tr", {}, el("td", { class: "l empty", colspan: head.length }, d.missing || "nothing on the watchlist yet")));
   } else {
     t.tBodies[0].replaceChildren(...d.rows.map((r) => el("tr", {},
-      el("td", { class: "l", title: r.sector || "" }, el("b", {}, r.ticker), el("span", { class: "pct" }, r.name || "")),
+      el("td", { class: "l", title: r.sector || "" }, el("b", {}, r.ticker), el("span", { class: "pct" }, r.name || ""),
+        r.pending ? el("span", { class: "pct err" }, r.pending) : "",
+        r.sp100_member === false ? el("span", { class: "pct" }, "not in the S&P 100: ranked against it") : ""),
       el("td", {}, fmt(r.price, 2), el("span", { class: "pct" }, r.as_of || "")),
       el("td", {}, pctOf(r.chg_1d)), el("td", {}, pctOf(r.chg_1m)), el("td", {}, pctOf(r.chg_12m)),
       ...TRK_COLS.map(([k, , scale, dp]) => {

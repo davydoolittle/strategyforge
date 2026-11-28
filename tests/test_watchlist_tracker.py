@@ -70,12 +70,19 @@ class TestAuthorizer(unittest.TestCase):
         conn = web.connect_watchlist(self.db)
         self.addCleanup(conn.close)
         WL.add(conn, "AAPL")
-        for sql in ("INSERT INTO candles VALUES ('X', 1, 1)", "UPDATE instruments SET session='x'",
+        conn2 = sqlite3.connect(self.db)
+        conn2.execute("CREATE TABLE IF NOT EXISTS tradable_assets (symbol TEXT PRIMARY KEY, name TEXT, exchange TEXT,"
+                      " fetched_on TEXT)")
+        conn2.execute("INSERT OR IGNORE INTO tradable_assets VALUES ('PYPL', 'PayPal', 'NASDAQ', 'x')")
+        conn2.commit()
+        conn2.close()
+        WL.add(conn, "PYPL")                                  # read through the fence: tradable_assets is readable
+        for sql in ("INSERT INTO tradable_assets VALUES ('X', 'x', 'x', 'x')", "INSERT INTO candles VALUES ('X', 1, 1)", "UPDATE instruments SET session='x'",
                     "DELETE FROM watchlist", "DROP TABLE candles", "CREATE TABLE t (x)",
                     "SELECT * FROM candles", "PRAGMA journal_mode=WAL", "ATTACH ':memory:' AS other"):
             with self.assertRaises(sqlite3.DatabaseError, msg=sql):
                 conn.execute(sql)
-        self.assertEqual(len(WL.rows(conn)), 1)
+        self.assertEqual(len(WL.rows(conn)), 2)
 
 
 class TestHttp(unittest.TestCase):

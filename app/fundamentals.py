@@ -377,9 +377,31 @@ def add_percentiles(metrics):
     return metrics
 
 
-def derive_all(conn, symbols, today=None):
+def add_outside_percentiles(m, members):
+    """An added name's percentiles against the S&P 100 members only: it is
+    ranked among them without becoming part of the comparison group."""
+    m["pct_all"], m["pct_sector"] = {}, {}
+    peers = [x for x in members if x.get("sector2") and x.get("sector2") == m.get("sector2")]
+    for k in PERCENTILE_KEYS:
+        m["pct_all"][k] = percentile([x.get(k) for x in members] + [m.get(k)], m.get(k))
+        pv = [x.get(k) for x in peers]
+        m["pct_sector"][k] = (percentile(pv + [m.get(k)], m.get(k))
+                              if len([p for p in pv if p is not None]) >= MIN_SECTOR_PEERS else None)
+    m["sector_peers"] = len(peers)
+    m["sp100_member"] = False
+    return m
+
+
+def derive_all(conn, symbols, today=None, members=None):
+    """members: the S&P 100 symbols the percentiles are taken within; any other
+    symbol is ranked against them (add_outside_percentiles). Default: all."""
     today = today or date.today().isoformat()
-    metrics = add_percentiles([derive(conn, s) for s in symbols])
+    members = set(symbols if members is None else members)
+    inside = add_percentiles([derive(conn, s) for s in symbols if s in members])
+    for m in inside:
+        m["sp100_member"] = True
+    outside = [add_outside_percentiles(derive(conn, s), inside) for s in symbols if s not in members]
+    metrics = inside + outside
     rows = [(today, m["symbol"], json.dumps(m)) for m in metrics]          # compute first, then write
     for i in range(0, len(rows), BATCH_ROWS):
         conn.executemany("INSERT OR REPLACE INTO fund_metrics VALUES (?, ?, ?)", rows[i:i + BATCH_ROWS])
@@ -398,9 +420,9 @@ def latest_metrics(conn):
 def refresh(conn, symbols=None, sec=None, log=print):
     import tracker
     ensure_tables(conn)
-    symbols = symbols or tracker.active(conn)
+    symbols = symbols or tracker.tracked(conn)
     done, failed = fetch_all(conn, symbols, sec, log=log)
-    metrics = derive_all(conn, symbols)
+    metrics = derive_all(conn, symbols, members=tracker.active(conn))
     with_pe = sum(1 for m in metrics if m.get("pe") is not None)
     log(f"fundamentals: {done} companies fetched, {len(failed)} failed {failed[:5]}; ratios for {len(metrics)},"
         f" P/E for {with_pe}")
@@ -416,7 +438,7 @@ def main_cli(argv=None):
     ensure_tables(conn)
     if args.derive:
         import tracker
-        derive_all(conn, tracker.active(conn))
+        derive_all(conn, tracker.tracked(conn), members=tracker.active(conn))
     else:
         refresh(conn)
     return 0

@@ -120,13 +120,21 @@ def ensure_watch_table(conn):
 
 
 def valid_ticker(conn, ticker):
-    """The ticker as stored if it is an equity instrument, else None."""
+    """The ticker as stored if it is an equity instrument (today's S&P 100, or a
+    name added before), or any active, tradable US-listed symbol in Alpaca's
+    list (tradable_assets, refreshed by the tracker job); else None."""
     t = (ticker or "").strip().upper()
     if not t or len(t) > 10:
         return None
     r = conn.execute("SELECT symbol FROM instruments WHERE symbol=? AND asset_class='equity'"
                      " AND session='us_equity'", (t,)).fetchone()
-    return r[0] if r else None
+    if r:
+        return r[0]
+    if conn.execute("SELECT 1 FROM sqlite_master WHERE name='tradable_assets'").fetchone():
+        r = conn.execute("SELECT symbol FROM tradable_assets WHERE symbol=?", (t,)).fetchone()
+        if r:
+            return r[0]
+    return None
 
 
 def add(conn, ticker, added_by=USER, trigger_values=None, notes=None, today=None):
@@ -134,7 +142,8 @@ def add(conn, ticker, added_by=USER, trigger_values=None, notes=None, today=None
     returned instead. Returns (row id, created) or raises ValueError."""
     t = valid_ticker(conn, ticker)
     if not t:
-        raise ValueError(f"{ticker!r} is not an equity in the instruments table")
+        raise ValueError(f"{(ticker or '').strip().upper() or 'an empty ticker'} is not an active US-listed symbol"
+                         " (checked against Alpaca's list of tradable US stocks and funds)")
     if notes is not None and len(notes) > MAX_NOTES:
         raise ValueError(f"notes longer than {MAX_NOTES} characters")
     today = today or datetime.now(timezone.utc).date().isoformat()

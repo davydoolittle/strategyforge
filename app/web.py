@@ -91,7 +91,7 @@ class HttpError(Exception):
 
 
 WRITE_TABLE = "watchlist"
-READ_TABLES = {"watchlist", "instruments", "sqlite_master"}
+READ_TABLES = {"watchlist", "instruments", "tradable_assets", "sqlite_master"}
 MAX_BODY = 4096
 
 
@@ -139,6 +139,13 @@ def _changes(conn, symbol):
             "chg_1d": chg(1), "chg_1m": chg(21), "chg_12m": chg(252)}
 
 
+def _asset_name(conn, t):
+    if not has_table(conn, "tradable_assets"):
+        return None
+    r = conn.execute("SELECT name FROM tradable_assets WHERE symbol=?", (t,)).fetchone()
+    return r[0] if r else None
+
+
 def tracker_panel(conn):
     """One row per ticker on the watchlist (active rows), with price changes,
     the key ratios and their percentiles, and who added it and why."""
@@ -156,12 +163,15 @@ def tracker_panel(conn):
                                                "trigger_values": r["trigger_values"], "notes": r["notes"]})
     for t in sorted(by):
         m = metrics.get(t, {})
-        out["rows"].append({"ticker": t, "name": m.get("name"), "sector": m.get("sic_desc"),
+        out["rows"].append({"ticker": t, "name": m.get("name") or _asset_name(conn, t), "sector": m.get("sic_desc"),
+                            "sp100_member": m.get("sp100_member", True) if m else None,
                             "sector_peers": m.get("sector_peers"), **_changes(conn, t),
                             "ratios": {k: {"value": m.get(k), "pct_sp100": (m.get("pct_all") or {}).get(k),
                                            "pct_sector": (m.get("pct_sector") or {}).get(k)} for k in TRACKER_RATIOS},
                             "piotroski_f": m.get("piotroski_f"), "facts_through": m.get("facts_through"),
-                            "note": m.get("note"), "added": by[t]})
+                            "note": m.get("note"), "added": by[t],
+                            "pending": None if _changes(conn, t)["price"] is not None else
+                            "just added: prices and financials arrive within the hour"})
     return out
 
 

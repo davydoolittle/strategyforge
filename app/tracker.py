@@ -19,6 +19,14 @@ individual stocks need a registration on P12's point-in-time member list
   python tracker.py --members        # refresh the list and the instruments rows
   python tracker.py --bars           # refresh the members' daily bars
   python tracker.py --refresh        # both, then fundamentals and screens (the daily job)
+  python tracker.py --new            # data for names just added to the watchlist (hourly job)
+  python tracker.py --tradable       # refresh the list of tradable US symbols
+
+Added names: anyone may add any active, tradable US-listed symbol (Alpaca's
+list, kept in tradable_assets so the dashboard checks it without a network
+call). An added name gets an instruments row, bars and facts like a member, and
+its percentiles are computed against the S&P 100, never joining that group.
+The screens stay on the S&P 100.
 """
 
 import argparse
@@ -36,6 +44,8 @@ COUNT_RANGE = (95, 110)        # 100 companies, a few with two share classes
 
 
 def ensure_tables(conn):
+    conn.execute("""CREATE TABLE IF NOT EXISTS tradable_assets (
+        symbol TEXT PRIMARY KEY, name TEXT, exchange TEXT, fetched_on TEXT)""")
     conn.execute("""CREATE TABLE IF NOT EXISTS sp100_members (
         symbol TEXT PRIMARY KEY, name TEXT, sector TEXT, source TEXT,
         first_seen TEXT, last_seen TEXT, active INTEGER NOT NULL DEFAULT 1)""")
@@ -74,6 +84,75 @@ def store_members(conn, members, today):
     return added, left
 
 
+def refresh_tradable(conn, headers=None, get=None, today=None):
+    """Alpaca's active, tradable US securities (stocks and ETFs), stored so the
+    dashboard can check a ticker someone types without a network call. Replaced
+    whole, in batches; a list under 5,000 symbols is refused as a bad fetch."""
+    import etf_universe
+    ensure_tables(conn)
+    today = today or datetime.now(timezone.utc).date().isoformat()
+    kw = {"get": get} if get else {}
+    assets = etf_universe.tradable_assets(headers or E.load_credentials(), **kw)
+    if len(assets) < 5000:
+        raise SystemExit(f"Alpaca listed only {len(assets)} tradable symbols: nothing stored")
+    rows = [(s, n, x, today) for s, (n, x) in sorted(assets.items())]
+    conn.execute("DELETE FROM tradable_assets")
+    for i in range(0, len(rows), 500):
+        conn.executemany("INSERT INTO tradable_assets VALUES (?, ?, ?, ?)", rows[i:i + 500])
+        conn.commit()
+    print(f"tradable list: {len(rows)} US symbols from Alpaca, {today}")
+    return len(rows)
+
+
+def user_symbols(conn):
+    """Active watchlist names that are not S&P 100 members (someone added them)."""
+    if not conn.execute("SELECT 1 FROM sqlite_master WHERE name='watchlist'").fetchone():
+        return []
+    members = set(active(conn))
+    return sorted({r[0] for r in conn.execute("SELECT ticker FROM watchlist WHERE status='active'")} - members)
+
+
+def tracked(conn):
+    """Everything the tracker prices and derives: S&P 100 members plus added names."""
+    return active(conn) + user_symbols(conn)
+
+
+def ensure_user_instruments(conn, symbols):
+    """An instruments row for each added name, like the members' (equity, us_equity,
+    no spread, so never backtested). A name already there (a research ETF) is left as it is."""
+    E.ensure_tables(conn)
+    conn.executemany("INSERT OR IGNORE INTO instruments (symbol, asset_class, tick_size, session)"
+                     " VALUES (?, ?, ?, ?)", [(s, ASSET_CLASS, E.TICK_SIZE, E.SESSION) for s in symbols])
+    conn.commit()
+
+
+def pending(conn):
+    """Added names with no bars fetched yet."""
+    out = []
+    for s in user_symbols(conn):
+        r = conn.execute("SELECT fetched_through FROM instruments WHERE symbol=?", (s,)).fetchone()
+        if not r or not r[0]:
+            out.append(s)
+    return out
+
+
+def refresh_new(conn, headers=None):
+    """The hourly pass: bars, facts and ratios for added names that have none yet."""
+    todo = pending(conn)
+    if not todo:
+        print("tracker: no newly added names waiting for data")
+        return []
+    ensure_user_instruments(conn, todo)
+    syms = [s for s in todo if s not in E.RESEARCH_SYMBOLS]
+    if syms:
+        E.backfill(conn, headers or E.load_credentials(), symbols=syms, fetch=E.fetch_bars,
+                   exchange=E.fetch_exchange, source="alpaca")
+    import fundamentals
+    fundamentals.refresh(conn)
+    print(f"tracker: data fetched for newly added {todo}")
+    return todo
+
+
 def active(conn):
     ensure_tables(conn)
     return [r[0] for r in conn.execute("SELECT symbol FROM sp100_members WHERE active=1 ORDER BY symbol")]
@@ -88,12 +167,13 @@ def refresh_members(conn, get=S.http_get, today=None):
 
 
 def refresh_bars(conn, headers=None):
-    """Alpaca adjusted daily bars for the active members (equities.backfill:
-    restartable, only changed rows written, batch commits)."""
-    syms = [s for s in active(conn) if s not in E.RESEARCH_SYMBOLS]
+    """Alpaca adjusted daily bars for the active members and added names
+    (equities.backfill: restartable, only changed rows written, batch commits)."""
+    ensure_user_instruments(conn, user_symbols(conn))
+    syms = [s for s in tracked(conn) if s not in E.RESEARCH_SYMBOLS]
     done = E.backfill(conn, headers or E.load_credentials(), symbols=syms, fetch=E.fetch_bars,
                       exchange=E.fetch_exchange, source="alpaca")
-    print(f"bars: {len(done)} of {len(syms)} members refreshed")
+    print(f"bars: {len(done)} of {len(syms)} tracked names refreshed")
     return done
 
 
@@ -101,9 +181,17 @@ def main_cli(argv=None):
     ap = argparse.ArgumentParser(description=__doc__.split("\n\n")[0])
     ap.add_argument("--members", action="store_true")
     ap.add_argument("--bars", action="store_true")
-    ap.add_argument("--refresh", action="store_true", help="members, bars, fundamentals and screens")
+    ap.add_argument("--refresh", action="store_true", help="members, tradable list, bars, fundamentals and screens")
+    ap.add_argument("--new", action="store_true", help="data for newly added watchlist names (the hourly job)")
+    ap.add_argument("--tradable", action="store_true", help="refresh the list of tradable US symbols")
     args = ap.parse_args(argv)
     conn = sqlite3.connect(main.DB_PATH, timeout=main.DB_TIMEOUT_S)
+    ensure_tables(conn)
+    if args.new:
+        refresh_new(conn)
+        return 0
+    if args.tradable or args.refresh:
+        refresh_tradable(conn)
     if args.members or args.refresh:
         refresh_members(conn)
     if args.bars or args.refresh:
